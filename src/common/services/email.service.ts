@@ -1,0 +1,492 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as nodemailer from 'nodemailer';
+import { MailerSend, EmailParams, Sender, Recipient, Attachment } from 'mailersend';
+
+export interface SendEmailOptions {
+  to: string | string[];
+  subject: string;
+  html?: string;
+  text?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | string;
+    contentType?: string;
+  }>;
+  cc?: string | string[];
+  bcc?: string | string[];
+  replyTo?: string;
+}
+
+@Injectable()
+export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
+  private mailerSend: MailerSend | null = null;
+  private transporter: nodemailer.Transporter | null = null;
+
+  constructor(private configService: ConfigService) {}
+
+  /**
+   * Get or create the SMTP transporter
+   */
+  private getSMTPTransporter(): nodemailer.Transporter {
+    if (this.transporter) {
+      return this.transporter;
+    }
+
+    // Use SMTP settings for ZENN Cafe
+    const smtpHost = this.configService.get<string>('SMTP_HOST') || 'mail.zenncafe.com.au';
+    const smtpPort = this.configService.get<number>('SMTP_PORT') || 587;
+    const smtpUser = this.configService.get<string>('SMTP_USER') || 'catering@zenncafe.com.au';
+    // Handle password with special characters - remove quotes if present
+    let smtpPassword = this.configService.get<string>('SMTP_PASSWORD') || this.configService.get<string>('SMTP_PASS') || 'TWT#4Tgu^@ox';
+    // Remove surrounding quotes if present (handles .env files that quote values)
+    if (smtpPassword.startsWith('"') && smtpPassword.endsWith('"')) {
+      smtpPassword = smtpPassword.slice(1, -1);
+    }
+    if (smtpPassword.startsWith("'") && smtpPassword.endsWith("'")) {
+      smtpPassword = smtpPassword.slice(1, -1);
+    }
+    const smtpSecure = this.configService.get<string>('SMTP_SECURE') === 'true';
+    const fromEmail = this.configService.get<string>('FROM_EMAIL') || 'catering@zenncafe.com.au';
+    const fromName = this.configService.get<string>('COMPANY_NAME') || 'ZENN';
+
+    // Note: We allow SMTP to work without explicit config for backward compatibility
+    // but log a warning if using defaults
+    if (!this.configService.get<string>('SMTP_HOST') || !this.configService.get<string>('SMTP_USER') || !this.configService.get<string>('SMTP_PASSWORD')) {
+      this.logger.warn('Using default SMTP settings. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD in environment variables to override.');
+    }
+
+    // Create transporter with flexible authentication options
+    const transporterOptions: any = {
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure, // true for 465, false for other ports
+      auth: {
+        user: smtpUser,
+        pass: smtpPassword,
+      },
+      tls: {
+        // Do not fail on invalid certs
+        rejectUnauthorized: false,
+        // Allow older TLS versions for compatibility
+        minVersion: 'TLSv1',
+        // Don't specify ciphers - let Node.js negotiate
+        // Disable strict TLS checking for compatibility
+        servername: smtpHost,
+      },
+      // Add connection timeout
+      connectionTimeout: 15000, // 15 seconds
+      greetingTimeout: 10000, // 10 seconds
+      debug: process.env.NODE_ENV === 'development', // Enable debug logging in development
+      logger: process.env.NODE_ENV === 'development', // Enable logger in development
+    };
+
+    // For port 587, use STARTTLS but don't require it to be strict
+    if (!smtpSecure && smtpPort === 587) {
+      // Don't require TLS - let the server negotiate
+      transporterOptions.requireTLS = false;
+      transporterOptions.requireTransportSecurity = false;
+      // Allow opportunistic TLS - upgrade if available but don't fail if not
+      transporterOptions.ignoreTLS = false;
+      // Use opportunistic STARTTLS
+      transporterOptions.opportunisticTLS = true;
+    }
+    
+    // For port 465, use SSL/TLS
+    if (smtpSecure && smtpPort === 465) {
+      transporterOptions.secure = true;
+    }
+
+    this.transporter = nodemailer.createTransport(transporterOptions);
+
+    this.logger.log(`SMTP transporter initialized successfully for ${smtpHost}:${smtpPort} (secure: ${smtpSecure})`);
+    this.logger.log(`SMTP user: ${smtpUser}`);
+    return this.transporter;
+  }
+
+  /**
+   * Check if SMTP is configured
+   */
+  private isSMTPConfigured(): boolean {
+    const smtpHost = this.configService.get<string>('SMTP_HOST');
+    const smtpUser = this.configService.get<string>('SMTP_USER');
+    const smtpPassword = this.configService.get<string>('SMTP_PASSWORD');
+    return !!(smtpHost && smtpUser && smtpPassword);
+  }
+
+  /**
+   * Get or create the MailerSend client (fallback)
+   */
+  private getMailerSendClient(): MailerSend {
+    if (this.mailerSend) {
+      return this.mailerSend;
+    }
+
+    const apiKey = this.configService.get<string>('MAILERSEND_API_KEY');
+    
+    if (!apiKey) {
+      this.logger.error('MailerSend API key is not configured. Please set MAILERSEND_API_KEY in environment variables.');
+      throw new Error('MailerSend API key is not configured');
+    }
+
+    this.mailerSend = new MailerSend({
+      apiKey: apiKey,
+    });
+
+    this.logger.log('MailerSend client initialized successfully');
+    return this.mailerSend;
+  }
+
+  /**
+   * Verify email connection (SMTP or MailerSend)
+   */
+  async verifyEmailConnection(): Promise<boolean> {
+    try {
+      if (this.isSMTPConfigured()) {
+        const transporter = this.getSMTPTransporter();
+        await transporter.verify();
+        this.logger.log('SMTP connection verified successfully');
+        return true;
+      } else {
+        const client = this.getMailerSendClient();
+        // MailerSend doesn't have a direct verify method, but we can check if client is initialized
+        if (client) {
+          this.logger.log('MailerSend connection verified successfully');
+          return true;
+        }
+        return false;
+      }
+    } catch (error) {
+      this.logger.error('Email connection verification failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send email with optional attachments (using SMTP or MailerSend)
+   */
+  async sendEmail(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    // Use SMTP if configured, otherwise fallback to MailerSend
+    if (this.isSMTPConfigured()) {
+      return this.sendEmailViaSMTP(options);
+    } else {
+      return this.sendEmailViaMailerSend(options);
+    }
+  }
+
+  /**
+   * Send email via SMTP
+   */
+  private async sendEmailViaSMTP(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const transporter = this.getSMTPTransporter();
+      
+      // Get configuration - use ZENN Cafe defaults
+      const fromEmail = this.configService.get<string>('FROM_EMAIL') || 
+                       this.configService.get<string>('SMTP_USER') || 
+                       'catering@zenncafe.com.au';
+      const fromName = this.configService.get<string>('COMPANY_NAME') || 
+                      'ZENN';
+
+      // Prepare recipients
+      const toEmails = Array.isArray(options.to) ? options.to : [options.to];
+      const ccEmails = options.cc ? (Array.isArray(options.cc) ? options.cc : [options.cc]) : [];
+      const bccEmails = options.bcc ? (Array.isArray(options.bcc) ? options.bcc : [options.bcc]) : [];
+
+      // Prepare mail options
+      const mailOptions: nodemailer.SendMailOptions = {
+        from: `"${fromName}" <${fromEmail}>`,
+        to: toEmails.join(', '),
+        subject: options.subject,
+        html: options.html,
+        text: options.text || (options.html ? this.htmlToText(options.html) : undefined),
+        replyTo: options.replyTo || fromEmail,
+      };
+
+      // Add CC if provided
+      if (ccEmails.length > 0) {
+        mailOptions.cc = ccEmails.join(', ');
+      }
+
+      // Add BCC if provided
+      if (bccEmails.length > 0) {
+        mailOptions.bcc = bccEmails.join(', ');
+      }
+
+      // Handle attachments
+      if (options.attachments && options.attachments.length > 0) {
+        mailOptions.attachments = options.attachments.map(att => {
+          if (Buffer.isBuffer(att.content)) {
+            return {
+              filename: att.filename,
+              content: att.content,
+              contentType: att.contentType,
+            };
+          } else {
+            // If it's a string, assume it's base64
+            return {
+              filename: att.filename,
+              content: Buffer.from(att.content, 'base64'),
+              contentType: att.contentType,
+            };
+          }
+        });
+      }
+
+      // Send email
+      const info = await transporter.sendMail(mailOptions);
+      
+      const messageId = info.messageId || 'unknown';
+      this.logger.log(`Email sent successfully via SMTP. Message ID: ${messageId}`);
+
+      return {
+        success: true,
+        messageId: messageId,
+      };
+    } catch (error: any) {
+      const errorMessage = error.message || error.toString() || 'Unknown error';
+      const smtpHost = this.configService.get<string>('SMTP_HOST') || 'unknown';
+      const smtpPort = this.configService.get<number>('SMTP_PORT') || 587;
+      
+      this.logger.error(`SMTP email sending error (${smtpHost}:${smtpPort}):`, errorMessage);
+      
+      // Provide helpful error messages
+      let helpfulError = errorMessage;
+      if (errorMessage.includes('Invalid login') || errorMessage.includes('Authentication failed') || errorMessage.includes('535')) {
+        helpfulError = `Authentication failed. Please verify:
+- SMTP_HOST: ${smtpHost}
+- SMTP_USER: ${this.configService.get<string>('SMTP_USER') || 'catering@zenncafe.com.au'}
+- SMTP_PASSWORD: (check if correct)
+- Try alternative SMTP hosts: mail.zenncafe.com.au, smtp.zenncafe.com.au, smtp.gmail.com, or smtp.office365.com
+- Try port 465 with SMTP_SECURE=true if port 587 doesn't work`;
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('ENOTFOUND')) {
+        helpfulError = `Connection failed to ${smtpHost}:${smtpPort}. DNS lookup failed - the SMTP host may not exist. Please try:
+- mail.zenncafe.com.au (most common for cPanel/hosting)
+- Check your email hosting provider's documentation for the correct SMTP host
+- Common alternatives: mail.yourdomain.com, smtp.yourdomain.com, or your hosting provider's mail server
+- If using cPanel, check Email Accounts > Connect Devices for SMTP settings
+- If using Google Workspace: smtp.gmail.com
+- If using Microsoft 365: smtp.office365.com`;
+      }
+      
+      // Log full error for debugging
+      if (error.response) {
+        this.logger.error('SMTP error response:', JSON.stringify(error.response, null, 2));
+      }
+      if (error.code) {
+        this.logger.error('SMTP error code:', error.code);
+      }
+
+      return {
+        success: false,
+        error: helpfulError,
+      };
+    }
+  }
+
+  /**
+   * Send email via MailerSend (fallback)
+   */
+  private async sendEmailViaMailerSend(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const client = this.getMailerSendClient();
+      
+      // Get configuration - use ZENN Cafe defaults
+      const fromEmail = this.configService.get<string>('MAILERSEND_FROM_EMAIL') || 
+                       this.configService.get<string>('FROM_EMAIL') || 
+                       'catering@zenncafe.com.au';
+      const fromName = this.configService.get<string>('MAILERSEND_FROM_NAME') || 
+                      this.configService.get<string>('COMPANY_NAME') || 
+                      'ZENN';
+
+      // Prepare recipients
+      const toEmails = Array.isArray(options.to) ? options.to : [options.to];
+      const recipients = toEmails.map(email => new Recipient(email));
+
+      // Prepare CC recipients if provided
+      const ccRecipients: Recipient[] = [];
+      if (options.cc) {
+        const ccEmails = Array.isArray(options.cc) ? options.cc : [options.cc];
+        ccRecipients.push(...ccEmails.map(email => new Recipient(email)));
+      }
+
+      // Prepare BCC recipients if provided
+      const bccRecipients: Recipient[] = [];
+      if (options.bcc) {
+        const bccEmails = Array.isArray(options.bcc) ? options.bcc : [options.bcc];
+        bccRecipients.push(...bccEmails.map(email => new Recipient(email)));
+      }
+
+      // Create sender
+      const sentFrom = new Sender(fromEmail, fromName);
+
+      // Create email parameters
+      const emailParams = new EmailParams()
+        .setFrom(sentFrom)
+        .setTo(recipients)
+        .setSubject(options.subject);
+
+      // Set HTML content
+      if (options.html) {
+        emailParams.setHtml(options.html);
+      }
+
+      // Set text content
+      if (options.text) {
+        emailParams.setText(options.text);
+      } else if (options.html) {
+        // If no text provided but HTML exists, create a basic text version
+        emailParams.setText(this.htmlToText(options.html));
+      }
+
+      // Set reply-to if provided
+      if (options.replyTo) {
+        emailParams.setReplyTo(new Sender(options.replyTo, fromName));
+      }
+
+      // Add CC recipients
+      if (ccRecipients.length > 0) {
+        emailParams.setCc(ccRecipients);
+      }
+
+      // Add BCC recipients
+      if (bccRecipients.length > 0) {
+        emailParams.setBcc(bccRecipients);
+      }
+
+      // Handle attachments
+      if (options.attachments && options.attachments.length > 0) {
+        const attachments = options.attachments.map(att => {
+          let content: string;
+          
+          if (Buffer.isBuffer(att.content)) {
+            // Convert Buffer to base64 string
+            content = att.content.toString('base64');
+          } else {
+            // If it's already a string, assume it's base64 or convert if needed
+            content = typeof att.content === 'string' ? att.content : Buffer.from(att.content).toString('base64');
+          }
+
+          // Create MailerSend Attachment instance
+          return new Attachment(
+            content,
+            att.filename,
+            'attachment', // disposition
+          );
+        });
+
+        emailParams.setAttachments(attachments);
+      }
+
+      // Send email
+      const response = await client.email.send(emailParams);
+      
+      // Extract message ID from response
+      // MailerSend returns response with headers containing X-Message-Id
+      const messageId = response.headers?.['x-message-id'] || 
+                       response.headers?.['X-Message-Id'] ||
+                       'unknown';
+
+      this.logger.log(`Email sent successfully via MailerSend. Message ID: ${messageId}`);
+
+      return {
+        success: true,
+        messageId: messageId as string,
+      };
+    } catch (error: any) {
+      const errorMessage = error.message || error.toString() || 'Unknown error';
+      this.logger.error('MailerSend email sending error:', errorMessage);
+      
+      // Log full error for debugging
+      if (error.response) {
+        this.logger.error('MailerSend API response:', JSON.stringify(error.response.data || error.response, null, 2));
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Send invoice email with PDF attachment
+   */
+  async sendInvoiceEmail(
+    recipientEmail: string,
+    orderId: number,
+    pdfBuffer: Buffer,
+    customMessage?: string,
+    customerName?: string,
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const name = customerName || 'Customer';
+    const companyName = this.configService.get<string>('COMPANY_NAME') || 
+                       this.configService.get<string>('MAILERSEND_FROM_NAME') || 
+                       'ZENN';
+    const emailSubject = `Invoice #${orderId} - ${companyName}`;
+
+    const emailBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
+    .header { background-color: #0d6efd; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Invoice for Order #${orderId}</h1>
+    </div>
+    <div class="content">
+      <p>Dear ${name},</p>
+      <p>Please find attached the invoice for your order #${orderId}.</p>
+      ${customMessage ? `<p>${customMessage}</p>` : ''}
+      <p>Thank you for your business!</p>
+    </div>
+    <div class="footer">
+      <p>If you have any questions, please contact us.</p>
+      <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    return this.sendEmail({
+      to: recipientEmail,
+      subject: emailSubject,
+      html: emailBody,
+      attachments: [
+        {
+          filename: `invoice-${orderId}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+  }
+
+  /**
+   * Convert HTML to plain text (basic implementation)
+   */
+  private htmlToText(html: string): string {
+    // Remove HTML tags and decode entities
+    return html
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .trim();
+  }
+}
