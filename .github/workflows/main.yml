@@ -1,4 +1,4 @@
-name: Deploy API (NestJS) 
+name: Deploy Zenn API
 
 on:
   push:
@@ -7,21 +7,41 @@ on:
 
 jobs:
   deploy:
+    name: Deploy Zenn API to EC2
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy API to EC2
+      # 1️⃣ Checkout repo (workflow context)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Deploy via SSH
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
           script: |
+            set -e
+
+            echo "📁 Moving to project directory"
             cd /home/ubuntu/zenn/zenn_api
-            git pull origin main
+
+            echo "🔄 Pulling latest code using GitHub PAT"
+            git pull https://kaushikaspace:${{ secrets.GH_PAT }}@github.com/kaushikaspace/zenn_api.git main
+
+            echo "📦 Installing dependencies"
             npm install
+
+            echo "🏗️ Building NestJS API"
             npm run build
-            pm2 describe zenn-api > /dev/null \
-              && pm2 restart zenn-api \
-              || pm2 start dist/main.js --name zenn-api
+
+            echo "🚀 Restarting PM2 process"
+            pm2 restart zenn-api --update-env || pm2 start dist/main.js --name zenn-api
+
+            echo "💾 Saving PM2 state"
             pm2 save
+
+            echo "✅ Zenn API deployment completed successfully"
