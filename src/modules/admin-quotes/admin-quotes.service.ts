@@ -513,6 +513,14 @@ export class AdminQuotesService {
     quote.gst = gst;
     quote.calculated_total = calculatedTotal;
     quote.customer_id = quote.customer_id || quote.order_customer_id || null;
+    // Explicitly ensure delivery fields are included
+    quote.delivery_date_time = quote.delivery_date_time || null;
+    quote.delivery_address = quote.delivery_address || null;
+    quote.delivery_method = quote.delivery_method || null;
+    quote.delivery_contact = quote.delivery_contact || null;
+    quote.delivery_details = quote.delivery_details || null;
+    quote.account_email = quote.account_email || null;
+    quote.cost_center = quote.cost_center || null;
     delete quote.order_customer_id;
 
     return { quote };
@@ -968,14 +976,40 @@ export class AdminQuotesService {
       const gst = afterDiscount * 0.1;
       const orderTotal = afterDiscount + gst + parseFloat(delivery_fee.toString());
 
-      // Build delivery_date_time: only set if both date and time are provided
-      // If null/empty, consider it a future order/quote (no delivery date set)
+      // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
+      // Allow setting just date (with default time 00:00:00) or both date and time
       let deliveryDateTime: string | null = null;
-      if (delivery_date && delivery_time) {
-        deliveryDateTime = `${delivery_date} ${delivery_time}:00`;
+      
+      if (delivery_date && typeof delivery_date === 'string' && delivery_date.trim()) {
+        // Build from delivery_date and delivery_time
+        const normalizedDate = delivery_date.trim();
+        if (delivery_time && typeof delivery_time === 'string' && delivery_time.trim()) {
+          // Both date and time provided
+          const timeParts = delivery_time.trim().replace(/:/g, '').match(/.{1,2}/g) || [];
+          if (timeParts.length >= 2 && timeParts[0] && timeParts[1]) {
+            const formattedTime = `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}:00`;
+            deliveryDateTime = `${normalizedDate} ${formattedTime}`;
+          } else {
+            // Invalid time format, use default time
+            deliveryDateTime = `${normalizedDate} 00:00:00`;
+          }
+        } else {
+          // Only date provided, use default time (start of day)
+          deliveryDateTime = `${normalizedDate} 00:00:00`;
+        }
       }
-      // If only date or only time provided, or neither provided, keep as null for future orders/quotes
-      // Note: If deliveryDateTime is null, we'll use COALESCE to keep existing value in UPDATE query
+      // If no date provided, keep as null for future orders/quotes
+
+      // Check current order status - preserve quote status unless explicitly converting
+      const currentOrderCheck = await manager.query(
+        `SELECT order_status FROM orders WHERE order_id = $1`,
+        [id],
+      );
+      
+      const currentStatus = currentOrderCheck.length > 0 ? currentOrderCheck[0].order_status : null;
+      // If updating a quote and order_status is not explicitly provided, keep current status
+      // If order_status is explicitly provided, use that value (allows manual conversion)
+      const newOrderStatus = order_status !== undefined && order_status !== null ? order_status : (currentStatus || 1);
 
       // Update order
       const orderResult = await manager.query(
@@ -1005,7 +1039,7 @@ export class AdminQuotesService {
           orderTotal,
           delivery_fee || 0,
           deliveryDateTime,
-          delivery_address || null,
+          (delivery_address && typeof delivery_address === 'string' && delivery_address.trim()) ? delivery_address.trim() : null,
           delivery_method || null,
           account_email?.trim() || null,
           cost_center?.trim() || null,
@@ -1015,7 +1049,7 @@ export class AdminQuotesService {
           userId || 1,
           couponId,
           finalCouponDiscount, // Store coupon discount amount for historical accuracy
-          order_status || 1, // Default to 1 (New) if not specified
+          newOrderStatus, // Keep as quote unless explicitly converting
           id,
         ],
       );
@@ -1044,14 +1078,16 @@ export class AdminQuotesService {
         if (previousStatus !== 7) {
           this.logger.log(`Quote ${id} approved. Auto-converting to order.`);
           
-          // Convert to order by setting status to 2 (New Order)
+          // Convert to order by updating payment_status from 'quote' to 'order'
+          // This ensures it will show in orders list and not in quotes list
           await manager.query(
             `UPDATE orders 
-             SET order_status = $1,
+             SET payment_status = $1,
+                 order_status = $2,
                  date_modified = CURRENT_TIMESTAMP
-             WHERE order_id = $2 AND standing_order = 0
+             WHERE order_id = $3 AND standing_order = 0
              RETURNING *`,
-            [2, id],
+            ['order', 2, id], // Set payment_status to 'order' and order_status to 2 (Paid/Approved)
           );
           
           // Auto-generate invoice asynchronously after transaction commits
@@ -1192,7 +1228,7 @@ export class AdminQuotesService {
   async convertToOrder(id: number): Promise<any> {
     // Check if quote exists and is not already converted
     const quoteCheck = await this.dataSource.query(
-      `SELECT order_status FROM orders WHERE order_id = $1 AND standing_order = 0`,
+      `SELECT order_status, payment_status FROM orders WHERE order_id = $1 AND standing_order = 0`,
       [id],
     );
 
@@ -1201,23 +1237,30 @@ export class AdminQuotesService {
     }
 
     const currentStatus = quoteCheck[0].order_status;
+    const currentPaymentStatus = quoteCheck[0].payment_status;
     
-    // Only allow conversion if it's still a quote status (1 = New Quote)
-    // Also allow conversion from status 4 (Awaiting Approval) and 7 (Approved)
+    // Only allow conversion if it's still a quote (payment_status = 'quote' or NULL for legacy quotes)
+    // Also allow conversion from status 4 (Awaiting Approval) and 7 (Approved) if still a quote
+    if (currentPaymentStatus && currentPaymentStatus !== 'quote') {
+      throw new BadRequestException('This quote has already been converted to an order');
+    }
+    
     if (currentStatus !== 1 && currentStatus !== 4 && currentStatus !== 7) {
       throw new BadRequestException('Quote has already been converted to order or is in an invalid status');
     }
 
-    // Convert to order by setting status to 1 (New Order)
+    // Convert to order by updating payment_status from 'quote' to 'order'
+    // This ensures it will show in orders list and not in quotes list
     // Status 1 means "New" for both quotes and orders
     // Status 2 = Paid, which should only be set when payment is received
     const result = await this.dataSource.query(
       `UPDATE orders 
-       SET order_status = $1,
+       SET payment_status = $1,
+           order_status = $2,
            date_modified = CURRENT_TIMESTAMP
-       WHERE order_id = $2 AND standing_order = 0
+       WHERE order_id = $3 AND standing_order = 0
        RETURNING *`,
-      [1, id], // Keep as status 1 (New Order), not 2 (Paid)
+      ['order', 1, id], // Set payment_status to 'order' and keep order_status as 1 (New Order)
     );
 
     if (result.length === 0) {

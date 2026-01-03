@@ -294,42 +294,50 @@ export class SubscriptionSchedulerService {
       const createOrderQuery = `
         INSERT INTO orders (
           customer_id,
+          location_id,
+          branch_id,
+          shipping_method,
           order_status,
           order_total,
           delivery_fee,
           delivery_date_time,
           customer_order_name,
           order_comments,
-          customer_company_name,
-          customer_department_name,
-          location_id,
           delivery_address,
+          delivery_method,
           delivery_contact,
           delivery_details,
           coupon_id,
+          coupon_discount,
           account_email,
           cost_center,
           standing_order,
-          date_added
+          user_id,
+          date_added,
+          date_modified
         )
         SELECT 
           customer_id,
+          location_id,
+          COALESCE(branch_id, 1),
+          COALESCE(shipping_method, 1),
           1, -- new order status
           order_total,
           delivery_fee,
           $1, -- scheduled delivery date
           customer_order_name,
           order_comments,
-          customer_company_name,
-          customer_department_name,
-          location_id,
           delivery_address,
+          delivery_method,
           delivery_contact,
           delivery_details,
           coupon_id,
+          coupon_discount,
           account_email,
           cost_center,
           0, -- not a subscription itself
+          user_id,
+          CURRENT_TIMESTAMP,
           CURRENT_TIMESTAMP
         FROM orders
         WHERE order_id = $2
@@ -343,49 +351,64 @@ export class SubscriptionSchedulerService {
 
       const newOrderId = newOrderResult[0].order_id;
 
-      // Copy order products
-      const copyProductsQuery = `
-        INSERT INTO order_product (
-          order_id,
-          product_id,
-          quantity,
-          price,
-          total,
-          comment
+      // Copy order products - use CTE to maintain order and match options correctly
+      const copyProductsWithOptionsQuery = `
+        WITH old_products AS (
+          SELECT 
+            order_product_id as old_order_product_id,
+            product_id,
+            product_name,
+            quantity,
+            price,
+            total,
+            order_product_comment,
+            sort_order,
+            ROW_NUMBER() OVER (ORDER BY order_product_id) as seq
+          FROM order_product
+          WHERE order_id = $2
+        ),
+        new_products AS (
+          INSERT INTO order_product (
+            order_id,
+            product_id,
+            product_name,
+            quantity,
+            price,
+            total,
+            order_product_comment,
+            sort_order
+          )
+          SELECT 
+            $1,
+            product_id,
+            product_name,
+            quantity,
+            price,
+            total,
+            order_product_comment,
+            sort_order
+          FROM old_products
+          ORDER BY seq
+          RETURNING order_product_id, product_id, quantity, price, ROW_NUMBER() OVER (ORDER BY order_product_id) as seq
         )
-        SELECT 
-          $1,
-          product_id,
-          quantity,
-          price,
-          total,
-          comment
-        FROM order_product
-        WHERE order_id = $2
-      `;
-      await queryRunner.query(copyProductsQuery, [newOrderId, subscription.order_id]);
-
-      // Copy order product options
-      const copyOptionsQuery = `
         INSERT INTO order_product_option (
           order_product_id,
+          product_option_id,
           option_name,
           option_value,
-          option_quantity,
-          option_price
+          option_quantity
         )
         SELECT 
-          new_op.order_product_id,
-          old_opo.option_name,
-          old_opo.option_value,
-          old_opo.option_quantity,
-          old_opo.option_price
-        FROM order_product old_op
-        JOIN order_product_option old_opo ON old_op.order_product_id = old_opo.order_product_id
-        JOIN order_product new_op ON new_op.product_id = old_op.product_id AND new_op.order_id = $1
-        WHERE old_op.order_id = $2
+          np.order_product_id,
+          opo.product_option_id,
+          opo.option_name,
+          opo.option_value,
+          opo.option_quantity
+        FROM old_products op
+        JOIN order_product_option opo ON op.old_order_product_id = opo.order_product_id
+        JOIN new_products np ON np.seq = op.seq
       `;
-      await queryRunner.query(copyOptionsQuery, [newOrderId, subscription.order_id]);
+      await queryRunner.query(copyProductsWithOptionsQuery, [newOrderId, subscription.order_id]);
 
       // Update future order status
       const updateFutureOrderQuery = `
@@ -451,6 +474,45 @@ export class SubscriptionSchedulerService {
     await this.dataSource.query(deactivateQuery, [subscriptionOrderId]);
 
     return { message: 'Future orders cancelled successfully' };
+  }
+
+  /**
+   * Process all future orders that are due today
+   * This should be called daily via a cron job
+   */
+  async processDueFutureOrders() {
+    this.logger.log('Starting processing of due future orders');
+
+    // Get all future orders that are due today (status = 'pending' and scheduled_delivery_date is today or earlier)
+    const dueOrdersQuery = `
+      SELECT future_order_id
+      FROM future_orders
+      WHERE status = 'pending'
+        AND DATE(scheduled_delivery_date) <= CURRENT_DATE
+      ORDER BY scheduled_delivery_date ASC
+    `;
+
+    const dueOrders = await this.dataSource.query(dueOrdersQuery);
+    let processedCount = 0;
+    let errorCount = 0;
+
+    for (const futureOrder of dueOrders) {
+      try {
+        await this.processFutureOrder(futureOrder.future_order_id);
+        processedCount++;
+        this.logger.log(`Processed future order ${futureOrder.future_order_id}`);
+      } catch (error) {
+        errorCount++;
+        this.logger.error(`Failed to process future order ${futureOrder.future_order_id}:`, error);
+      }
+    }
+
+    this.logger.log(`Processed ${processedCount} future orders, ${errorCount} errors`);
+    return {
+      processed: processedCount,
+      errors: errorCount,
+      total: dueOrders.length,
+    };
   }
 }
 

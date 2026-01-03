@@ -403,7 +403,7 @@ export class AdminBlogsService {
       // Clean filename to remove any path separators
       const cleanFileName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
       const fileName = `blogs/${Date.now()}-${cleanFileName}`;
-      const result = await this.s3Service.uploadToS3(file.buffer, 'caterly_assets', fileName, file.mimetype);
+      const result = await this.s3Service.uploadToS3(file.buffer, 'zenn_assets', fileName, file.mimetype);
       
       // Log the upload result for debugging
       this.logger.log(`Blog image uploaded successfully: ${result.url}`);

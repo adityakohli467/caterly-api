@@ -46,6 +46,8 @@ export class AdminOrdersService {
         o.order_total,
         o.order_status,
         o.delivery_date_time,
+        o.delivery_address,
+        o.delivery_method,
         o.standing_order,
         o.location_id,
         o.date_added,
@@ -81,7 +83,10 @@ export class AdminOrdersService {
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE 1=1
       AND o.order_status NOT IN (0, 4, 9) -- Exclude "Cancelled/Quote" (0), "Awaiting Approval" (4), and "Modify" (9)
-      -- Note: Status 1 (New) orders ARE included in the orders list
+      -- Exclude quotes (payment_status = 'quote') - quotes should only appear in quotes list
+      AND (o.payment_status IS NULL OR o.payment_status != 'quote')
+      -- Note: Status 1 (New) orders ARE included in the orders list, but quotes are excluded
+      -- Standing orders (subscriptions) are included unless filtered by order_type
     `;
 
     if (wholesale === 'true') {
@@ -447,11 +452,19 @@ export class AdminOrdersService {
       paymentStatus = 'Completed';
     }
 
-    const { order_products: _, ...orderWithoutProducts } = order;
+      const { order_products: _, ...orderWithoutProducts } = order;
 
     return {
       order: {
         ...orderWithoutProducts,
+        // Explicitly ensure delivery fields are included
+        delivery_date_time: order.delivery_date_time || null,
+        delivery_address: order.delivery_address || null,
+        delivery_method: order.delivery_method || null,
+        delivery_contact: order.delivery_contact || null,
+        delivery_details: order.delivery_details || null,
+        account_email: order.account_email || null,
+        cost_center: order.cost_center || null,
         order_products: orderProducts,
         products: orderProducts, // Also include as 'products' for consistency with quotes
         customer_order_name: `${order.firstname || ''} ${order.lastname || ''}`.trim() || order.customer_order_name || 'N/A',
@@ -485,6 +498,11 @@ export class AdminOrdersService {
 
     if (!createOrderDto.products || !Array.isArray(createOrderDto.products) || createOrderDto.products.length === 0) {
       throw new BadRequestException('At least one product is required');
+    }
+
+    // Validate delivery address is required when delivery method is "delivery"
+    if (createOrderDto.delivery_method === 'delivery' && (!createOrderDto.delivery_address || createOrderDto.delivery_address.trim().length === 0)) {
+      throw new BadRequestException('Delivery Address is required when delivery method is selected');
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -567,14 +585,55 @@ export class AdminOrdersService {
       const deliveryFeeAmount = parseFloat(delivery_fee || 0);
       const orderTotal = Math.round((afterDiscount + gst + deliveryFeeAmount) * 100) / 100;
 
-      // Build delivery_date_time: only set if both date and time are provided
-      // If null/empty, consider it a future order/quote (no delivery date set)
-      let finalDeliveryDateTime: string | null = delivery_date_time || null;
-      if (delivery_date && delivery_time) {
-        // Use provided date and time
-        finalDeliveryDateTime = `${delivery_date} ${delivery_time}:00`;
+      // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
+      // Allow setting just date (with default time 00:00:00) or both date and time
+      let finalDeliveryDateTime: string | null = null;
+      
+      if (delivery_date_time && typeof delivery_date_time === 'string' && delivery_date_time.trim()) {
+        // Use provided delivery_date_time if available (could be ISO format or "YYYY-MM-DD HH:MM:SS")
+        const trimmedDateTime = delivery_date_time.trim();
+        // If it's an ISO format, convert to "YYYY-MM-DD HH:MM:SS" format
+        if (trimmedDateTime.includes('T')) {
+          try {
+            const dateObj = new Date(trimmedDateTime);
+            if (!isNaN(dateObj.getTime())) {
+              const year = dateObj.getFullYear();
+              const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+              const day = dateObj.getDate().toString().padStart(2, '0');
+              const hours = dateObj.getHours().toString().padStart(2, '0');
+              const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+              const seconds = dateObj.getSeconds().toString().padStart(2, '0');
+              finalDeliveryDateTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+            } else {
+              finalDeliveryDateTime = trimmedDateTime;
+            }
+          } catch (error) {
+            // If parsing fails, use as-is
+            finalDeliveryDateTime = trimmedDateTime;
+          }
+        } else {
+          // Already in "YYYY-MM-DD HH:MM:SS" format
+          finalDeliveryDateTime = trimmedDateTime;
+        }
+      } else if (delivery_date && typeof delivery_date === 'string' && delivery_date.trim()) {
+        // Build from delivery_date and delivery_time
+        const normalizedDate = delivery_date.trim();
+        if (delivery_time && typeof delivery_time === 'string' && delivery_time.trim()) {
+          // Both date and time provided
+          const timeParts = delivery_time.trim().replace(/:/g, '').match(/.{1,2}/g) || [];
+          if (timeParts.length >= 2 && timeParts[0] && timeParts[1]) {
+            const formattedTime = `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}:00`;
+            finalDeliveryDateTime = `${normalizedDate} ${formattedTime}`;
+          } else {
+            // Invalid time format, use default time
+            finalDeliveryDateTime = `${normalizedDate} 00:00:00`;
+          }
+        } else {
+          // Only date provided, use default time (start of day)
+          finalDeliveryDateTime = `${normalizedDate} 00:00:00`;
+        }
       }
-      // If only date or only time provided, or neither provided, keep as null for future orders/quotes
+      // If no date provided, keep as null for future orders/quotes
 
       // Create order
       // Set branch_id to location_id if provided, otherwise default to 1
@@ -702,6 +761,24 @@ export class AdminOrdersService {
     await queryRunner.startTransaction();
 
     try {
+      // Get current order status and payment_status to preserve them
+      const currentOrderCheck = await queryRunner.query(
+        `SELECT order_status, payment_status FROM orders WHERE order_id = $1`,
+        [id],
+      );
+
+      if (currentOrderCheck.length === 0) {
+        throw new NotFoundException('Order not found');
+      }
+
+      const currentOrderStatus = currentOrderCheck[0].order_status;
+      const currentPaymentStatus = currentOrderCheck[0].payment_status;
+      
+      // Ensure payment_status is set to 'order' if it's NULL or 'quote' (to prevent disappearing from orders list)
+      // Only update if it's NULL or 'quote', otherwise preserve existing value
+      const preservedPaymentStatus = currentPaymentStatus && currentPaymentStatus !== 'quote' 
+        ? currentPaymentStatus 
+        : 'order';
       const {
         customer_id,
         location_id,
@@ -717,6 +794,7 @@ export class AdminOrdersService {
         cost_center,
         delivery_contact,
         delivery_details,
+        standing_order, // Include standing_order to allow updating subscription orders
         products = [],
       } = updateOrderDto;
 
@@ -775,18 +853,51 @@ export class AdminOrdersService {
       const deliveryFeeAmount = parseFloat(delivery_fee || 0);
       const orderTotal = Math.round((afterDiscount + gst + deliveryFeeAmount) * 100) / 100;
 
-      // Build delivery_date_time: only set if both date and time are provided
-      // If null/empty, consider it a future order (no delivery date set)
-      let finalDeliveryDateTime: string | null = delivery_date_time || null;
-      if (delivery_date && delivery_time) {
-        finalDeliveryDateTime = `${delivery_date} ${delivery_time}:00`;
+      // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
+      // Allow setting just date (with default time 00:00:00) or both date and time
+      let finalDeliveryDateTime: string | null = null;
+      
+      if (delivery_date_time && typeof delivery_date_time === 'string' && delivery_date_time.trim()) {
+        // Use provided delivery_date_time if available
+        finalDeliveryDateTime = delivery_date_time.trim();
+      } else if (delivery_date && typeof delivery_date === 'string' && delivery_date.trim()) {
+        // Build from delivery_date and delivery_time
+        const normalizedDate = delivery_date.trim();
+        if (delivery_time && typeof delivery_time === 'string' && delivery_time.trim()) {
+          // Both date and time provided
+          const timeParts = delivery_time.trim().replace(/:/g, '').match(/.{1,2}/g) || [];
+          if (timeParts.length >= 2 && timeParts[0] && timeParts[1]) {
+            const formattedTime = `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}:00`;
+            finalDeliveryDateTime = `${normalizedDate} ${formattedTime}`;
+          } else {
+            // Invalid time format, use default time
+            finalDeliveryDateTime = `${normalizedDate} 00:00:00`;
+          }
+        } else {
+          // Only date provided, use default time (start of day)
+          finalDeliveryDateTime = `${normalizedDate} 00:00:00`;
+        }
       }
-      // If only date or only time provided, or neither provided, keep as null for future orders
+      // If no date provided, keep as null for future orders
 
       // Update order
       const branch_id = location_id || 1;
       const shipping_method = delivery_method === 'pickup' ? 2 : 1;
       const user_id = userId || 1;
+
+      // Get current standing_order to preserve it if not provided
+      const currentStandingOrderCheck = await queryRunner.query(
+        `SELECT standing_order FROM orders WHERE order_id = $1`,
+        [id],
+      );
+      const currentStandingOrder = currentStandingOrderCheck.length > 0 
+        ? currentStandingOrderCheck[0].standing_order 
+        : 0;
+      
+      // Use provided standing_order or preserve existing value
+      const finalStandingOrder = standing_order !== undefined && standing_order !== null 
+        ? standing_order 
+        : currentStandingOrder;
 
       const orderResult = await queryRunner.query(
         `UPDATE orders 
@@ -807,8 +918,11 @@ export class AdminOrdersService {
              delivery_contact = $15,
              delivery_details = $16,
              user_id = $17,
+             order_status = $18,
+             payment_status = $19,
+             standing_order = $20,
              date_modified = CURRENT_TIMESTAMP
-         WHERE order_id = $18 AND standing_order = 0
+         WHERE order_id = $21
          RETURNING *`,
         [
           customer_id,
@@ -821,13 +935,16 @@ export class AdminOrdersService {
           order_comments || null,
           couponId,
           couponDiscount, // Store coupon discount amount for historical accuracy
-          delivery_address || null,
+          (delivery_address && typeof delivery_address === 'string' && delivery_address.trim()) ? delivery_address.trim() : null,
           delivery_method || null,
           account_email?.trim() || null,
           cost_center?.trim() || null,
           delivery_contact?.trim() || null,
           delivery_details?.trim() || null,
           user_id,
+          currentOrderStatus, // Preserve existing order_status
+          preservedPaymentStatus, // Ensure payment_status is 'order' (not 'quote' or NULL)
+          finalStandingOrder, // Update or preserve standing_order
           id,
         ],
       );
@@ -1044,7 +1161,9 @@ export class AdminOrdersService {
         COUNT(CASE WHEN order_status = 2 THEN 1 END) as paid_orders
       FROM orders
       WHERE order_status NOT IN (0, 8)
-      -- Note: Status 1 is for Quotes, Status 2+ are Orders (2=Paid, 7=Approved, etc.)
+      -- Exclude quotes (payment_status = 'quote')
+      AND (payment_status IS NULL OR payment_status != 'quote')
+      -- Note: Status 1 (New) orders ARE included, but quotes are excluded
     `;
 
     const statsResult = await this.dataSource.query(statsQuery);
@@ -1055,10 +1174,10 @@ export class AdminOrdersService {
       FROM orders
       WHERE order_status NOT IN (0, 8)
       AND order_status NOT IN (1, 9)
-      AND (
-        (delivery_date_time IS NOT NULL AND DATE(delivery_date_time) = CURRENT_DATE)
-        OR (delivery_date_time IS NULL AND DATE(date_added) = CURRENT_DATE)
-      )
+      -- Exclude quotes (payment_status = 'quote')
+      AND (payment_status IS NULL OR payment_status != 'quote')
+      AND delivery_date_time IS NOT NULL
+      AND DATE(delivery_date_time) = CURRENT_DATE
     `);
 
     const productionResult = await this.dataSource.query(`
@@ -1078,10 +1197,13 @@ export class AdminOrdersService {
       FROM orders
       WHERE DATE(date_added) = CURRENT_DATE
       AND order_status NOT IN (0, 8)
-      -- Include status 1 (New) orders
+      -- Exclude quotes (payment_status = 'quote')
+      AND (payment_status IS NULL OR payment_status != 'quote')
+      -- Include status 1 (New) orders, but exclude quotes
     `);
 
     // Get today's delivery orders with full details
+    // Only show orders that are actually scheduled for delivery TODAY (not future orders)
     const todayOrdersQuery = `
       SELECT 
         o.order_id,
@@ -1099,12 +1221,12 @@ export class AdminOrdersService {
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       WHERE o.order_status NOT IN (0, 8)
-      -- Include status 1 (New) orders in today's orders
-      AND (
-        (o.delivery_date_time IS NOT NULL AND DATE(o.delivery_date_time) = CURRENT_DATE)
-        OR (o.delivery_date_time IS NULL AND DATE(o.date_added) = CURRENT_DATE)
-      )
-      ORDER BY o.date_added DESC, o.delivery_date_time DESC NULLS LAST
+      -- Exclude quotes (payment_status = 'quote')
+      AND (o.payment_status IS NULL OR o.payment_status != 'quote')
+      -- Only show orders with delivery_date_time set to TODAY (not future dates)
+      AND o.delivery_date_time IS NOT NULL
+      AND DATE(o.delivery_date_time) = CURRENT_DATE
+      ORDER BY o.delivery_date_time ASC, o.date_added DESC
       LIMIT 50
     `;
     const todayOrdersResult = await this.dataSource.query(todayOrdersQuery);
@@ -1147,10 +1269,12 @@ export class AdminOrdersService {
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       WHERE o.order_status NOT IN (0, 8)
-      -- Include status 1 (New) orders
+      -- Exclude quotes (payment_status = 'quote')
+      AND (o.payment_status IS NULL OR o.payment_status != 'quote')
+      -- Only show orders scheduled for tomorrow
       AND o.delivery_date_time IS NOT NULL
       AND DATE(o.delivery_date_time) = $1
-      ORDER BY o.date_added DESC, o.delivery_date_time DESC
+      ORDER BY o.delivery_date_time ASC, o.date_added DESC
       LIMIT 50
     `;
     const tomorrowOrdersResult = await this.dataSource.query(tomorrowOrdersQuery, [tomorrowDateStr]);

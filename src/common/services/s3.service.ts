@@ -115,7 +115,7 @@ export class S3Service {
 
     const contentType = contentTypeMap[fileExtension.toLowerCase()] || 'image/jpeg';
 
-    return this.uploadToS3(file, 'caterly_assets', fileName, contentType);
+    return this.uploadToS3(file, 'zenn_assets', fileName, contentType);
   }
 
   /**
