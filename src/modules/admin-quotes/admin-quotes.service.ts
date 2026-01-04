@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { DataSource } from 'typeorm';
 import { EmailService } from '../../common/services/email.service';
 import { InvoiceService } from '../../common/services/invoice.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AdminQuotesService {
@@ -47,7 +48,8 @@ export class AdminQuotesService {
       LEFT JOIN department d ON c.department_id = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.standing_order = 0
-      AND o.order_status = 1
+      AND (o.order_status = 1 OR o.order_status = 4 OR o.order_status = 7 OR o.order_status = 8 OR o.order_status = 9)
+      -- Include: 1=new, 4=awaiting approval, 7=approved, 8=rejected, 9=modification requested
       -- Exclude orders that have been paid (status 2)
       AND o.order_status != 2
       -- Only show quotes (payment_status = 'quote' or NULL for legacy quotes)
@@ -113,7 +115,8 @@ export class AdminQuotesService {
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       WHERE o.standing_order = 0
-      AND o.order_status = 1
+      AND (o.order_status = 1 OR o.order_status = 4 OR o.order_status = 7 OR o.order_status = 8 OR o.order_status = 9)
+      -- Include: 1=new, 4=awaiting approval, 7=approved, 8=rejected, 9=modification requested
       -- Exclude orders that have been paid (status 2)
       AND o.order_status != 2
       -- Only show quotes (payment_status = 'quote' or NULL for legacy quotes)
@@ -1385,8 +1388,22 @@ export class AdminQuotesService {
         throw new BadRequestException('Recipient email is required');
       }
 
-      const baseUrl = process.env.FRONTEND_URL || process.env.STOREFRONT_URL || 'http://localhost:3000';
-      const publicQuoteUrl = `${baseUrl}/quote/${id}`;
+      // Generate or retrieve unique token for quote access
+      let quoteToken = quote.quote_token;
+      if (!quoteToken) {
+        // Generate a secure random token
+        quoteToken = crypto.randomBytes(32).toString('hex');
+        
+        // Store the token in the database
+        await manager.query(
+          `UPDATE orders SET quote_token = $1 WHERE order_id = $2`,
+          [quoteToken, id]
+        );
+      }
+
+      // Use production storefront URL for quote links
+      const baseUrl = 'http://13.55.15.37:3000';
+      const publicQuoteUrl = `${baseUrl}/quote/${quoteToken}`;
 
       const customerName = quote.firstname && quote.lastname ? `${quote.firstname} ${quote.lastname}` : 'Customer';
       const emailSubject = `Quote #${quote.order_id} - ${process.env.COMPANY_NAME || 'Sendrix'}`;
@@ -1505,6 +1522,7 @@ export class AdminQuotesService {
       }
 
       // Update quote status if email sent successfully
+      // Note: quote_token is already set above if it didn't exist
       if (emailResult.success) {
         await manager.query(
           `UPDATE orders 

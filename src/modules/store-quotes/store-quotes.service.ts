@@ -8,6 +8,80 @@ export class StoreQuotesService {
   constructor(private dataSource: DataSource) {}
 
   /**
+   * Get public quote details by token (no authentication required)
+   * Used for customer quote review via email link with secure token
+   */
+  async getPublicQuoteByToken(token: string) {
+    const query = `
+      SELECT 
+        o.order_id,
+        o.customer_id,
+        o.location_id,
+        o.order_status,
+        o.order_total,
+        o.delivery_fee,
+        o.date_added,
+        o.date_modified,
+        o.delivery_date_time,
+        o.delivery_address,
+        o.order_comments,
+        o.approval_comments,
+        c.firstname,
+        c.lastname,
+        c.email,
+        c.telephone,
+        c.company_id,
+        c.department_id,
+        c.customer_type,
+        co.company_name,
+        d.department_name,
+        l.location_name,
+        cp.coupon_id,
+        cp.coupon_code,
+        cp.type as coupon_type,
+        cp.coupon_discount,
+        (
+          SELECT json_agg(json_build_object(
+            'product_id', op.product_id,
+            'product_name', p.product_name,
+            'quantity', op.quantity,
+            'price', op.price,
+            'total', op.total,
+            'options', (
+              SELECT json_agg(json_build_object(
+                'option_name', opo.option_name,
+                'option_value', opo.option_value,
+                'option_quantity', opo.option_quantity,
+                'option_price', opo.option_price,
+                'product_option_id', opo.product_option_id
+              ))
+              FROM order_product_option opo
+              WHERE opo.order_product_id = op.order_product_id
+            )
+          ))
+          FROM order_product op
+          LEFT JOIN product p ON op.product_id = p.product_id
+          WHERE op.order_id = o.order_id
+        ) as products
+      FROM orders o
+      LEFT JOIN customer c ON o.customer_id = c.customer_id
+      LEFT JOIN company co ON c.company_id = co.company_id
+      LEFT JOIN department d ON c.department_id = d.department_id
+      LEFT JOIN locations l ON o.location_id = l.location_id
+      LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
+      WHERE o.quote_token = $1 AND o.standing_order = 0
+    `;
+    const result = await this.dataSource.query(query, [token]);
+
+    if (result.length === 0) {
+      throw new NotFoundException('Quote not found or invalid token');
+    }
+
+    const quote = result[0];
+    return this.calculateQuoteTotals(quote);
+  }
+
+  /**
    * Get public quote details (no authentication required)
    * Used for customer quote review via email link
    */
@@ -53,7 +127,7 @@ export class StoreQuotesService {
                 'option_value', opo.option_value,
                 'option_quantity', opo.option_quantity,
                 'option_price', opo.option_price,
-                'option_value_id', opo.option_value_id
+                'product_option_id', opo.product_option_id
               ))
               FROM order_product_option opo
               WHERE opo.order_product_id = op.order_product_id
@@ -78,7 +152,14 @@ export class StoreQuotesService {
     }
 
     const quote = result[0];
+    return this.calculateQuoteTotals(quote);
+  }
 
+  /**
+   * Calculate quote totals with discounts
+   * Helper method to avoid code duplication
+   */
+  private async calculateQuoteTotals(quote: any) {
     // Get customer type for discount calculation
     const customerType = quote.customer_type || 'Retail';
     const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
@@ -130,8 +211,12 @@ export class StoreQuotesService {
             const optionPrice = parseFloat(option.option_price || 0);
             const optionQuantity = option.option_quantity || 1;
 
-            if (option.option_value_id && optionDiscountsMap.size > 0) {
-              const discountKey = `${product.product_id}_${option.option_value_id}`;
+            // Note: option_value_id is not available in order_product_option
+            // Discounts should already be applied in the stored price
+            // For quotes, we use the stored option_price directly
+            if (false && optionDiscountsMap.size > 0) {
+              // Discount calculation disabled for quotes - prices are already final
+              const discountKey = `${product.product_id}_${option.product_option_id}`;
               const discountPercentage = optionDiscountsMap.get(discountKey) || 0;
 
               if (discountPercentage > 0) {
@@ -197,6 +282,82 @@ export class StoreQuotesService {
     quote.calculated_total = calculatedTotal;
 
     return { quote };
+  }
+
+  /**
+   * Submit customer feedback/approval by token (no authentication required)
+   * Actions: 'approve', 'modify', 'reject'
+   */
+  async submitCustomerFeedbackByToken(token: string, data: { action: string; comments?: string }) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const { action, comments } = data;
+
+      if (!action || !['approve', 'modify', 'reject'].includes(action)) {
+        throw new BadRequestException("Invalid action. Must be 'approve', 'modify', or 'reject'");
+      }
+
+      // Verify quote exists by token
+      const quoteCheck = await queryRunner.query(
+        `SELECT order_id, order_status FROM orders WHERE quote_token = $1 AND standing_order = 0`,
+        [token],
+      );
+
+      if (quoteCheck.length === 0) {
+        throw new NotFoundException('Quote not found or invalid token');
+      }
+
+      const quoteId = quoteCheck[0].order_id;
+
+      // Map action to status
+      // Status: 7=approved, 8=rejected, 9=modified
+      let newStatus: number;
+      switch (action) {
+        case 'approve':
+          newStatus = 7; // approved
+          break;
+        case 'modify':
+          newStatus = 9; // modified
+          break;
+        case 'reject':
+          newStatus = 8; // rejected
+          break;
+        default:
+          newStatus = 1; // new (shouldn't happen)
+      }
+
+      // Update quote with customer feedback
+      const updateQuery = `
+        UPDATE orders 
+        SET order_status = $1,
+            approval_comments = $2,
+            date_modified = CURRENT_TIMESTAMP
+        WHERE quote_token = $3 AND standing_order = 0
+        RETURNING *
+      `;
+
+      const result = await queryRunner.query(updateQuery, [
+        newStatus,
+        (comments && comments.trim()) || null,
+        token,
+      ]);
+
+      await queryRunner.commitTransaction();
+      
+      return {
+        success: true,
+        quote: result[0],
+        message: `Quote ${action === 'approve' ? 'approved' : action === 'modify' ? 'marked for modification' : 'rejected'} successfully`,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   /**
