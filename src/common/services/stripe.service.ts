@@ -105,7 +105,7 @@ export class StripeService {
     }
 
     this.stripe = new Stripe(this.secretKey, {
-      apiVersion: '2025-11-17.clover',
+      apiVersion: '2025-11-17.clover' as any,
       typescript: true,
     });
 
