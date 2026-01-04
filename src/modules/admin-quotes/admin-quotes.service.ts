@@ -685,6 +685,21 @@ export class AdminQuotesService {
       }
       // If only date or only time provided, or neither provided, keep as null for future orders/quotes
 
+      // Validate location_id - check if it exists in locations table
+      let validLocationId: number | null = null;
+      if (location_id) {
+        const locationCheck = await manager.query(
+          `SELECT location_id FROM locations WHERE location_id = $1`,
+          [location_id],
+        );
+        if (locationCheck.length > 0) {
+          validLocationId = location_id;
+        } else {
+          this.logger.warn(`Location ID ${location_id} does not exist in locations table. Using NULL instead.`);
+        }
+      }
+      // If location_id is not provided or invalid, use NULL (location_id is nullable in orders table)
+
       // Insert order
       const orderResult = await manager.query(
         `INSERT INTO orders (
@@ -715,7 +730,7 @@ export class AdminQuotesService {
         RETURNING order_id`,
         [
           customer_id,
-          location_id || 1,
+          validLocationId,
           1,
           1,
           0,
@@ -1011,6 +1026,21 @@ export class AdminQuotesService {
       // If order_status is explicitly provided, use that value (allows manual conversion)
       const newOrderStatus = order_status !== undefined && order_status !== null ? order_status : (currentStatus || 1);
 
+      // Validate location_id - check if it exists in locations table
+      let validLocationId: number | null = null;
+      if (location_id) {
+        const locationCheck = await manager.query(
+          `SELECT location_id FROM locations WHERE location_id = $1`,
+          [location_id],
+        );
+        if (locationCheck.length > 0) {
+          validLocationId = location_id;
+        } else {
+          this.logger.warn(`Location ID ${location_id} does not exist in locations table. Using NULL instead.`);
+        }
+      }
+      // If location_id is not provided or invalid, use NULL (location_id is nullable in orders table)
+
       // Update order
       const orderResult = await manager.query(
         `UPDATE orders 
@@ -1035,7 +1065,7 @@ export class AdminQuotesService {
          RETURNING *`,
         [
           customer_id,
-          location_id || 1,
+          validLocationId,
           orderTotal,
           delivery_fee || 0,
           deliveryDateTime,
