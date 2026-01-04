@@ -939,6 +939,29 @@ export class AdminProductsService {
     await queryRunner.startTransaction();
 
     try {
+      // Check if product exists
+      const productCheck = await queryRunner.query(
+        'SELECT product_id, product_name FROM product WHERE product_id = $1',
+        [Number(id)],
+      );
+
+      if (productCheck.length === 0) {
+        throw new NotFoundException('Product not found');
+      }
+
+      // Check if product is used in any orders
+      const orderProductCheck = await queryRunner.query(
+        'SELECT COUNT(*) as count FROM order_product WHERE product_id = $1',
+        [Number(id)],
+      );
+
+      const orderCount = parseInt(orderProductCheck[0].count);
+      if (orderCount > 0) {
+        throw new BadRequestException(
+          `Cannot delete product "${productCheck[0].product_name}" because it is used in ${orderCount} order(s). Please remove it from all orders first.`,
+        );
+      }
+
       // Delete product options first (foreign key constraint)
       await queryRunner.query('DELETE FROM product_option WHERE product_id = $1', [Number(id)]);
 
@@ -954,16 +977,18 @@ export class AdminProductsService {
         [Number(id)],
       );
 
-      if (result.length === 0) {
-        throw new NotFoundException('Product not found');
-      }
-
       await queryRunner.commitTransaction();
 
       return { message: 'Product deleted successfully' };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      throw error;
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.error('Delete product error:', error);
+      throw new BadRequestException(
+        error.message || 'Failed to delete product. It may be referenced in existing orders.',
+      );
     } finally {
       await queryRunner.release();
     }

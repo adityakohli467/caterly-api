@@ -59,6 +59,22 @@ export class HttpExceptionFilter implements ExceptionFilter {
         } else {
           message = 'Required field is missing';
         }
+      } else if (errorMessage.includes('violates foreign key constraint')) {
+        // Handle foreign key constraint violations
+        status = HttpStatus.BAD_REQUEST;
+        const constraintMatch = errorMessage.match(/constraint "([^"]+)"/);
+        const tableMatch = errorMessage.match(/on table "([^"]+)"/);
+        
+        if (constraintMatch && tableMatch) {
+          const tableName = tableMatch[1].replace(/_/g, ' ');
+          if (errorMessage.includes('order_product')) {
+            message = 'Cannot delete this product because it is used in existing orders. Please remove it from all orders first.';
+          } else {
+            message = `Cannot delete this item because it is referenced in ${tableName}. Please remove all references first.`;
+          }
+        } else {
+          message = 'Cannot delete this item because it is referenced by other records. Please remove all references first.';
+        }
       } else {
         status = HttpStatus.INTERNAL_SERVER_ERROR;
         message = 'Database error occurred';
