@@ -154,7 +154,23 @@ export class AdminCustomersService {
     const countResult = await this.dataSource.query(countQuery, countParams);
     const count = parseInt(countResult[0].count);
 
-    return { customers: result, count, limit: Number(limit), offset: Number(offset) };
+    // Transform the result to nest company and department data
+    const customers = result.map((row: any) => ({
+      ...row,
+      company: row.company_id && row.company_name ? {
+        company_id: row.company_id,
+        company_name: row.company_name
+      } : null,
+      department: row.department_id && row.department_name ? {
+        department_id: row.department_id,
+        department_name: row.department_name
+      } : null,
+      // Remove flat fields to avoid confusion
+      company_name: undefined,
+      department_name: undefined,
+    }));
+
+    return { customers, count, limit: Number(limit), offset: Number(offset) };
   }
 
   async findOne(id: number): Promise<any> {
@@ -211,7 +227,6 @@ export class AdminCustomersService {
       customer_cost_centre,
       company_id,
       department_id,
-      estimated_opening_date,
       status,
       archived,
       discount_percentage,
@@ -246,11 +261,20 @@ export class AdminCustomersService {
     `);
     const hasCreatedFrom = createdFromCheck.length > 0;
 
+    // Check if approved column exists
+    const approvedCheck = await this.dataSource.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'customer' 
+      AND column_name = 'approved'
+    `);
+    const hasApproved = approvedCheck.length > 0;
+
     // Build dynamic query parts
     const columns: string[] = [
       'firstname', 'lastname', 'email', 'telephone', 'customer_address',
       'company_id', 'department_id', 'customer_type', 'customer_notes',
-      'customer_cost_centre', 'estimated_opening_date', 'status'
+      'customer_cost_centre', 'status'
     ];
     const placeholders: string[] = [];
     const values: any[] = [
@@ -264,7 +288,6 @@ export class AdminCustomersService {
       customer_type || 'Retail',
       customer_notes ? customer_notes.trim() : null,
       customer_cost_centre ? customer_cost_centre.trim() : null,
-      estimated_opening_date || null,
       status || 1,
     ];
 
@@ -285,6 +308,13 @@ export class AdminCustomersService {
     if (hasCreatedFrom) {
       columns.push('created_from');
       values.push('admin');
+      paramIndex++;
+    }
+
+    // Set approved = true for admin-created customers
+    if (hasApproved) {
+      columns.push('approved');
+      values.push(true);
       paramIndex++;
     }
 
@@ -318,14 +348,13 @@ export class AdminCustomersService {
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'customer' 
-      AND column_name IN ('customer_type', 'customer_notes', 'customer_cost_centre', 'department_id', 'estimated_opening_date', 'archived', 'discount_percentage', 'wholesale_discount_percentage')
+      AND column_name IN ('customer_type', 'customer_notes', 'customer_cost_centre', 'department_id', 'archived', 'discount_percentage', 'wholesale_discount_percentage')
     `);
     const existingColumns = columnCheck.map((row: any) => row.column_name);
     const hasCustomerType = existingColumns.includes('customer_type');
     const hasCustomerNotes = existingColumns.includes('customer_notes');
     const hasCostCentre = existingColumns.includes('customer_cost_centre');
     const hasDepartmentId = existingColumns.includes('department_id');
-    const hasEstimatedDate = existingColumns.includes('estimated_opening_date');
     const hasArchived = existingColumns.includes('archived');
     const hasDiscountPercentage = existingColumns.includes('discount_percentage');
     const hasWholesaleDiscountPercentage = existingColumns.includes('wholesale_discount_percentage');
@@ -384,10 +413,6 @@ export class AdminCustomersService {
       values.push(updateCustomerDto.department_id ? Number(updateCustomerDto.department_id) : null);
     }
 
-    if (hasEstimatedDate && updateCustomerDto.estimated_opening_date !== undefined) {
-      updates.push(`estimated_opening_date = $${paramIndex++}`);
-      values.push(updateCustomerDto.estimated_opening_date || null);
-    }
 
     if (updateCustomerDto.status !== undefined) {
       updates.push(`status = $${paramIndex++}`);
