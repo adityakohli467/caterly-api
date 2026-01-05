@@ -1406,7 +1406,9 @@ export class AdminQuotesService {
       const publicQuoteUrl = `${baseUrl}/quote/${quoteToken}`;
 
       const customerName = quote.firstname && quote.lastname ? `${quote.firstname} ${quote.lastname}` : 'Customer';
-      const emailSubject = `Quote #${quote.order_id} - ${process.env.COMPANY_NAME || 'Sendrix'}`;
+      // Normalize company name - remove "Email" suffix if present and ensure proper formatting
+      const companyName = (process.env.COMPANY_NAME || 'ZENN').replace(/\s*–\s*Email\s*$/i, '').replace(/^Zenn\s/i, 'ZENN ');
+      const emailSubject = `Quote #${quote.order_id} - ${companyName}`;
 
       const emailBody = `
         <!DOCTYPE html>
@@ -1421,7 +1423,7 @@ export class AdminQuotesService {
             .product-item { padding: 10px; border-bottom: 1px solid #eee; }
             .total { font-weight: bold; font-size: 18px; color: #0d6efd; }
             .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-            .cta-button { display: inline-block; padding: 12px 24px; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+            .cta-button { display: inline-block; padding: 12px 24px; background-color: #0d6efd; color: #ffffff !important; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: 500; }
           </style>
         </head>
         <body>
@@ -1489,7 +1491,7 @@ export class AdminQuotesService {
               ${customMessage ? `<div class="quote-details"><p>${customMessage}</p></div>` : ''}
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${publicQuoteUrl}" class="cta-button">Review & Approve Quote</a>
+                <a href="${publicQuoteUrl}" class="cta-button" style="color: #ffffff !important; background-color: #0d6efd; text-decoration: none; padding: 12px 24px; border-radius: 5px; display: inline-block; font-weight: 500;">Review & Approve Quote</a>
               </div>
               
               <p style="font-size: 0.9em; color: #666;">
@@ -1498,7 +1500,7 @@ export class AdminQuotesService {
             </div>
             <div class="footer">
               <p>If you have any questions, please contact us.</p>
-              <p>&copy; ${new Date().getFullYear()} ${process.env.COMPANY_NAME || 'Sendrix'}. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
             </div>
           </div>
         </body>
