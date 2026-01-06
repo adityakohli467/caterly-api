@@ -49,12 +49,14 @@ export class AdminInvoicesController {
   }
 
   @Get(':order_id/download')
-  @ApiOperation({ summary: 'Download invoice PDF' })
+  @ApiOperation({ summary: 'Download invoice or quote PDF' })
   async downloadInvoice(@Param('order_id', ParseIntPipe) orderId: number, @Res() res: Response) {
     const pdfBuffer = await this.adminInvoicesService.getInvoicePDF(orderId);
+    // Match old PHP app: always use "invoice-" filename, but PDF content shows QUOTE or INVOICE dynamically
+    const filename = `invoice-${orderId}.pdf`;
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="quote-${orderId}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdfBuffer.length.toString());
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');

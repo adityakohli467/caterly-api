@@ -168,7 +168,7 @@ export class StoreProductsService {
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
       LEFT JOIN product_category pc ON p.product_id = pc.product_id
-      WHERE p.product_status = 1
+      WHERE p.product_status = 1 AND p.show_in_storefront = true
     `;
 
     // Filter by customer type visibility
@@ -243,7 +243,7 @@ export class StoreProductsService {
       FROM product p
       LEFT JOIN product_category pc ON p.product_id = pc.product_id
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
-      WHERE p.product_status = 1
+      WHERE p.product_status = 1 AND p.show_in_storefront = true
     `;
 
     let countParams: any[] = [];
@@ -418,7 +418,7 @@ export class StoreProductsService {
       FROM product p
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
-      WHERE p.product_id = $1 AND p.product_status = 1
+      WHERE p.product_id = $1 AND p.product_status = 1 AND p.show_in_storefront = true
     `;
 
     // Filter by customer type visibility
@@ -725,7 +725,7 @@ export class StoreProductsService {
       FROM product p
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
-      WHERE p.product_status = 1
+      WHERE p.product_status = 1 AND p.show_in_storefront = true
     `;
 
     // Filter by customer type visibility
@@ -928,7 +928,7 @@ export class StoreProductsService {
       FROM product p
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
-      WHERE p.product_status = 1
+      WHERE p.product_status = 1 AND p.show_in_storefront = true
         AND p.` + featuredColumn + ` = true
     `;
 
@@ -1145,7 +1145,7 @@ export class StoreProductsService {
     }
 
     // Check if product exists
-    const productQuery = `SELECT product_id FROM product WHERE product_id = $1 AND product_status = 1`;
+    const productQuery = `SELECT product_id FROM product WHERE product_id = $1 AND product_status = 1 AND show_in_storefront = true`;
     const productResult = await this.dataSource.query(productQuery, [id]);
     if (productResult.length === 0) {
       throw new NotFoundException('Product not found');

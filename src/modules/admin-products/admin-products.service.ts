@@ -422,6 +422,7 @@ export class AdminProductsService {
       show_in_checkout?: boolean;
       featured_1?: boolean;
       featured_2?: boolean;
+      show_in_storefront?: boolean;
     },
     files?: Express.Multer.File[],
   ) {
@@ -477,6 +478,7 @@ export class AdminProductsService {
         show_in_checkout,
         featured_1,
         featured_2,
+        show_in_storefront,
       } = productData;
 
       // Validation
@@ -545,9 +547,10 @@ export class AdminProductsService {
           show_in_checkout,
           featured_1,
           featured_2,
+          show_in_storefront,
           product_date_added,
           product_date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
         RETURNING *`,
         [
           product_name,
@@ -569,6 +572,7 @@ export class AdminProductsService {
           show_in_checkout || false,
           featured_1 || false,
           featured_2 || false,
+          show_in_storefront || false,
         ],
       );
 
@@ -669,6 +673,7 @@ export class AdminProductsService {
       show_in_checkout?: boolean;
       featured_1?: boolean;
       featured_2?: boolean;
+      show_in_storefront?: boolean;
     },
     files?: Express.Multer.File[],
   ) {
@@ -722,6 +727,7 @@ export class AdminProductsService {
         show_in_checkout,
         featured_1,
         featured_2,
+        show_in_storefront,
       } = productData;
 
       // Validate update fields
@@ -832,6 +838,10 @@ export class AdminProductsService {
       if (featured_2 !== undefined) {
         updateFields.push(`featured_2 = $${paramIndex++}`);
         updateParams.push(featured_2);
+      }
+      if (show_in_storefront !== undefined) {
+        updateFields.push(`show_in_storefront = $${paramIndex++}`);
+        updateParams.push(show_in_storefront);
       }
 
       updateFields.push('product_date_modified = CURRENT_TIMESTAMP');
@@ -1076,5 +1086,64 @@ export class AdminProductsService {
     }
 
     return { message: 'Category deleted successfully' };
+  }
+
+  /**
+   * Toggle product status (activate/deactivate)
+   */
+  async toggleProductStatus(id: number, status: number): Promise<any> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Validate status (0 = inactive, 1 = active)
+      if (status !== 0 && status !== 1) {
+        throw new BadRequestException('Invalid status. Must be 0 (inactive) or 1 (active)');
+      }
+
+      // Check if product exists
+      const checkQuery = 'SELECT product_id, product_status FROM product WHERE product_id = $1';
+      const checkResult = await queryRunner.query(checkQuery, [id]);
+
+      if (checkResult.length === 0) {
+        throw new NotFoundException('Product not found');
+      }
+
+      // Update product status
+      const updateQuery = `
+        UPDATE product 
+        SET product_status = $1, product_date_modified = CURRENT_TIMESTAMP
+        WHERE product_id = $2
+        RETURNING product_id, product_status, product_name
+      `;
+      const result = await queryRunner.query(updateQuery, [status, id]);
+
+      await queryRunner.commitTransaction();
+      
+      return {
+        message: `Product ${status === 1 ? 'activated' : 'deactivated'} successfully`,
+        product: result[0],
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Get inactive products
+   */
+  async getInactiveProducts(filters: {
+    limit?: number;
+    offset?: number;
+    search?: string;
+  }) {
+    return this.listProducts({
+      ...filters,
+      status: 0, // Only inactive products
+    });
   }
 }

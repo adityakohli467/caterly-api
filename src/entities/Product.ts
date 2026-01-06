@@ -63,6 +63,9 @@ export class Product {
   @Column({ type: "boolean", default: false })
   featured_2!: boolean
 
+  @Column({ type: "boolean", default: false })
+  show_in_storefront!: boolean
+
   @CreateDateColumn({ name: "product_date_added" })
   product_date_added!: Date
 

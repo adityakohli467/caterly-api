@@ -241,23 +241,7 @@ export class AdminQuotesService {
     const quotes = result.map((row: any) => {
       let subtotal = productsMap.get(row.order_id) || 0;
 
-      // Calculate wholesale discount if applicable
-      let wholesaleDiscount = 0;
-      const customerType = row.customer_type || 'Retail';
-      const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-      
-      // Only apply wholesale discount if no custom product/option discounts are set
-      const customerDiscounts = customerDiscountsMap.get(row.customer_id);
-      const hasCustomDiscounts = customerDiscounts && (customerDiscounts.hasProductDiscounts || customerDiscounts.hasOptionDiscounts);
-      
-      if (isWholesale && !hasCustomDiscounts) {
-        const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-        wholesaleDiscount = subtotal * (discountPercentage / 100);
-      }
-
-      const afterWholesaleDiscount = subtotal - wholesaleDiscount;
-
-      // Calculate coupon discount (applied after wholesale discount)
+      // Calculate coupon discount
       let couponDiscount = 0;
       let couponCode: string | null = null;
       // Check if coupon_id exists (even if JOIN returns NULL due to deleted coupon)
@@ -270,15 +254,15 @@ export class AdminQuotesService {
           // Coupon still exists - calculate from coupon table
           couponCode = row.coupon_code;
           if (row.coupon_type === 'P') {
-            couponDiscount = afterWholesaleDiscount * (parseFloat(row.coupon_discount) / 100);
+            couponDiscount = subtotal * (parseFloat(row.coupon_discount) / 100);
           } else if (row.coupon_type === 'F') {
             couponDiscount = parseFloat(row.coupon_discount);
           }
-          couponDiscount = Math.min(couponDiscount, afterWholesaleDiscount);
+          couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
           // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
           // Calculate what the total should be without coupon
-          const tempAfterDiscount = afterWholesaleDiscount;
+          const tempAfterDiscount = subtotal;
           const tempGst = tempAfterDiscount * 0.1;
           const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
           const tempTotal = tempAfterDiscount + tempGst + tempDeliveryFee;
@@ -292,7 +276,7 @@ export class AdminQuotesService {
       }
       
       const finalCouponDiscount = couponDiscount;
-      const afterDiscount = afterWholesaleDiscount - finalCouponDiscount;
+      const afterDiscount = subtotal - finalCouponDiscount;
       // Match quote creation calculation exactly (no rounding for GST, round final total)
       const gst = afterDiscount * 0.1;
       const deliveryFee = parseFloat(row.delivery_fee || 0);
@@ -378,9 +362,6 @@ export class AdminQuotesService {
     const quote = result[0];
 
     // Calculate totals
-    const customerType = quote.customer_type || 'Retail';
-    const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-
     // Fetch option-level discounts
     const optionDiscountsMap = new Map();
     // Fetch product-level discounts
@@ -457,16 +438,7 @@ export class AdminQuotesService {
       }
     }
 
-    let wholesaleDiscount = 0;
-    // Only apply wholesale discount if no custom discounts are set
-    if (isWholesale && optionDiscountsMap.size === 0 && productDiscountsMap.size === 0) {
-      const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-      wholesaleDiscount = subtotal * (discountPercentage / 100);
-    }
-
-    const afterWholesaleDiscount = subtotal - wholesaleDiscount;
-
-    // Calculate coupon discount (applied after wholesale discount)
+    // Calculate coupon discount
     let couponDiscount = 0;
     let couponCode: string | null = quote.coupon_code || null;
     // Check if coupon_id exists (even if JOIN returns NULL due to deleted coupon)
@@ -479,15 +451,15 @@ export class AdminQuotesService {
         // Coupon information available from JOIN - recalculate to ensure accuracy
         couponCode = quote.coupon_code;
         if (quote.coupon_type === 'P') {
-          couponDiscount = afterWholesaleDiscount * (parseFloat(quote.coupon_discount) / 100);
+          couponDiscount = subtotal * (parseFloat(quote.coupon_discount) / 100);
         } else if (quote.coupon_type === 'F') {
           couponDiscount = parseFloat(quote.coupon_discount);
         }
-        couponDiscount = Math.min(couponDiscount, afterWholesaleDiscount);
+        couponDiscount = Math.min(couponDiscount, subtotal);
       } else {
         // Coupon was deleted but coupon_id exists - calculate discount from stored order_total
         // Calculate what the total should be without coupon
-        const tempAfterDiscount = afterWholesaleDiscount;
+        const tempAfterDiscount = subtotal;
         const tempGst = tempAfterDiscount * 0.1;
         const tempDeliveryFee = parseFloat(quote.delivery_fee || 0);
         const tempTotal = tempAfterDiscount + tempGst + tempDeliveryFee;
@@ -501,17 +473,15 @@ export class AdminQuotesService {
     }
 
     const finalCouponDiscount = couponDiscount;
-    const afterDiscount = afterWholesaleDiscount - finalCouponDiscount;
+    const afterDiscount = subtotal - finalCouponDiscount;
     const gst = Math.round(afterDiscount * 0.1 * 100) / 100;
     const calculatedTotal = Math.round((afterDiscount + gst + parseFloat(quote.delivery_fee || 0)) * 100) / 100;
 
     quote.subtotal = subtotal;
-    quote.wholesale_discount = wholesaleDiscount;
     quote.coupon_discount = finalCouponDiscount;
     quote.coupon_code = couponCode;
     quote.coupon_id = quote.coupon_id || null; // Ensure coupon_id is included
-    quote.total_discount = wholesaleDiscount + finalCouponDiscount;
-    quote.after_wholesale_discount = afterWholesaleDiscount;
+    quote.total_discount = finalCouponDiscount;
     quote.after_discount = afterDiscount;
     quote.gst = gst;
     quote.calculated_total = calculatedTotal;
@@ -555,13 +525,6 @@ export class AdminQuotesService {
       if (!products || products.length === 0) {
         throw new BadRequestException('At least one product is required');
       }
-
-      // Get customer details
-      const customerQuery = `SELECT customer_type FROM customer WHERE customer_id = $1`;
-      const customerResult = await manager.query(customerQuery, [customer_id]);
-      const customer = customerResult[0];
-      const customerType = customer?.customer_type || 'Retail';
-      const isWholesale = !!(customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler')));
 
       // Get customer product option discounts (option-level)
       const optionDiscountsMap = new Map();
@@ -636,16 +599,8 @@ export class AdminQuotesService {
         }
       }
 
-      let wholesaleDiscount = 0;
-      // Only apply wholesale discount if no custom discounts are set
-      if (isWholesale && optionDiscountsMap.size === 0 && productDiscountsMap.size === 0) {
-        const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-        wholesaleDiscount = subtotal * (discountPercentage / 100);
-      }
-
       let couponDiscount = 0;
       let couponId = null;
-      const afterWholesaleDiscount = subtotal - wholesaleDiscount;
       
       if (coupon_code) {
         // Trim whitespace and make case-insensitive lookup
@@ -661,14 +616,14 @@ export class AdminQuotesService {
           const coupon = couponResult[0];
           couponId = coupon.coupon_id;
 
-          // Apply coupon discount after wholesale discount
+          // Apply coupon discount
           if (coupon.type === 'P') {
-            couponDiscount = afterWholesaleDiscount * (parseFloat(coupon.coupon_discount) / 100);
+            couponDiscount = subtotal * (parseFloat(coupon.coupon_discount) / 100);
           } else if (coupon.type === 'F') {
             couponDiscount = parseFloat(coupon.coupon_discount);
           }
 
-          couponDiscount = Math.min(couponDiscount, afterWholesaleDiscount);
+          couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
           // Log warning if coupon not found (for debugging)
           this.logger.warn(`Coupon not found or inactive: ${coupon_code} (normalized: ${normalizedCouponCode})`);
@@ -676,7 +631,7 @@ export class AdminQuotesService {
       }
 
       const finalCouponDiscount = couponDiscount;
-      const afterDiscount = afterWholesaleDiscount - finalCouponDiscount;
+      const afterDiscount = subtotal - finalCouponDiscount;
       const gst = afterDiscount * 0.1;
       const orderTotal = afterDiscount + gst + parseFloat(delivery_fee.toString());
 
@@ -833,10 +788,8 @@ export class AdminQuotesService {
         quote: {
           order_id: orderId,
           subtotal,
-          wholesale_discount: wholesaleDiscount,
           coupon_discount: finalCouponDiscount,
-          total_discount: wholesaleDiscount + finalCouponDiscount,
-          after_wholesale_discount: afterWholesaleDiscount,
+          total_discount: finalCouponDiscount,
           after_discount: afterDiscount,
           gst,
           delivery_fee,
@@ -870,19 +823,11 @@ export class AdminQuotesService {
       // Ensure products is an array
       const productsArray = Array.isArray(products) ? products : [];
 
-      // Get customer details
-      let isWholesale = false;
-      let customerType = 'Retail';
+      // Get customer product discounts
       const optionDiscountsMap = new Map();
       const productDiscountsMap = new Map();
       
       if (customer_id) {
-        const customerQuery = `SELECT customer_type FROM customer WHERE customer_id = $1`;
-        const customerResult = await manager.query(customerQuery, [customer_id]);
-        const customer = customerResult[0];
-        customerType = customer?.customer_type || 'Retail';
-        isWholesale = !!(customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler')));
-
         // Fetch option-level discounts
         const optionDiscountQuery = `
           SELECT product_id, option_value_id, discount_percentage
@@ -950,16 +895,8 @@ export class AdminQuotesService {
         }
       }
 
-      let wholesaleDiscount = 0;
-      // Only apply wholesale discount if no custom discounts are set
-      if (isWholesale && optionDiscountsMap.size === 0 && productDiscountsMap.size === 0) {
-        const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-        wholesaleDiscount = subtotal * (discountPercentage / 100);
-      }
-
       let couponDiscount = 0;
       let couponId = null;
-      const afterWholesaleDiscount = subtotal - wholesaleDiscount;
       
       if (coupon_code) {
         // Trim whitespace and make case-insensitive lookup
@@ -975,14 +912,14 @@ export class AdminQuotesService {
           const coupon = couponResult[0];
           couponId = coupon.coupon_id;
 
-          // Apply coupon discount after wholesale discount
+          // Apply coupon discount
           if (coupon.type === 'P') {
-            couponDiscount = afterWholesaleDiscount * (parseFloat(coupon.coupon_discount) / 100);
+            couponDiscount = subtotal * (parseFloat(coupon.coupon_discount) / 100);
           } else if (coupon.type === 'F') {
             couponDiscount = parseFloat(coupon.coupon_discount);
           }
 
-          couponDiscount = Math.min(couponDiscount, afterWholesaleDiscount);
+          couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
           // Log warning if coupon not found (for debugging)
           this.logger.warn(`Coupon not found or inactive: ${coupon_code} (normalized: ${normalizedCouponCode})`);
@@ -990,7 +927,7 @@ export class AdminQuotesService {
       }
 
       const finalCouponDiscount = couponDiscount;
-      const afterDiscount = afterWholesaleDiscount - finalCouponDiscount;
+      const afterDiscount = subtotal - finalCouponDiscount;
       const gst = afterDiscount * 0.1;
       const orderTotal = afterDiscount + gst + parseFloat(delivery_fee.toString());
 
@@ -1246,10 +1183,8 @@ export class AdminQuotesService {
         throw new NotFoundException('Quote not found after update');
       }
       updatedQuote.subtotal = subtotal;
-      updatedQuote.wholesale_discount = wholesaleDiscount;
       updatedQuote.coupon_discount = finalCouponDiscount;
-      updatedQuote.total_discount = wholesaleDiscount + finalCouponDiscount;
-      updatedQuote.after_wholesale_discount = afterWholesaleDiscount;
+      updatedQuote.total_discount = finalCouponDiscount;
       updatedQuote.after_discount = afterDiscount;
       updatedQuote.gst = gst;
       updatedQuote.calculated_total = orderTotal;
@@ -1370,9 +1305,11 @@ export class AdminQuotesService {
               'option_name', opo.option_name,
               'option_value', opo.option_value,
               'option_quantity', opo.option_quantity,
-              'option_price', opo.option_price
-            ))
+              'option_price', opo.option_price,
+              'option_value_id', po.option_value_id
+            ) ORDER BY opo.order_product_option_id)
             FROM order_product_option opo
+            LEFT JOIN product_option po ON opo.product_option_id = po.product_option_id
             WHERE opo.order_product_id = op.order_product_id
           ) as options
         FROM order_product op
@@ -1381,6 +1318,125 @@ export class AdminQuotesService {
       `;
       const productsResult = await manager.query(productsQuery, [id]);
       const quoteProducts = productsResult;
+
+      // Calculate totals - same logic as findOne method
+      // Fetch option-level discounts
+      const optionDiscountsMap = new Map();
+      // Fetch product-level discounts
+      const productDiscountsMap = new Map();
+      
+      if (quote.customer_id) {
+        // Get option-level discounts
+        const optionDiscountQuery = `
+          SELECT product_id, option_value_id, discount_percentage
+          FROM customer_product_option_discount
+          WHERE customer_id = $1
+        `;
+        const optionDiscountResult = await manager.query(optionDiscountQuery, [quote.customer_id]);
+        optionDiscountResult.forEach((row: any) => {
+          const key = `${row.product_id}_${row.option_value_id}`;
+          optionDiscountsMap.set(key, parseFloat(row.discount_percentage));
+        });
+
+        // Get product-level discounts
+        const productDiscountQuery = `
+          SELECT product_id, discount_percentage
+          FROM customer_product_discount
+          WHERE customer_id = $1
+        `;
+        const productDiscountResult = await manager.query(productDiscountQuery, [quote.customer_id]);
+        productDiscountResult.forEach((row: any) => {
+          productDiscountsMap.set(row.product_id, parseFloat(row.discount_percentage));
+        });
+      }
+
+      // Build products array with options for calculation
+      const productsWithOptions = quoteProducts.map((p: any) => ({
+        product_id: p.product_id,
+        price: parseFloat(p.price || 0),
+        quantity: parseInt(p.quantity || 1),
+        options: p.options || []
+      }));
+
+      let subtotal = 0;
+      for (const product of productsWithOptions) {
+        const productPrice = parseFloat(product.price || 0);
+        const productQuantity = parseInt(product.quantity || 1);
+        let productSubtotal = productPrice * productQuantity;
+
+        // Check if product has options
+        const hasOptions = product.options && Array.isArray(product.options) && product.options.length > 0;
+        
+        if (hasOptions) {
+          // Product has options - apply option-level discounts
+          for (const option of product.options) {
+            const optionPrice = parseFloat(option.option_price || 0);
+            const optionQuantity = option.option_quantity || 1;
+
+            // Try to get option_value_id from product_option table if available
+            if (option.option_value_id) {
+              const discountKey = `${product.product_id}_${option.option_value_id}`;
+              const discountPercentage = optionDiscountsMap.get(discountKey) || 0;
+
+              if (discountPercentage > 0) {
+                const discountAmount = optionPrice * (discountPercentage / 100);
+                subtotal += (optionPrice - discountAmount) * optionQuantity;
+              } else {
+                subtotal += optionPrice * optionQuantity;
+              }
+            } else {
+              subtotal += optionPrice * optionQuantity;
+            }
+          }
+          // Add base product total
+          subtotal += productSubtotal;
+        } else {
+          // Product has no options - apply product-level discount
+          const productDiscountPercentage = productDiscountsMap.get(product.product_id) || 0;
+          
+          if (productDiscountPercentage > 0) {
+            const discountAmount = productSubtotal * (productDiscountPercentage / 100);
+            subtotal += productSubtotal - discountAmount;
+          } else {
+            subtotal += productSubtotal;
+          }
+        }
+      }
+
+      // Calculate coupon discount
+      let couponDiscount = 0;
+      let couponCode: string | null = quote.coupon_code || null;
+      // Check if coupon_id exists (even if JOIN returns NULL due to deleted coupon)
+      if (quote.coupon_id) {
+        // First, try to use stored coupon_discount from orders table (for historical accuracy)
+        if (quote.coupon_discount && parseFloat(quote.coupon_discount.toString()) > 0) {
+          couponDiscount = parseFloat(quote.coupon_discount.toString());
+          couponCode = quote.coupon_code || 'DELETED';
+        } else if (quote.coupon_code && quote.coupon_discount) {
+          // Coupon information available from JOIN - recalculate to ensure accuracy
+          couponCode = quote.coupon_code;
+          if (quote.coupon_type === 'P') {
+            couponDiscount = subtotal * (parseFloat(quote.coupon_discount.toString()) / 100);
+          } else if (quote.coupon_type === 'F') {
+            couponDiscount = parseFloat(quote.coupon_discount.toString());
+          }
+          couponDiscount = Math.min(couponDiscount, subtotal);
+        }
+      }
+
+      const finalCouponDiscount = couponDiscount;
+      const afterDiscount = subtotal - finalCouponDiscount;
+      // Match quote creation calculation exactly (no rounding for GST, round final total)
+      const gst = afterDiscount * 0.1; // 10% GST - no rounding to match findOne
+      const deliveryFee = parseFloat(quote.delivery_fee || 0);
+      const calculatedTotal = afterDiscount + gst + deliveryFee;
+
+      // Set calculated fields on quote object for email template
+      quote.subtotal = subtotal;
+      quote.coupon_discount = finalCouponDiscount;
+      quote.coupon_code = couponCode;
+      quote.gst = gst;
+      quote.calculated_total = calculatedTotal;
 
       const recipientEmailFinal = recipientEmail || quote.customer_email || quote.email;
 
@@ -1402,7 +1458,7 @@ export class AdminQuotesService {
       }
 
       // Use production storefront URL for quote links
-      const baseUrl = 'http://13.55.15.37:3000';
+      const baseUrl = 'http://16.176.19.248:3000';
       const publicQuoteUrl = `${baseUrl}/quote/${quoteToken}`;
 
       const customerName = quote.firstname && quote.lastname ? `${quote.firstname} ${quote.lastname}` : 'Customer';
@@ -1417,13 +1473,13 @@ export class AdminQuotesService {
           <style>
             body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #0d6efd; color: white; padding: 20px; text-align: center; }
+            .header { background-color: #055160; color: white; padding: 20px; text-align: center; }
             .content { padding: 20px; background-color: #f9f9f9; }
             .quote-details { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
             .product-item { padding: 10px; border-bottom: 1px solid #eee; }
-            .total { font-weight: bold; font-size: 18px; color: #0d6efd; }
+            .total { font-weight: bold; font-size: 18px; color: #055160; }
             .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-            .cta-button { display: inline-block; padding: 12px 24px; background-color: #0d6efd; color: #ffffff !important; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: 500; }
+            .cta-button { display: inline-block; padding: 12px 24px; background-color: #055160; color: #ffffff !important; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: 500; }
           </style>
         </head>
         <body>
@@ -1448,7 +1504,7 @@ export class AdminQuotesService {
               <div class="quote-details">
                 <h2>Delivery/Pick Up Details</h2>
                 ${quote.delivery_date_time ? `<p><strong>Delivery Date:</strong> ${new Date(quote.delivery_date_time).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>` : ''}
-                ${quote.delivery_date_time ? `<p><strong>Delivery Time:</strong> ${new Date(quote.delivery_date_time).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>` : ''}
+                ${quote.delivery_date_time ? `<p><strong>Delivery Time:</strong> ${new Date(quote.delivery_date_time).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false })}</p>` : ''}
                 ${quote.delivery_address ? `<p><strong>Delivery Address:</strong> ${quote.delivery_address}</p>` : ''}
                 ${quote.delivery_contact ? (() => {
                   const parts = quote.delivery_contact.split('|');
@@ -1481,17 +1537,16 @@ export class AdminQuotesService {
                   .join('')}
                 <hr>
                 <p><strong>Subtotal:</strong> $${Number(quote.subtotal || 0).toFixed(2)}</p>
-                ${quote.wholesale_discount && quote.wholesale_discount > 0 ? `<p><strong>Wholesale Discount:</strong> -$${Number(quote.wholesale_discount).toFixed(2)}</p>` : ''}
                 ${quote.coupon_code && quote.coupon_discount ? `<p><strong>Coupon Discount (${quote.coupon_code}):</strong> -$${Number(quote.coupon_discount).toFixed(2)}</p>` : ''}
-                ${quote.delivery_fee ? `<p><strong>Delivery Fee:</strong> $${Number(quote.delivery_fee).toFixed(2)}</p>` : ''}
                 <p><strong>GST (10%):</strong> $${Number(quote.gst || 0).toFixed(2)}</p>
+                ${quote.delivery_fee ? `<p><strong>Delivery Fee:</strong> $${Number(quote.delivery_fee).toFixed(2)}</p>` : ''}
                 <p class="total">Total: $${Number(quote.calculated_total || quote.order_total || 0).toFixed(2)}</p>
               </div>
 
               ${customMessage ? `<div class="quote-details"><p>${customMessage}</p></div>` : ''}
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${publicQuoteUrl}" class="cta-button" style="color: #ffffff !important; background-color: #0d6efd; text-decoration: none; padding: 12px 24px; border-radius: 5px; display: inline-block; font-weight: 500;">Review & Approve Quote</a>
+                <a href="${publicQuoteUrl}" class="cta-button" style="color: #ffffff !important; background-color: #055160; text-decoration: none; padding: 12px 24px; border-radius: 5px; display: inline-block; font-weight: 500;">Review & Approve Quote</a>
               </div>
               
               <p style="font-size: 0.9em; color: #666;">

@@ -11,6 +11,7 @@ export interface InvoiceData {
   order_id: number;
   order_date: string;
   delivery_date?: string;
+  delivery_time?: string;
   customer_name: string;
   customer_email?: string;
   customer_phone?: string;
@@ -20,6 +21,8 @@ export interface InvoiceData {
   location_address?: string;
   location_phone?: string;
   delivery_address?: string;
+  delivery_contact?: string;
+  delivery_details?: string;
   items: Array<{
     product_name: string;
     quantity: number;
@@ -45,6 +48,7 @@ export interface InvoiceData {
   payment_status: string;
   payment_date?: string;
   order_comments?: string;
+  is_quote?: boolean;
 }
 
 @Injectable()
@@ -113,8 +117,8 @@ export class InvoiceService {
         comp.company_abn,
         d.department_name,
         loc.location_name,
-        NULL as location_address,
-        NULL as location_phone,
+        loc.pickup_address as location_address,
+        loc.contact as location_phone,
         o.coupon_id,
         o.coupon_discount as stored_coupon_discount,
         cp.coupon_code,
@@ -123,6 +127,7 @@ export class InvoiceService {
         o.delivery_method,
         o.delivery_contact,
         o.delivery_details,
+        o.standing_order,
         COALESCE((
           SELECT SUM(amount - refund_amount)
           FROM payment_history
@@ -204,19 +209,7 @@ export class InvoiceService {
 
     const deliveryFee = parseFloat(order.delivery_fee || 0);
 
-    // Calculate wholesale discount
-    let wholesaleDiscount = 0;
-    const customerType = order.customer_type || 'Retail';
-    const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-    
-    if (isWholesale) {
-      const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-      wholesaleDiscount = subtotal * (discountPercentage / 100);
-    }
-
-    const afterWholesaleDiscount = subtotal - wholesaleDiscount;
-
-    // Calculate coupon discount
+    // Calculate coupon discount (no wholesale discount - removed as per requirements)
     let couponDiscount = 0;
     if (order.coupon_id) {
       // First, try to use stored coupon_discount from orders table (for historical accuracy)
@@ -225,14 +218,14 @@ export class InvoiceService {
       } else if (order.coupon_code && order.coupon_discount) {
         // Coupon still exists - calculate from coupon table
         if (order.coupon_type === 'P') {
-          couponDiscount = afterWholesaleDiscount * (parseFloat(order.coupon_discount) / 100);
+          couponDiscount = subtotal * (parseFloat(order.coupon_discount) / 100);
         } else if (order.coupon_type === 'F') {
           couponDiscount = parseFloat(order.coupon_discount);
         }
-        couponDiscount = Math.min(couponDiscount, afterWholesaleDiscount);
+        couponDiscount = Math.min(couponDiscount, subtotal);
       } else {
         // Coupon was deleted - calculate from stored order_total
-        const tempAfterDiscount = afterWholesaleDiscount;
+        const tempAfterDiscount = subtotal;
         const tempGst = tempAfterDiscount * 0.1;
         const tempTotal = tempAfterDiscount + tempGst + deliveryFee;
         const storedTotal = parseFloat(order.order_total || 0);
@@ -242,7 +235,7 @@ export class InvoiceService {
       }
     }
 
-    const afterDiscount = afterWholesaleDiscount - couponDiscount;
+    const afterDiscount = subtotal - couponDiscount;
     const gst = afterDiscount * 0.1;
     const total = afterDiscount + gst + deliveryFee;
 
@@ -267,10 +260,46 @@ export class InvoiceService {
       paymentStatusStr = 'completed';
     }
 
+    // Extract delivery time from delivery_date_time
+    let deliveryTime: string | undefined = undefined;
+    if (order.delivery_date) {
+      try {
+        const deliveryDateTime = new Date(order.delivery_date);
+        deliveryTime = deliveryDateTime.toLocaleTimeString('en-AU', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+      } catch (error) {
+        this.logger.warn('Could not parse delivery time:', error);
+      }
+    }
+
+    // Determine if this is a quote (payment_status = 'quote' or standing_order = 0 and order_status = 0)
+    const isQuote = order.payment_status === 'quote' || 
+                    (order.order_status === 0 && order.standing_order === 0);
+
+    // Parse delivery_contact to extract name and number
+    let deliveryContactName: string | undefined = undefined;
+    let deliveryContactNumber: string | undefined = undefined;
+    let deliveryContactDisplay: string | undefined = undefined;
+    if (order.delivery_contact) {
+      const parts = order.delivery_contact.split('|');
+      deliveryContactName = parts[0]?.trim() || undefined;
+      deliveryContactNumber = parts[1]?.trim() || undefined;
+      // Combine name and number if both exist, otherwise use whichever is available
+      if (deliveryContactName && deliveryContactNumber) {
+        deliveryContactDisplay = `${deliveryContactName} - ${deliveryContactNumber}`;
+      } else {
+        deliveryContactDisplay = deliveryContactNumber || deliveryContactName || order.delivery_contact;
+      }
+    }
+
     return {
       order_id: order.order_id,
       order_date: order.order_date,
       delivery_date: order.delivery_date,
+      delivery_time: deliveryTime,
       customer_name: order.customer_name || 'N/A',
       customer_email: order.customer_email,
       customer_phone: order.customer_phone,
@@ -280,9 +309,11 @@ export class InvoiceService {
       location_address: order.location_address,
       location_phone: order.location_phone,
       delivery_address: order.delivery_address,
+      delivery_contact: deliveryContactDisplay,
+      delivery_details: order.delivery_details,
       items: itemsWithOptions,
       subtotal,
-      wholesale_discount: wholesaleDiscount,
+      wholesale_discount: 0, // Removed wholesale discount as per requirements
       delivery_fee: deliveryFee,
       discount: couponDiscount,
       gst,
@@ -293,6 +324,7 @@ export class InvoiceService {
       payment_status: paymentStatusStr,
       payment_date: order.payment_date,
       order_comments: order.order_comments,
+      is_quote: isQuote,
     };
   }
 
@@ -304,12 +336,13 @@ export class InvoiceService {
     companyEmail: string;
     companyPhone: string;
     companyAbn: string;
+    companyAddress: string;
   }> {
     try {
       const settingsResult = await this.dataSource.query(
         `SELECT setting_key, setting_value 
          FROM settings 
-         WHERE setting_key IN ('company_name', 'company_email', 'company_phone', 'company_abn')`
+         WHERE setting_key IN ('company_name', 'company_email', 'company_phone', 'company_abn', 'company_address')`
       );
 
       const settings: Record<string, string> = {};
@@ -322,6 +355,7 @@ export class InvoiceService {
         companyEmail: settings.company_email || this.configService.get<string>('COMPANY_EMAIL') || 'info@zenn.com.au',
         companyPhone: settings.company_phone || this.configService.get<string>('COMPANY_PHONE') || '+61 3 1234 5678',
         companyAbn: settings.company_abn || this.configService.get<string>('COMPANY_ABN') || 'ABN: 12 345 678 901',
+        companyAddress: settings.company_address || this.configService.get<string>('COMPANY_ADDRESS') || '123 Business Street\nMelbourne, VIC 3000',
       };
     } catch (error) {
       this.logger.warn('Could not fetch company settings from database, using defaults:', error);
@@ -330,6 +364,7 @@ export class InvoiceService {
         companyEmail: this.configService.get<string>('COMPANY_EMAIL') || 'info@zenn.com.au',
         companyPhone: this.configService.get<string>('COMPANY_PHONE') || '+61 3 1234 5678',
         companyAbn: this.configService.get<string>('COMPANY_ABN') || 'ABN: 12 345 678 901',
+        companyAddress: this.configService.get<string>('COMPANY_ADDRESS') || '123 Business Street\nMelbourne, VIC 3000',
       };
     }
   }
@@ -349,7 +384,8 @@ export class InvoiceService {
     return new Promise(async (resolve, reject) => {
       try {
         // Force ZENN branding - completely ignore database settings
-        // Do not fetch company settings to avoid any old data contamination
+        // Fetch company settings for address and contact info
+        const companySettings = await this.getCompanySettings();
         const companyName = 'ZENN'; // Always use ZENN for branding
         this.logger.log(`Generating ${data.order_status === 0 ? 'Quote' : 'Invoice'} #${data.order_id} for company: ${companyName}`);
         
@@ -357,11 +393,9 @@ export class InvoiceService {
           margin: 40,
           size: 'A4',
           info: {
-            Title: `${data.order_status === 0 ? 'Quote' : 'Invoice'} #${data.order_id}`,
-            Author: "ZENN", // Force ZENN branding - no other company names
-            Subject: data.order_status === 0 ? 'Quote' : 'Invoice',
-            Creator: "ZENN", // Force ZENN branding
-            Producer: "ZENN", // Force ZENN branding
+            Title: data.is_quote ? `Quote #${data.order_id}` : `Invoice #${data.order_id}`,
+            Author: companyName,
+            Subject: data.is_quote ? 'Quote' : 'Invoice',
           },
         });
         const buffers: Buffer[] = [];
@@ -380,64 +414,66 @@ export class InvoiceService {
         const borderGray = '#e0e0e0';
         const bgGray = '#f8f9fa';
 
-        // Header Section
+        // Header Section - Logo centered at top, address top right (matching caterly format)
         const headerY = 15;
         const pageWidth = doc.page.width;
         const pageMargin = 40;
         const pageHeight = doc.page.height;
-
-        // Company Name/Logo - Display "ZENN" as text instead of logo image
-        // No logo images - only ZENN text branding
-        // Force "ZENN" text - do not use companyName variable to avoid any database contamination
+        
+        // Company Logo/Text - Centered at top (matching caterly format)
+        // For kj4, use "ZENN" text branding instead of logo image
         let logoHeight = 0;
-        const logoTextY = headerY + 10;
-        const zennText = 'ZENN'; // Hardcode ZENN text
+        const logoStartY = headerY; // Start at header position
+        const zennText = 'ZENN'; // Hardcode ZENN text for kj4 branding
         doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
         const logoTextWidth = doc.widthOfString(zennText);
-        const logoTextX = (pageWidth - logoTextWidth) / 2;
-        doc.text(zennText, logoTextX, logoTextY);
-        logoHeight = 35; // Set height for spacing calculations
+        const logoTextX = (pageWidth - logoTextWidth) / 2; // Center horizontally
+        doc.text(zennText, logoTextX, logoStartY);
+        logoHeight = 35 + 5; // Add spacing
+        
+        // Calculate total header height (company name + logo/text)
+        const totalHeaderHeight = logoStartY + logoHeight - headerY;
 
-        // Company Information - Display in top right corner
-        // Force ZENN branding for all company info - completely override database settings
-        const companyEmail = 'info@zenn.com.au'; // Always use ZENN email
-        const companyPhone = '+61 3 1234 5678'; // Use default ZENN phone
-        const companyABN = 'ABN: 12 345 678 901'; // Use default ZENN ABN
+        // Company Information - Address in top right corner (compact) - matching caterly format
+        const companyEmail = companySettings.companyEmail;
+        const companyPhone = companySettings.companyPhone;
+        const companyABN = companySettings.companyAbn;
+        const companyAddress = companySettings.companyAddress;
 
         doc.fontSize(7).font('Helvetica').fillColor(darkGray);
-        const addressStartY = headerY + 1;
-        const addressWidth = 170;
-        const addressStartX = pageWidth - pageMargin - addressWidth;
+        const addressStartY = headerY + 1; // Start at same level as company name/logo
+        const addressWidth = 170; // Width for right-aligned text
+        const addressStartX = pageWidth - pageMargin - addressWidth; // Right-aligned
+        
+        const companyAddressLines = companyAddress.split('\n');
         let addressY = addressStartY;
-
-        // Company Name (bold) - Force ZENN
-        doc.font('Helvetica-Bold').fontSize(8);
-        doc.text('ZENN', addressStartX, addressY, { align: 'right', width: addressWidth });
-        addressY += 9;
-
-        // Company Email
-        doc.font('Helvetica').fontSize(7);
-        doc.text(`Email: ${companyEmail}`, addressStartX, addressY, { align: 'right', width: addressWidth });
-        addressY += 7;
-
-        // Company Phone
+        
+        // Address lines - right aligned (tight spacing) - matching caterly format
+        companyAddressLines.forEach((line: string) => {
+          if (line.trim()) {
+            doc.text(line.trim(), addressStartX, addressY, { align: 'right', width: addressWidth });
+            addressY += 7; // Very tight spacing
+          }
+        });
+        
+        // Add spacing before contact information
+        addressY += 1;
+        
+        // Contact information - right aligned (tight) - matching caterly format
         doc.text(`Phone: ${companyPhone}`, addressStartX, addressY, { align: 'right', width: addressWidth });
         addressY += 7;
-
-        // Company ABN
-        doc.text(companyABN, addressStartX, addressY, { align: 'right', width: addressWidth });
+        doc.text(`Email: ${companyEmail}`, addressStartX, addressY, { align: 'right', width: addressWidth });
         addressY += 7;
+        doc.text(companyABN, addressStartX, addressY, { align: 'right', width: addressWidth });
 
         doc.fillColor(darkGray);
 
-        // Invoice Title Section - Dynamic based on order status
-        // order_status 0 = Quote, otherwise it's an Order/Invoice
-        const isQuote = data.order_status === 0;
-        const documentTitle = isQuote ? 'QUOTE' : 'INVOICE';
-        const documentNumberLabel = isQuote ? 'Quote Number:' : 'Invoice Number:';
-        const documentDateLabel = isQuote ? 'Quote Date:' : 'Invoice Date:';
+        // Invoice/Quote Title Section - Below logo/company name (very compact spacing) - matching caterly format
+        const documentTitle = data.is_quote ? 'QUOTE' : 'INVOICE';
+        const documentNumberLabel = data.is_quote ? 'Quote Number:' : 'Invoice Number:';
+        const documentDateLabel = data.is_quote ? 'Quote Date:' : 'Invoice Date:';
         
-        const titleY = Math.max(headerY + logoHeight + 8, addressY + 5);
+        const titleY = Math.max(headerY + totalHeaderHeight + 8, addressY + 5);
         doc.rect(40, titleY, 520, 25).fillColor(primaryColor).fill().fillColor('#ffffff');
 
         doc.fontSize(18).font('Helvetica-Bold').fillColor('#ffffff');
@@ -445,7 +481,7 @@ export class InvoiceService {
 
         doc.fillColor(darkGray);
 
-        // Invoice Details Section
+        // Invoice/Quote Details Section - very compact spacing
         const detailsY = titleY + 32;
         doc.fontSize(8).font('Helvetica');
 
@@ -473,10 +509,16 @@ export class InvoiceService {
             timeZone: 'Australia/Sydney',
           });
           doc.font('Helvetica').text(auDeliveryDateStr, 130, detailsY + 18);
+          
+          // Add delivery time if available
+          if (data.delivery_time) {
+            doc.font('Helvetica-Bold').text('Delivery Time:', 40, detailsY + 27);
+            doc.font('Helvetica').text(data.delivery_time, 130, detailsY + 27);
+          }
         }
 
-        // Bill To Section
-        const billToY = detailsY;
+        // Bill To Section - adjust Y position if delivery time is shown
+        const billToY = data.delivery_time ? detailsY + 9 : detailsY;
         doc.fontSize(9).font('Helvetica-Bold').fillColor(primaryColor);
         doc.text('Bill To:', 360, billToY);
 
@@ -524,8 +566,24 @@ export class InvoiceService {
           });
         }
 
-        // Items Table Section
-        const tableStartY = Math.max(detailsY + 25, billToInfoY + 10);
+        if (data.delivery_contact) {
+          doc.text(`Delivery Contact: ${data.delivery_contact}`, 360, billToInfoY, { width: 200 });
+          billToInfoY += 9;
+        }
+
+        if (data.delivery_details) {
+          const detailsLines = data.delivery_details.split('\n');
+          detailsLines.forEach((line: string) => {
+            if (line.trim()) {
+              doc.text(`Delivery Notes: ${line.trim()}`, 360, billToInfoY, { width: 200 });
+              billToInfoY += 9;
+            }
+          });
+        }
+
+        // Items Table Section - adjust based on delivery time and additional fields
+        const baseTableStartY = data.delivery_time ? detailsY + 36 : detailsY + 25;
+        const tableStartY = Math.max(baseTableStartY, billToInfoY + 10);
 
         doc.rect(40, tableStartY, 520, 18).fillColor(primaryColor).fill().fillColor('#ffffff');
 

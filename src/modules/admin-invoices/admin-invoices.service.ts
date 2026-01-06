@@ -47,6 +47,24 @@ export class AdminInvoicesService {
     return this.invoiceService.getInvoicePDF(orderId);
   }
 
+  async isQuote(orderId: number): Promise<boolean> {
+    // Check if order is a quote (order_status = 0 AND standing_order = 0) OR payment_status = 'quote'
+    const orderResult = await this.dataSource.query(
+      `SELECT order_status, standing_order, payment_status 
+       FROM orders 
+       WHERE order_id = $1`,
+      [orderId]
+    );
+    
+    if (orderResult.length === 0) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const order = orderResult[0];
+    return order.payment_status === 'quote' || 
+           (order.order_status === 0 && order.standing_order === 0);
+  }
+
   async sendInvoiceEmail(orderId: number, customMessage?: string): Promise<any> {
     // Get order details
     const orderQuery = `
