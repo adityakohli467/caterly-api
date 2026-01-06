@@ -35,12 +35,6 @@ export class AdminOrdersController {
     return this.adminOrdersService.getStDruexOrders(query);
   }
 
-  @Get('wholesale')
-  @ApiOperation({ summary: 'Get wholesale orders' })
-  async getWholesaleOrders(@Query() query: any) {
-    return this.adminOrdersService.findAll({ ...query, wholesale: 'true' });
-  }
-
   @Get()
   @ApiOperation({ summary: 'List all orders' })
   async findAll(@Query() query: any) {
@@ -56,8 +50,7 @@ export class AdminOrdersController {
   @Get(':id/checklist')
   @ApiOperation({ summary: 'Get order checklist' })
   async getChecklist(@Param('id', ParseIntPipe) id: number) {
-    // TODO: Implement checklist logic
-    return { message: 'Checklist endpoint - to be implemented' };
+    return this.adminOrdersService.getChecklist(id);
   }
 
   @Post()
@@ -105,15 +98,13 @@ export class AdminOrdersController {
     @Param('productId', ParseIntPipe) productId: number,
     @Body() body: { is_prepared: boolean },
   ) {
-    // TODO: Implement prepared status update
-    return { message: 'Prepared status update - to be implemented' };
+    return this.adminOrdersService.updatePreparedStatus(id, productId, body.is_prepared);
   }
 
   @Put(':id/checklist')
   @ApiOperation({ summary: 'Update order checklist' })
   async updateChecklist(@Param('id', ParseIntPipe) id: number, @Body() checklist: any) {
-    // TODO: Implement checklist update
-    return { message: 'Checklist update - to be implemented' };
+    return this.adminOrdersService.updateChecklist(id, checklist);
   }
 
   @Post(':id/send-email')

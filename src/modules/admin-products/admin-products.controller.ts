@@ -49,6 +49,23 @@ export class AdminProductsController {
     });
   }
 
+  @Get('inactive')
+  @ApiOperation({ summary: 'Get inactive products' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  async getInactiveProducts(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminProductsService.getInactiveProducts({
+      limit: limit ? parseInt(limit) : 20,
+      offset: offset ? parseInt(offset) : 0,
+      search,
+    });
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get single product' })
   @ApiParam({ name: 'id', type: Number })
@@ -170,6 +187,25 @@ export class AdminProductsController {
   @ApiParam({ name: 'id', type: Number })
   async deleteProduct(@Param('id', ParseIntPipe) id: number) {
     return this.adminProductsService.deleteProduct(id);
+  }
+
+  @Put(':id/toggle-status')
+  @ApiOperation({ summary: 'Toggle product status (activate/deactivate)' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'number', description: '0 = inactive, 1 = active' },
+      },
+      required: ['status'],
+    },
+  })
+  async toggleProductStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { status: number },
+  ) {
+    return this.adminProductsService.toggleProductStatus(id, body.status);
   }
 
   // Category management endpoints

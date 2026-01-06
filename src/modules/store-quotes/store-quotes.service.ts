@@ -160,10 +160,6 @@ export class StoreQuotesService {
    * Helper method to avoid code duplication
    */
   private async calculateQuoteTotals(quote: any) {
-    // Get customer type for discount calculation
-    const customerType = quote.customer_type || 'Retail';
-    const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-
     // Get customer product option discounts (option-level)
     const optionDiscountsMap = new Map();
     // Get customer product discounts (product-level)
@@ -245,14 +241,6 @@ export class StoreQuotesService {
       }
     }
 
-    // Calculate wholesale discount
-    let wholesaleDiscount = 0;
-    // Only apply wholesale discount if no custom discounts are set
-    if (isWholesale && optionDiscountsMap.size === 0 && productDiscountsMap.size === 0) {
-      const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-      wholesaleDiscount = subtotal * (discountPercentage / 100);
-    }
-
     // Calculate coupon discount
     let couponDiscount = 0;
     if (quote.coupon_code && quote.coupon_type && quote.coupon_discount) {
@@ -264,19 +252,15 @@ export class StoreQuotesService {
       couponDiscount = Math.min(couponDiscount, subtotal);
     }
 
-    const afterWholesaleDiscount = subtotal - wholesaleDiscount;
-    const finalCouponDiscount =
-      couponDiscount > 0 ? Math.min(couponDiscount, afterWholesaleDiscount) : 0;
-    const afterDiscount = afterWholesaleDiscount - finalCouponDiscount;
+    const finalCouponDiscount = couponDiscount;
+    const afterDiscount = subtotal - finalCouponDiscount;
     const gst = afterDiscount * 0.1;
     const calculatedTotal = afterDiscount + gst + parseFloat(quote.delivery_fee || 0);
 
     // Add calculated fields
     quote.subtotal = subtotal;
-    quote.wholesale_discount = wholesaleDiscount;
     quote.coupon_discount = finalCouponDiscount;
-    quote.total_discount = wholesaleDiscount + finalCouponDiscount;
-    quote.after_wholesale_discount = afterWholesaleDiscount;
+    quote.total_discount = finalCouponDiscount;
     quote.after_discount = afterDiscount;
     quote.gst = gst;
     quote.calculated_total = calculatedTotal;

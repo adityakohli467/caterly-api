@@ -32,13 +32,10 @@ export class AdminOrdersService {
       min_amount,
       max_amount,
       order_type,
-      wholesale,
     } = query;
 
     const params: any[] = [];
     let paramIndex = 1;
-
-    const customerJoinType = wholesale === 'true' ? 'INNER JOIN' : 'LEFT JOIN';
 
     let sqlQuery = `
       SELECT 
@@ -76,7 +73,7 @@ export class AdminOrdersService {
           ELSE false
         END as has_successful_payment
       FROM orders o
-      ${customerJoinType} customer c ON o.customer_id = c.customer_id
+      LEFT JOIN customer c ON o.customer_id = c.customer_id
       LEFT JOIN company co ON c.company_id = co.company_id
       LEFT JOIN department d ON c.department_id = d.department_id
       LEFT JOIN locations l ON o.location_id = l.location_id
@@ -87,17 +84,10 @@ export class AdminOrdersService {
       AND (o.payment_status IS NULL OR o.payment_status != 'quote')
       -- Note: Status 1 (New) orders ARE included in the orders list, but quotes are excluded
       -- Standing orders (subscriptions) are included unless filtered by order_type
+      AND o.order_status != 0
     `;
 
-    if (wholesale === 'true') {
-      sqlQuery += ` AND c.customer_type IS NOT NULL`;
-      sqlQuery += ` AND (c.customer_type LIKE '%Wholesale%' OR c.customer_type LIKE '%Wholesaler%')`;
-      sqlQuery += ` AND o.order_status != 0`;
-    } else {
-      // Always exclude quotes (status 0) from orders list
-      sqlQuery += ` AND o.order_status != 0`;
-      
-      if (order_type) {
+    if (order_type) {
         const now = new Date();
         if (order_type === 'past') {
           sqlQuery += ` AND o.standing_order = 0 AND o.delivery_date_time < $${paramIndex++}`;
@@ -120,10 +110,10 @@ export class AdminOrdersService {
         } else if (order_type === 'reminder') {
           sqlQuery += ` AND o.standing_order = 1`;
         } else if (order_type === 'late') {
-          sqlQuery += ` AND o.standing_order = 0 AND o.delivery_date_time < $${paramIndex++} AND o.order_status != 5`;
+          // Late orders: past delivery date, not standing order, not cancelled, not completed
+          sqlQuery += ` AND o.standing_order = 0 AND o.delivery_date_time < $${paramIndex++} AND o.delivery_date_time IS NOT NULL AND o.order_status NOT IN (0, 4, 5)`;
           params.push(now.toISOString());
         }
-      }
     }
 
     if (status !== undefined) {
@@ -211,19 +201,7 @@ export class AdminOrdersService {
     const orders = result.map((row: any) => {
       let subtotal = productsMap.get(row.order_id) || 0;
 
-      // Calculate wholesale discount
-      let wholesaleDiscount = 0;
-      const customerType = row.customer_type || 'Retail';
-      const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-      
-      if (isWholesale) {
-        const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-        wholesaleDiscount = subtotal * (discountPercentage / 100);
-      }
-
-      const afterWholesaleDiscount = subtotal - wholesaleDiscount;
-
-      // Calculate coupon discount (applied after wholesale discount)
+      // Calculate coupon discount
       let couponDiscount = 0;
       let couponCode: string | null = null;
       // Check if coupon_id exists (even if JOIN returns NULL due to deleted coupon)
@@ -236,15 +214,15 @@ export class AdminOrdersService {
           // Coupon still exists - calculate from coupon table
           couponCode = row.coupon_code;
           if (row.coupon_type === 'P') {
-            couponDiscount = afterWholesaleDiscount * (parseFloat(row.coupon_discount) / 100);
+            couponDiscount = subtotal * (parseFloat(row.coupon_discount) / 100);
           } else if (row.coupon_type === 'F') {
             couponDiscount = parseFloat(row.coupon_discount);
           }
-          couponDiscount = Math.min(couponDiscount, afterWholesaleDiscount);
+          couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
           // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
           // Calculate what the total should be without coupon
-          const tempAfterDiscount = afterWholesaleDiscount;
+          const tempAfterDiscount = subtotal;
           const tempGst = Math.round((tempAfterDiscount * 0.1) * 100) / 100;
           const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
           const tempTotal = Math.round((tempAfterDiscount + tempGst + tempDeliveryFee) * 100) / 100;
@@ -257,7 +235,7 @@ export class AdminOrdersService {
         }
       }
 
-      const afterDiscount = afterWholesaleDiscount - couponDiscount;
+      const afterDiscount = subtotal - couponDiscount;
       const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
       const deliveryFee = parseFloat(row.delivery_fee || 0);
       const calculatedTotal = Math.round((afterDiscount + gst + deliveryFee) * 100) / 100;
@@ -275,7 +253,7 @@ export class AdminOrdersService {
         location_name: row.location_name,
         location_id: row.location_id,
         delivery_date: row.delivery_date_time ? new Date(row.delivery_date_time).toISOString().split('T')[0] : null,
-        delivery_time: row.delivery_date_time ? new Date(row.delivery_date_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : null,
+        delivery_time: row.delivery_date_time ? new Date(row.delivery_date_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : null,
         order_total: calculatedTotal,
         order_status: row.order_status,
         standing_order: row.standing_order,
@@ -326,7 +304,7 @@ export class AdminOrdersService {
               'price', op.price,
               'total', op.total,
               'product_comment', op.order_product_comment,
-              'is_prepared', false,
+              'is_prepared', COALESCE(op.is_prepared, false),
               'options', COALESCE((
                 SELECT json_agg(json_build_object(
                   'option_name', opo.option_name,
@@ -387,35 +365,24 @@ export class AdminOrdersService {
       }
     }
 
-    // Calculate wholesale discount
-    let wholesaleDiscount = 0;
-    const customerType = order.customer_type || 'Retail';
-    const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-    
-    if (isWholesale) {
-      const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-      wholesaleDiscount = subtotal * (discountPercentage / 100);
-    }
-
-    // Calculate coupon discount (applied after wholesale discount)
+    // Calculate coupon discount
     let couponDiscount = 0;
     let couponCode: string | null = order.coupon_code || null;
-    const subtotalAfterWholesale = subtotal - wholesaleDiscount;
     // Check if coupon_id exists (even if JOIN returns NULL due to deleted coupon)
     if (order.coupon_id) {
       if (order.coupon_code && order.coupon_discount) {
         // Coupon information available from JOIN
         couponCode = order.coupon_code;
         if (order.coupon_type === 'P') {
-          couponDiscount = subtotalAfterWholesale * (parseFloat(order.coupon_discount) / 100);
+          couponDiscount = subtotal * (parseFloat(order.coupon_discount) / 100);
         } else if (order.coupon_type === 'F') {
           couponDiscount = parseFloat(order.coupon_discount);
         }
-        couponDiscount = Math.min(couponDiscount, subtotalAfterWholesale);
+        couponDiscount = Math.min(couponDiscount, subtotal);
       } else {
         // Coupon was deleted but coupon_id exists - calculate discount from stored order_total
         // Calculate what the total should be without coupon
-        const tempAfterDiscount = subtotalAfterWholesale;
+        const tempAfterDiscount = subtotal;
         const tempGst = Math.round((tempAfterDiscount * 0.1) * 100) / 100;
         const tempDeliveryFee = parseFloat(order.delivery_fee || 0);
         const tempTotal = Math.round((tempAfterDiscount + tempGst + tempDeliveryFee) * 100) / 100;
@@ -428,7 +395,7 @@ export class AdminOrdersService {
       }
     }
 
-    const afterDiscount = subtotalAfterWholesale - couponDiscount;
+    const afterDiscount = subtotal - couponDiscount;
     const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
     const deliveryFee = parseFloat(order.delivery_fee || 0);
     const orderTotal = Math.round((afterDiscount + gst + deliveryFee) * 100) / 100;
@@ -471,12 +438,10 @@ export class AdminOrdersService {
         customer_order_email: order.email || order.customer_order_email || null,
         customer_order_telephone: order.telephone || order.customer_order_telephone || null,
         subtotal: subtotal,
-        wholesale_discount: wholesaleDiscount,
         coupon_discount: couponDiscount,
         coupon_code: couponCode,
         coupon_id: order.coupon_id || null, // Ensure coupon_id is included
-        total_discount: wholesaleDiscount + couponDiscount,
-        after_wholesale_discount: subtotalAfterWholesale,
+        total_discount: couponDiscount,
         after_discount: afterDiscount,
         gst: gst,
         calculated_total: orderTotal,
@@ -530,11 +495,6 @@ export class AdminOrdersService {
       } = createOrderDto;
 
       // Get customer details
-      const customerResult = await queryRunner.query(`SELECT customer_type FROM customer WHERE customer_id = $1`, [customer_id]);
-      const customer = customerResult[0];
-      const customerType = customer?.customer_type || 'Retail';
-      const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-
       // Calculate totals
       let subtotal = 0;
       for (const product of products) {
@@ -542,15 +502,8 @@ export class AdminOrdersService {
         subtotal += productTotal;
       }
 
-      let wholesaleDiscount = 0;
-      if (isWholesale) {
-        const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-        wholesaleDiscount = subtotal * (discountPercentage / 100);
-      }
-
       let couponDiscount = 0;
       let couponId = null;
-      const subtotalAfterWholesale = subtotal - wholesaleDiscount;
       if (coupon_code) {
         // Trim whitespace and make case-insensitive lookup
         const normalizedCouponCode = (coupon_code || '').trim().toUpperCase();
@@ -565,22 +518,22 @@ export class AdminOrdersService {
           const coupon = couponResult[0];
           couponId = coupon.coupon_id;
 
-          // Apply coupon discount after wholesale discount
+          // Apply coupon discount
           if (coupon.type === 'P') {
-            couponDiscount = subtotalAfterWholesale * (parseFloat(coupon.coupon_discount) / 100);
+            couponDiscount = subtotal * (parseFloat(coupon.coupon_discount) / 100);
           } else if (coupon.type === 'F') {
             couponDiscount = parseFloat(coupon.coupon_discount);
           }
 
-          couponDiscount = Math.min(couponDiscount, subtotalAfterWholesale);
+          couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
           // Log warning if coupon not found (for debugging)
           this.logger.warn(`Coupon not found or inactive: ${coupon_code} (normalized: ${normalizedCouponCode})`);
         }
       }
 
-      const totalDiscount = wholesaleDiscount + couponDiscount;
-      const afterDiscount = subtotalAfterWholesale - couponDiscount;
+      const totalDiscount = couponDiscount;
+      const afterDiscount = subtotal - couponDiscount;
       const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
       const deliveryFeeAmount = parseFloat(delivery_fee || 0);
       const orderTotal = Math.round((afterDiscount + gst + deliveryFeeAmount) * 100) / 100;
@@ -799,11 +752,6 @@ export class AdminOrdersService {
       } = updateOrderDto;
 
       // Get customer details
-      const customerResult = await queryRunner.query(`SELECT customer_type FROM customer WHERE customer_id = $1`, [customer_id]);
-      const customer = customerResult[0];
-      const customerType = customer?.customer_type || 'Retail';
-      const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-
       // Calculate totals
       let subtotal = 0;
       for (const product of products) {
@@ -811,15 +759,8 @@ export class AdminOrdersService {
         subtotal += productTotal;
       }
 
-      let wholesaleDiscount = 0;
-      if (isWholesale) {
-        const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
-        wholesaleDiscount = subtotal * (discountPercentage / 100);
-      }
-
       let couponDiscount = 0;
       let couponId = null;
-      const subtotalAfterWholesale = subtotal - wholesaleDiscount;
       if (coupon_code) {
         // Trim whitespace and make case-insensitive lookup
         const normalizedCouponCode = (coupon_code || '').trim().toUpperCase();
@@ -835,20 +776,20 @@ export class AdminOrdersService {
           couponId = coupon.coupon_id;
 
           if (coupon.type === 'P') {
-            couponDiscount = subtotalAfterWholesale * (parseFloat(coupon.coupon_discount) / 100);
+            couponDiscount = subtotal * (parseFloat(coupon.coupon_discount) / 100);
           } else if (coupon.type === 'F') {
             couponDiscount = parseFloat(coupon.coupon_discount);
           }
 
-          couponDiscount = Math.min(couponDiscount, subtotalAfterWholesale);
+          couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
           // Log warning if coupon not found (for debugging)
           this.logger.warn(`Coupon not found or inactive: ${coupon_code} (normalized: ${normalizedCouponCode})`);
         }
       }
 
-      const totalDiscount = wholesaleDiscount + couponDiscount;
-      const afterDiscount = subtotalAfterWholesale - couponDiscount;
+      const totalDiscount = couponDiscount;
+      const afterDiscount = subtotal - couponDiscount;
       const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
       const deliveryFeeAmount = parseFloat(delivery_fee || 0);
       const orderTotal = Math.round((afterDiscount + gst + deliveryFeeAmount) * 100) / 100;
@@ -1248,10 +1189,7 @@ export class AdminOrdersService {
     }));
 
     // Get tomorrow's delivery orders
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowDateStr = tomorrow.toISOString().split('T')[0];
-
+    // Use CURRENT_DATE + 1 to avoid timezone issues
     const tomorrowOrdersQuery = `
       SELECT 
         o.order_id,
@@ -1273,11 +1211,11 @@ export class AdminOrdersService {
       AND (o.payment_status IS NULL OR o.payment_status != 'quote')
       -- Only show orders scheduled for tomorrow
       AND o.delivery_date_time IS NOT NULL
-      AND DATE(o.delivery_date_time) = $1
+      AND DATE(o.delivery_date_time) = CURRENT_DATE + 1
       ORDER BY o.delivery_date_time ASC, o.date_added DESC
       LIMIT 50
     `;
-    const tomorrowOrdersResult = await this.dataSource.query(tomorrowOrdersQuery, [tomorrowDateStr]);
+    const tomorrowOrdersResult = await this.dataSource.query(tomorrowOrdersQuery);
     const tomorrowOrders = tomorrowOrdersResult.map((row: any) => ({
       order_id: row.order_id,
       customer_order_name: row.customer_order_name || `${row.firstname || ''} ${row.lastname || ''}`.trim() || 'N/A',
@@ -1790,5 +1728,163 @@ export class AdminOrdersService {
       email_sent: emailSent,
       error: emailError || undefined,
     };
+  }
+
+  async getChecklist(orderId: number): Promise<any> {
+    try {
+      const checklistQuery = `
+        SELECT * FROM order_checklist
+        WHERE order_id = $1
+        LIMIT 1
+      `;
+      const result = await this.dataSource.query(checklistQuery, [orderId]);
+
+      if (result.length === 0) {
+        // Return default empty checklist
+        return {
+          checklist: {
+            catering_location: false,
+            catering_time: false,
+            catering_people: false,
+            catering_delivery_instructions: false,
+            catering_dietary_req: false,
+            day_before_location: false,
+            day_before_time: false,
+            day_before_people: false,
+            day_before_delivery_instructions: false,
+            day_before_dietary_req: false,
+            delivery_day_check_everything: false,
+            delivery_day_cutlery: false,
+            delivery_day_cups: false,
+            delivery_day_coffee_tea: false,
+            delivery_day_sugar: false,
+            delivery_day_plates: false,
+            delivery_day_signs: false,
+            delivery_day_hot_cold: false,
+            delivery_day_safety_pins: false,
+            delivering_check_right_order: false,
+            delivering_greet_introduce: false,
+            delivering_ask_setup_area: false,
+            delivering_introduce_service: false,
+            delivering_setup_specifications: false,
+            delivering_cover_everything: false,
+            delivering_remind_questions: false,
+            delivering_wish_great_day: false,
+          },
+        };
+      }
+
+      return { checklist: result[0] };
+    } catch (error) {
+      this.logger.error(`Error getting checklist for order ${orderId}:`, error);
+      throw error;
+    }
+  }
+
+  async updateChecklist(orderId: number, checklistData: any): Promise<any> {
+    try {
+      // Verify order exists
+      const orderCheck = await this.dataSource.query(
+        `SELECT order_id FROM orders WHERE order_id = $1`,
+        [orderId],
+      );
+
+      if (orderCheck.length === 0) {
+        throw new NotFoundException(`Order with ID ${orderId} not found`);
+      }
+
+      // Define all checklist fields
+      const fields = [
+        'catering_location', 'catering_time', 'catering_people', 'catering_delivery_instructions', 'catering_dietary_req',
+        'day_before_location', 'day_before_time', 'day_before_people', 'day_before_delivery_instructions', 'day_before_dietary_req',
+        'delivery_day_check_everything', 'delivery_day_cutlery', 'delivery_day_cups', 'delivery_day_coffee_tea',
+        'delivery_day_sugar', 'delivery_day_plates', 'delivery_day_signs', 'delivery_day_hot_cold', 'delivery_day_safety_pins',
+        'delivering_check_right_order', 'delivering_greet_introduce', 'delivering_ask_setup_area', 'delivering_introduce_service',
+        'delivering_setup_specifications', 'delivering_cover_everything', 'delivering_remind_questions', 'delivering_wish_great_day',
+      ];
+
+      // Check if checklist exists
+      const checkQuery = `SELECT * FROM order_checklist WHERE order_id = $1`;
+      const checkResult = await this.dataSource.query(checkQuery, [orderId]);
+
+      // Prepare values array
+      const values = fields.map(field => checklistData[field] || false);
+
+      if (checkResult.length === 0) {
+        // Insert new checklist
+        const placeholders = fields.map((_, i) => `$${i + 2}`).join(', ');
+        const insertQuery = `
+          INSERT INTO order_checklist (
+            order_id, ${fields.join(', ')}, updated_at
+          ) VALUES ($1, ${placeholders}, NOW())
+          RETURNING *
+        `;
+        const result = await this.dataSource.query(insertQuery, [orderId, ...values]);
+        return { message: 'Checklist created successfully', checklist: result[0] };
+      } else {
+        // Update existing checklist
+        const setClause = fields.map((field, i) => `${field} = $${i + 2}`).join(', ');
+        const updateQuery = `
+          UPDATE order_checklist SET
+            ${setClause}, updated_at = NOW()
+          WHERE order_id = $1
+          RETURNING *
+        `;
+        const result = await this.dataSource.query(updateQuery, [orderId, ...values]);
+        return { message: 'Checklist updated successfully', checklist: result[0] };
+      }
+    } catch (error) {
+      this.logger.error(`Error updating checklist for order ${orderId}:`, error);
+      throw error;
+    }
+  }
+
+  async updatePreparedStatus(orderId: number, productId: number, isPrepared: boolean): Promise<any> {
+    try {
+      // Verify order exists
+      const orderCheck = await this.dataSource.query(
+        `SELECT order_id FROM orders WHERE order_id = $1`,
+        [orderId],
+      );
+
+      if (orderCheck.length === 0) {
+        throw new NotFoundException(`Order with ID ${orderId} not found`);
+      }
+
+      // Check if is_prepared column exists, if not add it
+      const columnCheck = await this.dataSource.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'order_product' AND column_name = 'is_prepared'
+      `);
+
+      if (columnCheck.length === 0) {
+        // Add is_prepared column if it doesn't exist
+        await this.dataSource.query(`
+          ALTER TABLE order_product 
+          ADD COLUMN IF NOT EXISTS is_prepared BOOLEAN DEFAULT FALSE
+        `);
+      }
+
+      const updateQuery = `
+        UPDATE order_product
+        SET is_prepared = $1
+        WHERE order_id = $2 AND order_product_id = $3
+        RETURNING *
+      `;
+      const result = await this.dataSource.query(updateQuery, [isPrepared, orderId, productId]);
+
+      if (result.length === 0) {
+        throw new NotFoundException('Order product not found');
+      }
+
+      return {
+        message: 'Product prepared status updated',
+        product: result[0],
+      };
+    } catch (error) {
+      this.logger.error(`Error updating prepared status for order ${orderId}, product ${productId}:`, error);
+      throw error;
+    }
   }
 }
