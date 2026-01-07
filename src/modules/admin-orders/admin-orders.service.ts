@@ -117,8 +117,23 @@ export class AdminOrdersService {
     }
 
     if (status !== undefined) {
-      sqlQuery += ` AND o.order_status = $${paramIndex++}`;
-      params.push(Number(status));
+      const statusNum = Number(status);
+      // Special handling for status 3 (Paid Orders filter)
+      if (statusNum === 3) {
+        // Paid orders: order_status = 2 OR payment_status indicates paid OR has successful payment history
+        sqlQuery += ` AND (
+          o.order_status = 2 
+          OR o.payment_status IN ('paid', 'success', 'completed', 'succeeded')
+          OR EXISTS (
+            SELECT 1 FROM payment_history ph 
+            WHERE ph.order_id = o.order_id 
+            AND ph.payment_status IN ('succeeded', 'paid', 'completed', 'success')
+          )
+        )`;
+      } else {
+        sqlQuery += ` AND o.order_status = $${paramIndex++}`;
+        params.push(statusNum);
+      }
     }
 
     if (location_id) {
@@ -221,11 +236,11 @@ export class AdminOrdersService {
           couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
           // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
-          // Calculate what the total should be without coupon
+          // Calculate what the total should be without coupon (GST is inclusive)
           const tempAfterDiscount = subtotal;
-          const tempGst = Math.round((tempAfterDiscount * 0.1) * 100) / 100;
           const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
-          const tempTotal = Math.round((tempAfterDiscount + tempGst + tempDeliveryFee) * 100) / 100;
+          const tempTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100; // Total is inclusive of GST
+          const tempGst = Math.round((tempTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
           // The difference is the coupon discount
           const storedTotal = parseFloat(row.order_total || 0);
           if (storedTotal < tempTotal) {
@@ -236,9 +251,10 @@ export class AdminOrdersService {
       }
 
       const afterDiscount = subtotal - couponDiscount;
-      const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
+      // GST is inclusive: calculate as 11% but display as 10%
       const deliveryFee = parseFloat(row.delivery_fee || 0);
-      const calculatedTotal = Math.round((afterDiscount + gst + deliveryFee) * 100) / 100;
+      const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100; // Total is inclusive of GST
+      const gst = Math.round((calculatedTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
 
       return {
         order_id: row.order_id,
@@ -381,11 +397,11 @@ export class AdminOrdersService {
         couponDiscount = Math.min(couponDiscount, subtotal);
       } else {
         // Coupon was deleted but coupon_id exists - calculate discount from stored order_total
-        // Calculate what the total should be without coupon
+        // Calculate what the total should be without coupon (GST is inclusive)
         const tempAfterDiscount = subtotal;
-        const tempGst = Math.round((tempAfterDiscount * 0.1) * 100) / 100;
         const tempDeliveryFee = parseFloat(order.delivery_fee || 0);
-        const tempTotal = Math.round((tempAfterDiscount + tempGst + tempDeliveryFee) * 100) / 100;
+        const tempTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100; // Total is inclusive of GST
+        const tempGst = Math.round((tempTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
         // The difference is the coupon discount
         const storedTotal = parseFloat(order.order_total || 0);
         if (storedTotal < tempTotal) {
@@ -535,10 +551,11 @@ export class AdminOrdersService {
       }
 
       const totalDiscount = couponDiscount;
-      const afterDiscount = subtotal - couponDiscount;
-      const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
-      const deliveryFeeAmount = parseFloat(delivery_fee || 0);
-      const orderTotal = Math.round((afterDiscount + gst + deliveryFeeAmount) * 100) / 100;
+    const afterDiscount = subtotal - couponDiscount;
+    // GST is inclusive: calculate as 11% but display as 10%
+    const deliveryFeeAmount = parseFloat(delivery_fee || 0);
+    const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100; // Total is inclusive of GST
+    const gst = Math.round((orderTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
@@ -791,10 +808,11 @@ export class AdminOrdersService {
       }
 
       const totalDiscount = couponDiscount;
-      const afterDiscount = subtotal - couponDiscount;
-      const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
-      const deliveryFeeAmount = parseFloat(delivery_fee || 0);
-      const orderTotal = Math.round((afterDiscount + gst + deliveryFeeAmount) * 100) / 100;
+    const afterDiscount = subtotal - couponDiscount;
+    // GST is inclusive: calculate as 11% but display as 10%
+    const deliveryFeeAmount = parseFloat(delivery_fee || 0);
+    const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100; // Total is inclusive of GST
+    const gst = Math.round((orderTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
@@ -1952,5 +1970,40 @@ export class AdminOrdersService {
       this.logger.error('Error updating late fees:', error);
       throw error;
     }
+  }
+
+  /**
+   * Mark order as complete (finished preparing)
+   * Sets is_completed = 1, does NOT change order_status or payment status
+   */
+  async complete(id: number): Promise<any> {
+    // Check if order exists
+    const orderCheck = await this.dataSource.query(
+      `SELECT order_id FROM orders WHERE order_id = $1`,
+      [id]
+    );
+
+    if (orderCheck.length === 0) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Update is_completed flag only (not order_status) using raw query
+    const updateQuery = `
+      UPDATE orders 
+      SET is_completed = 1,
+          date_modified = CURRENT_TIMESTAMP
+      WHERE order_id = $1
+      RETURNING *
+    `;
+
+    await this.dataSource.query(updateQuery, [id]);
+
+    // Get updated order with all details
+    const updatedOrder = await this.findOne(id);
+
+    return {
+      message: 'Order marked as complete',
+      order: updatedOrder.order,
+    };
   }
 }

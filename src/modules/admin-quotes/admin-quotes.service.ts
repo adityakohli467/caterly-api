@@ -15,7 +15,7 @@ export class AdminQuotesService {
   ) {}
 
   async findAll(query: any): Promise<any> {
-    const { limit = 20, offset = 0, search, status, customer_id, location_id, date_from, date_to } = query;
+    const { limit = 20, offset = 0, search, status, customer_id, location_id, date_from, date_to, sort_field, sort_direction } = query;
 
     let sqlQuery = `
       SELECT 
@@ -104,7 +104,26 @@ export class AdminQuotesService {
       paramIndex++;
     }
 
-    sqlQuery += ` ORDER BY o.date_added DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    // Handle sorting
+    let orderByClause = 'ORDER BY o.date_added DESC';
+    if (sort_field && typeof sort_field === 'string' && sort_field.trim()) {
+      const direction = (sort_direction === 'desc') ? 'DESC' : 'ASC';
+      // Map frontend field names to database column names
+      const fieldMap: Record<string, string> = {
+        'order_id': 'o.order_id',
+        'customer_name': 'COALESCE(o.customer_order_name, COALESCE(c.firstname, \'\') || \' \' || COALESCE(c.lastname, \'\'))',
+        'company_name': 'co.company_name',
+        'department_name': 'd.department_name',
+        'delivery_date_time': 'o.delivery_date_time',
+        'delivery_time': 'o.delivery_date_time',
+        'order_total': 'o.order_total',
+        'order_status': 'o.order_status',
+      };
+      const dbField = fieldMap[sort_field] || 'o.date_added';
+      orderByClause = `ORDER BY ${dbField} ${direction}`;
+    }
+    
+    sqlQuery += ` ${orderByClause} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(Number(limit), Number(offset));
 
     const result = await this.dataSource.query(sqlQuery, params);
@@ -260,12 +279,12 @@ export class AdminQuotesService {
           }
           couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
-          // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
-          // Calculate what the total should be without coupon
-          const tempAfterDiscount = subtotal;
-          const tempGst = tempAfterDiscount * 0.1;
-          const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
-          const tempTotal = tempAfterDiscount + tempGst + tempDeliveryFee;
+        // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
+        // Calculate what the total should be without coupon (GST is inclusive)
+        const tempAfterDiscount = subtotal;
+        const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
+        const tempTotal = tempAfterDiscount + tempDeliveryFee; // Total is inclusive of GST
+        const tempGst = tempTotal * (11 / 111); // Calculate GST as 11% but display as 10%
           // The difference is the coupon discount
           const storedTotal = parseFloat(row.order_total || 0);
           if (storedTotal < tempTotal) {
@@ -277,10 +296,10 @@ export class AdminQuotesService {
       
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      // Match quote creation calculation exactly (no rounding for GST, round final total)
-      const gst = afterDiscount * 0.1;
+      // GST is inclusive: calculate as 11% but display as 10%
       const deliveryFee = parseFloat(row.delivery_fee || 0);
-      const calculatedTotal = afterDiscount + gst + deliveryFee;
+      const calculatedTotal = afterDiscount + deliveryFee; // Total is inclusive of GST
+      const gst = calculatedTotal * (11 / 111); // Calculate GST as 11% but display as 10%
 
       return {
         ...row,
@@ -458,11 +477,11 @@ export class AdminQuotesService {
         couponDiscount = Math.min(couponDiscount, subtotal);
       } else {
         // Coupon was deleted but coupon_id exists - calculate discount from stored order_total
-        // Calculate what the total should be without coupon
+        // Calculate what the total should be without coupon (GST is inclusive)
         const tempAfterDiscount = subtotal;
-        const tempGst = tempAfterDiscount * 0.1;
         const tempDeliveryFee = parseFloat(quote.delivery_fee || 0);
-        const tempTotal = tempAfterDiscount + tempGst + tempDeliveryFee;
+        const tempTotal = tempAfterDiscount + tempDeliveryFee; // Total is inclusive of GST
+        const tempGst = tempTotal * (11 / 111); // Calculate GST as 11% but display as 10%
         // The difference is the coupon discount
         const storedTotal = parseFloat(quote.order_total || 0);
         if (storedTotal < tempTotal) {
@@ -474,8 +493,9 @@ export class AdminQuotesService {
 
     const finalCouponDiscount = couponDiscount;
     const afterDiscount = subtotal - finalCouponDiscount;
-    const gst = Math.round(afterDiscount * 0.1 * 100) / 100;
-    const calculatedTotal = Math.round((afterDiscount + gst + parseFloat(quote.delivery_fee || 0)) * 100) / 100;
+    // GST is inclusive: calculate as 11% but display as 10%
+    const calculatedTotal = Math.round((afterDiscount + parseFloat(quote.delivery_fee || 0)) * 100) / 100; // Total is inclusive of GST
+    const gst = Math.round((calculatedTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
 
     quote.subtotal = subtotal;
     quote.coupon_discount = finalCouponDiscount;
@@ -632,8 +652,9 @@ export class AdminQuotesService {
 
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      const gst = afterDiscount * 0.1;
-      const orderTotal = afterDiscount + gst + parseFloat(delivery_fee.toString());
+      // GST is inclusive: calculate as 11% but display as 10%
+      const orderTotal = afterDiscount + parseFloat(delivery_fee.toString()); // Total is inclusive of GST
+      const gst = orderTotal * (11 / 111); // Calculate GST as 11% but display as 10%
 
       // Build delivery_date_time: only set if both date and time are provided
       // If null/empty, consider it a future order/quote (no delivery date set)
@@ -928,8 +949,9 @@ export class AdminQuotesService {
 
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      const gst = afterDiscount * 0.1;
-      const orderTotal = afterDiscount + gst + parseFloat(delivery_fee.toString());
+      // GST is inclusive: calculate as 11% but display as 10%
+      const orderTotal = afterDiscount + parseFloat(delivery_fee.toString()); // Total is inclusive of GST
+      const gst = orderTotal * (11 / 111); // Calculate GST as 11% but display as 10%
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
@@ -1426,10 +1448,10 @@ export class AdminQuotesService {
 
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      // Match quote creation calculation exactly (no rounding for GST, round final total)
-      const gst = afterDiscount * 0.1; // 10% GST - no rounding to match findOne
+      // GST is inclusive: calculate as 11% but display as 10%
       const deliveryFee = parseFloat(quote.delivery_fee || 0);
-      const calculatedTotal = afterDiscount + gst + deliveryFee;
+      const calculatedTotal = afterDiscount + deliveryFee; // Total is inclusive of GST
+      const gst = calculatedTotal * (11 / 111); // Calculate GST as 11% but display as 10% - no rounding to match findOne
 
       // Set calculated fields on quote object for email template
       quote.subtotal = subtotal;
@@ -1471,14 +1493,21 @@ export class AdminQuotesService {
         <html>
         <head>
           <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333333 !important; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
             .header { background-color: #055160; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background-color: #f9f9f9; }
-            .quote-details { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
-            .product-item { padding: 10px; border-bottom: 1px solid #eee; }
-            .total { font-weight: bold; font-size: 18px; color: #055160; }
-            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+            .header h1 { color: white !important; }
+            .content { padding: 20px; background-color: #f9f9f9; color: #333333 !important; }
+            .content p { color: #333333 !important; }
+            .quote-details { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; color: #333333 !important; }
+            .quote-details h2 { color: #055160 !important; margin-top: 0; }
+            .quote-details p { color: #333333 !important; }
+            .quote-details strong { color: #333333 !important; }
+            .product-item { padding: 10px; border-bottom: 1px solid #eee; color: #333333 !important; }
+            .product-item strong { color: #333333 !important; }
+            .total { font-weight: bold; font-size: 18px; color: #055160 !important; }
+            .footer { text-align: center; padding: 20px; color: #666666 !important; font-size: 12px; }
+            .footer p { color: #666666 !important; }
             .cta-button { display: inline-block; padding: 12px 24px; background-color: #055160; color: #ffffff !important; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: 500; }
           </style>
         </head>
@@ -1488,46 +1517,61 @@ export class AdminQuotesService {
               <h1>Quote #${quote.order_id}</h1>
             </div>
             <div class="content">
-              <p>Dear ${customerName},</p>
-              <p>Please review the quote details below and provide your feedback.</p>
+              <p style="color: #333333 !important;">Dear ${customerName},</p>
+              <p style="color: #333333 !important;">Please review the quote details below and provide your feedback.</p>
               
               <div class="quote-details">
-                <h2>Customer Details</h2>
-                ${quote.company_name ? `<p><strong>Company Name:</strong> ${quote.company_name}</p>` : ''}
-                ${quote.department_name ? `<p><strong>Department:</strong> ${quote.department_name}</p>` : ''}
-                <p><strong>Customer Name:</strong> ${customerName}</p>
-                <p><strong>Customer Email:</strong> ${quote.customer_email || quote.email || 'N/A'}</p>
-                <p><strong>Customer Phone:</strong> ${quote.telephone || 'N/A'}</p>
-                ${quote.location_name ? `<p><strong>Order Location:</strong> ${quote.location_name}</p>` : ''}
+                <h2 style="color: #055160 !important; margin-top: 0;">Customer Details</h2>
+                ${quote.company_name ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Company Name:</strong> ${quote.company_name}</p>` : ''}
+                ${quote.department_name ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Department:</strong> ${quote.department_name}</p>` : ''}
+                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Customer Name:</strong> ${customerName}</p>
+                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Customer Email:</strong> ${quote.customer_email || quote.email || 'N/A'}</p>
+                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Customer Phone:</strong> ${quote.telephone || 'N/A'}</p>
+                ${quote.location_name ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Order Location:</strong> ${quote.location_name}</p>` : ''}
               </div>
 
               <div class="quote-details">
-                <h2>Delivery/Pick Up Details</h2>
-                ${quote.delivery_date_time ? `<p><strong>Delivery Date:</strong> ${new Date(quote.delivery_date_time).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>` : ''}
-                ${quote.delivery_date_time ? `<p><strong>Delivery Time:</strong> ${new Date(quote.delivery_date_time).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false })}</p>` : ''}
-                ${quote.delivery_address ? `<p><strong>Delivery Address:</strong> ${quote.delivery_address}</p>` : ''}
+                <h2 style="color: #055160 !important; margin-top: 0;">Delivery/Pick Up Details</h2>
+                ${quote.delivery_date_time ? (() => {
+                  const date = new Date(quote.delivery_date_time);
+                  const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                  return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Date:</strong> ${formattedDate}</p>`;
+                })() : ''}
+                ${quote.delivery_date_time ? (() => {
+                  const date = new Date(quote.delivery_date_time);
+                  const hours = date.getHours();
+                  const minutes = date.getMinutes();
+                  const hour12 = hours % 12 || 12;
+                  const ampm = hours >= 12 ? 'PM' : 'AM';
+                  const timeStr = quote.delivery_time || `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                  const [h, m] = timeStr.split(':').map(Number);
+                  const h12 = h % 12 || 12;
+                  const ap = h >= 12 ? 'PM' : 'AM';
+                  return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Time:</strong> ${h12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ap}</p>`;
+                })() : ''}
+                ${quote.delivery_address ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Address:</strong> ${quote.delivery_address}</p>` : ''}
                 ${quote.delivery_contact ? (() => {
                   const parts = quote.delivery_contact.split('|');
                   const contactName = parts[0]?.trim() || '';
                   const contactNumber = parts[1]?.trim() || '';
                   return `
-                    ${contactName ? `<p><strong>Delivery Contact:</strong> ${contactName}</p>` : ''}
-                    ${contactNumber ? `<p><strong>Delivery Contact Number:</strong> ${contactNumber}</p>` : ''}
+                    ${contactName ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Contact:</strong> ${contactName}</p>` : ''}
+                    ${contactNumber ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Contact Number:</strong> ${contactNumber}</p>` : ''}
                   `;
                 })() : ''}
-                ${quote.delivery_details ? `<p><strong>Delivery Notes:</strong> ${quote.delivery_details.replace(/\n/g, '<br>')}</p>` : ''}
+                ${quote.delivery_details ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Notes:</strong> ${quote.delivery_details.replace(/\n/g, '<br>')}</p>` : ''}
               </div>
 
               <div class="quote-details">
-                <h2>Quote Items</h2>
+                <h2 style="color: #055160 !important; margin-top: 0;">Quote Items</h2>
                 ${quoteProducts
                   .map(
                     (product: any) => `
-                  <div class="product-item">
-                    <strong>${product.product_name}</strong> - Qty: ${product.quantity} × $${Number(product.price).toFixed(2)} = $${Number(product.total).toFixed(2)}
-                    ${product.order_product_comment ? `<div style="margin-left: 20px; margin-top: 5px; font-size: 0.9em; color: #666; font-style: italic;">Note: ${product.order_product_comment}</div>` : ''}
+                  <div class="product-item" style="color: #333333 !important;">
+                    <strong style="color: #333333 !important;">${product.product_name}</strong> - Qty: ${product.quantity} × $${Number(product.price).toFixed(2)} = $${Number(product.total).toFixed(2)}
+                    ${product.order_product_comment ? `<div style="margin-left: 20px; margin-top: 5px; font-size: 0.9em; color: #666666 !important; font-style: italic;">Note: ${product.order_product_comment}</div>` : ''}
                     ${product.options && product.options.length > 0 ? `
-                      <div style="margin-left: 20px; margin-top: 5px; font-size: 0.9em; color: #666;">
+                      <div style="margin-left: 20px; margin-top: 5px; font-size: 0.9em; color: #666666 !important;">
                         Options: ${product.options.map((opt: any) => `${opt.option_name}: ${opt.option_value} (${opt.option_quantity} × $${Number(opt.option_price).toFixed(2)})`).join(', ')}
                       </div>
                     ` : ''}
@@ -1536,26 +1580,26 @@ export class AdminQuotesService {
                   )
                   .join('')}
                 <hr>
-                <p><strong>Subtotal:</strong> $${Number(quote.subtotal || 0).toFixed(2)}</p>
-                ${quote.coupon_code && quote.coupon_discount ? `<p><strong>Coupon Discount (${quote.coupon_code}):</strong> -$${Number(quote.coupon_discount).toFixed(2)}</p>` : ''}
-                <p><strong>GST (10%):</strong> $${Number(quote.gst || 0).toFixed(2)}</p>
-                ${quote.delivery_fee ? `<p><strong>Delivery Fee:</strong> $${Number(quote.delivery_fee).toFixed(2)}</p>` : ''}
-                <p class="total">Total: $${Number(quote.calculated_total || quote.order_total || 0).toFixed(2)}</p>
+                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Subtotal:</strong> $${Number(quote.subtotal || 0).toFixed(2)}</p>
+                ${quote.coupon_code && quote.coupon_discount ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Coupon Discount (${quote.coupon_code}):</strong> -$${Number(quote.coupon_discount).toFixed(2)}</p>` : ''}
+                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">GST (10%):</strong> $${Number(quote.gst || 0).toFixed(2)}</p>
+                ${quote.delivery_fee ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Fee:</strong> $${Number(quote.delivery_fee).toFixed(2)}</p>` : ''}
+                <p class="total" style="color: #055160 !important; font-weight: bold; font-size: 18px;">Total: $${Number(quote.calculated_total || quote.order_total || 0).toFixed(2)}</p>
               </div>
 
-              ${customMessage ? `<div class="quote-details"><p>${customMessage}</p></div>` : ''}
+              ${customMessage ? `<div class="quote-details"><p style="color: #333333 !important;">${customMessage}</p></div>` : ''}
 
               <div style="text-align: center; margin: 30px 0;">
                 <a href="${publicQuoteUrl}" class="cta-button" style="color: #ffffff !important; background-color: #055160; text-decoration: none; padding: 12px 24px; border-radius: 5px; display: inline-block; font-weight: 500;">Review & Approve Quote</a>
               </div>
               
-              <p style="font-size: 0.9em; color: #666;">
+              <p style="font-size: 0.9em; color: #666666 !important;">
                 Click the button above to review the quote, add comments, and approve, request modifications, or reject the quote.
               </p>
             </div>
             <div class="footer">
-              <p>If you have any questions, please contact us.</p>
-              <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+              <p style="color: #666666 !important;">If you have any questions, please contact us.</p>
+              <p style="color: #666666 !important;">&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
             </div>
           </div>
         </body>

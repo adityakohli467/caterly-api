@@ -226,10 +226,10 @@ export class InvoiceService {
         }
         couponDiscount = Math.min(couponDiscount, subtotal);
       } else {
-        // Coupon was deleted - calculate from stored order_total
+        // Coupon was deleted - calculate from stored order_total (GST is inclusive)
         const tempAfterDiscount = subtotal;
-        const tempGst = tempAfterDiscount * 0.1;
-        const tempTotal = tempAfterDiscount + tempGst + deliveryFee;
+        const tempTotal = tempAfterDiscount + deliveryFee; // Total is inclusive of GST
+        const tempGst = tempTotal * (11 / 111); // Calculate GST as 11% but display as 10%
         const storedTotal = parseFloat(order.order_total || 0);
         if (storedTotal < tempTotal) {
           couponDiscount = tempTotal - storedTotal;
@@ -238,9 +238,10 @@ export class InvoiceService {
     }
 
     const afterDiscount = subtotal - couponDiscount;
-    const gst = afterDiscount * 0.1;
+    // GST is inclusive: calculate as 11% but display as 10%
     const lateFee = parseFloat(order.late_fee || 0);
-    const total = afterDiscount + gst + deliveryFee + lateFee;
+    const total = afterDiscount + deliveryFee + lateFee; // Total is inclusive of GST
+    const gst = total * (11 / 111); // Calculate GST as 11% but display as 10%
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);

@@ -1,11 +1,15 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { InvoiceService } from '../../common/services/invoice.service';
 
 @Injectable()
 export class StoreQuotesService {
   private readonly logger = new Logger(StoreQuotesService.name);
 
-  constructor(private dataSource: DataSource) {}
+  constructor(
+    private dataSource: DataSource,
+    private invoiceService: InvoiceService,
+  ) {}
 
   /**
    * Get public quote details by token (no authentication required)
@@ -254,8 +258,10 @@ export class StoreQuotesService {
 
     const finalCouponDiscount = couponDiscount;
     const afterDiscount = subtotal - finalCouponDiscount;
-    const gst = afterDiscount * 0.1;
-    const calculatedTotal = afterDiscount + gst + parseFloat(quote.delivery_fee || 0);
+    // GST is inclusive: calculate as 11% but display as 10%
+    // Total = afterDiscount + deliveryFee (inclusive of GST)
+    const calculatedTotal = afterDiscount + parseFloat(quote.delivery_fee || 0);
+    const gst = calculatedTotal * (11 / 111); // Calculate GST as 11% but display as 10%
 
     // Add calculated fields
     quote.subtotal = subtotal;
@@ -331,6 +337,19 @@ export class StoreQuotesService {
 
       await queryRunner.commitTransaction();
       
+      // Auto-generate invoice when quote is approved (status 7) - after transaction commits
+      if (newStatus === 7) {
+        // Generate invoice asynchronously after transaction commits
+        setTimeout(async () => {
+          try {
+            await this.invoiceService.generateInvoice(quoteId);
+            this.logger.log(`Auto-generated invoice for approved quote ${quoteId} (customer approval via token)`);
+          } catch (error) {
+            this.logger.error(`Failed to auto-generate invoice for quote ${quoteId}:`, error);
+          }
+        }, 1000);
+      }
+      
       return {
         success: true,
         quote: result[0],
@@ -403,21 +422,20 @@ export class StoreQuotesService {
         Number(id),
       ]);
 
-      // Auto-generate invoice when quote is approved (status 7)
-      if (newStatus === 7) {
-        try {
-          // Note: Invoice generation is handled in admin-quotes service
-          // This is just a placeholder for future implementation
-        } catch (error) {
-          // Log but don't fail
-          console.error('Error importing InvoiceService:', error);
-        }
-      }
-
       await queryRunner.commitTransaction();
       
-      // Note: Auto-invoice generation when quote is approved (status 7) 
-      // is handled in admin-quotes service update method to ensure proper dependency injection
+      // Auto-generate invoice when quote is approved (status 7) - after transaction commits
+      if (newStatus === 7) {
+        // Generate invoice asynchronously after transaction commits
+        setTimeout(async () => {
+          try {
+            await this.invoiceService.generateInvoice(Number(id));
+            this.logger.log(`Auto-generated invoice for approved quote ${id} (customer approval)`);
+          } catch (error) {
+            this.logger.error(`Failed to auto-generate invoice for quote ${id}:`, error);
+          }
+        }, 1000);
+      }
 
       return {
         success: true,
