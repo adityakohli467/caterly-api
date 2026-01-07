@@ -398,7 +398,8 @@ export class AdminOrdersService {
     const afterDiscount = subtotal - couponDiscount;
     const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
     const deliveryFee = parseFloat(order.delivery_fee || 0);
-    const orderTotal = Math.round((afterDiscount + gst + deliveryFee) * 100) / 100;
+    const lateFee = parseFloat(order.late_fee || 0);
+    const orderTotal = Math.round((afterDiscount + gst + deliveryFee + lateFee) * 100) / 100;
 
     // Check payment status from payment_history
     const paymentStatusQuery = `
@@ -444,6 +445,7 @@ export class AdminOrdersService {
         total_discount: couponDiscount,
         after_discount: afterDiscount,
         gst: gst,
+        late_fee: lateFee,
         calculated_total: orderTotal,
         payment_status: paymentStatus,
         order_total: orderTotal,
@@ -1884,6 +1886,70 @@ export class AdminOrdersService {
       };
     } catch (error) {
       this.logger.error(`Error updating prepared status for order ${orderId}, product ${productId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update late fees for multiple orders
+   */
+  async updateLateFees(orderIds: number[], lateFee: number): Promise<any> {
+    if (!orderIds || orderIds.length === 0) {
+      throw new BadRequestException('At least one order ID is required');
+    }
+
+    if (lateFee < 0) {
+      throw new BadRequestException('Late fee must be a positive number');
+    }
+
+    // Remove duplicates and ensure all IDs are valid numbers
+    const uniqueOrderIds = [...new Set(orderIds.map(id => Number(id)).filter(id => !isNaN(id) && id > 0))];
+    
+    if (uniqueOrderIds.length === 0) {
+      throw new BadRequestException('No valid order IDs provided');
+    }
+
+    this.logger.log(`Updating late fees for ${uniqueOrderIds.length} order(s): ${uniqueOrderIds.join(', ')}`);
+
+    try {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      try {
+        // Update late fees for all selected orders
+        const placeholders = uniqueOrderIds.map((_, index) => `$${index + 1}`).join(', ');
+        const updateQuery = `
+          UPDATE orders 
+          SET late_fee = $${uniqueOrderIds.length + 1},
+              date_modified = CURRENT_TIMESTAMP
+          WHERE order_id IN (${placeholders})
+          RETURNING order_id, late_fee
+        `;
+        
+        const result = await queryRunner.query(
+          updateQuery,
+          [...uniqueOrderIds, lateFee]
+        );
+        
+        this.logger.log(`Successfully updated ${result.length} order(s) with late fee`);
+
+        await queryRunner.commitTransaction();
+
+        return {
+          success: true,
+          message: `Late fee of $${lateFee.toFixed(2)} applied to ${result.length} order(s)`,
+          updated_orders: result.length,
+          orders: result,
+        };
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        throw error;
+      } finally {
+        await queryRunner.release();
+      }
+    } catch (error: any) {
+      this.logger.error('Error updating late fees:', error);
       throw error;
     }
   }

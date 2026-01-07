@@ -39,6 +39,7 @@ export interface InvoiceData {
   subtotal: number;
   wholesale_discount?: number;
   delivery_fee: number;
+  late_fee?: number;
   discount: number;
   gst: number;
   total: number;
@@ -103,6 +104,7 @@ export class InvoiceService {
         o.date_added as order_date,
         o.delivery_date_time as delivery_date,
         o.delivery_fee,
+        o.late_fee,
         o.order_status,
         o.payment_status,
         o.payment_date,
@@ -237,7 +239,8 @@ export class InvoiceService {
 
     const afterDiscount = subtotal - couponDiscount;
     const gst = afterDiscount * 0.1;
-    const total = afterDiscount + gst + deliveryFee;
+    const lateFee = parseFloat(order.late_fee || 0);
+    const total = afterDiscount + gst + deliveryFee + lateFee;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);
@@ -315,6 +318,7 @@ export class InvoiceService {
       subtotal,
       wholesale_discount: 0, // Removed wholesale discount as per requirements
       delivery_fee: deliveryFee,
+      late_fee: lateFee,
       discount: couponDiscount,
       gst,
       total,
@@ -688,6 +692,12 @@ export class InvoiceService {
         if (data.delivery_fee > 0) {
           doc.text('Delivery Fee:', totalsX, currentY, { width: 120, align: 'right' });
           doc.text(`$${data.delivery_fee.toFixed(2)}`, totalsX + 130, currentY, { width: 90, align: 'right' });
+          currentY += 9;
+        }
+
+        if (data.late_fee && data.late_fee > 0) {
+          doc.text('Late Fee:', totalsX, currentY, { width: 120, align: 'right' });
+          doc.text(`$${data.late_fee.toFixed(2)}`, totalsX + 130, currentY, { width: 90, align: 'right' });
           currentY += 9;
         }
 
