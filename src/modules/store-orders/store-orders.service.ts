@@ -201,10 +201,10 @@ export class StoreOrdersService {
       // Apply discounts
       const afterDiscount = afterWholesaleDiscount - couponDiscount;
 
-      // Calculate GST and total
-      const gst = afterDiscount * 0.1; // 10% GST
+      // Calculate GST and total (GST is inclusive: calculate as 11% but display as 10%)
       const deliveryFee = parseFloat((delivery_fee || 0).toString());
-      const total = afterDiscount + gst + deliveryFee;
+      const total = afterDiscount + deliveryFee; // Total is inclusive of GST
+      const gst = total * (11 / 111); // Calculate GST as 11% but display as 10%
 
       // Parse delivery date and time
       let deliveryDateTime = new Date();
@@ -699,8 +699,9 @@ export class StoreOrdersService {
     }
 
     const afterDiscount = afterWholesaleDiscount - couponDiscount;
-    const gst = Math.round((afterDiscount * 0.1) * 100) / 100; // 10% GST, rounded
-    const calculatedTotal = Math.round((afterDiscount + gst + deliveryFee) * 100) / 100;
+    // GST is inclusive: calculate as 11% but display as 10%
+    const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100; // Total is inclusive of GST
+    const gst = Math.round((calculatedTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
 
     return {
       order: {

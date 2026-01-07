@@ -86,9 +86,9 @@ export class AdminOrdersController {
   }
 
   @Put(':id/complete')
-  @ApiOperation({ summary: 'Complete order' })
+  @ApiOperation({ summary: 'Mark order as complete (finished preparing)' })
   async complete(@Param('id', ParseIntPipe) id: number) {
-    return this.adminOrdersService.updateStatus(id, 2); // Paid status
+    return this.adminOrdersService.complete(id);
   }
 
   @Put(':id/products/:productId/prepared')
