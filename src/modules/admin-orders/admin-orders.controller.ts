@@ -125,6 +125,12 @@ export class AdminOrdersController {
     return this.adminOrdersService.sendPaymentLink(id, body?.email_payment);
   }
 
+  @Post('update-late-fees')
+  @ApiOperation({ summary: 'Update late fees for multiple orders' })
+  async updateLateFees(@Body() body: { order_ids: number[]; late_fee: number }) {
+    return this.adminOrdersService.updateLateFees(body.order_ids, body.late_fee);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete order' })
   async delete(@Param('id', ParseIntPipe) id: number) {
