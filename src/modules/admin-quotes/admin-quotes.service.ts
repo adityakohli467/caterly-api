@@ -280,30 +280,33 @@ export class AdminQuotesService {
           couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
         // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
-        // Calculate what the total should be without coupon (GST is inclusive)
         const tempAfterDiscount = subtotal;
         const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
-        const tempTotal = tempAfterDiscount + tempDeliveryFee; // Total is inclusive of GST
-        const tempGst = tempTotal * (11 / 111); // Calculate GST as 11% but display as 10%
-          // The difference is the coupon discount
-          const storedTotal = parseFloat(row.order_total || 0);
-          if (storedTotal < tempTotal) {
-            couponDiscount = tempTotal - storedTotal;
-            couponCode = 'DELETED';
-          }
+        const tempPreGstTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100;
+        const tempGst = Math.round((tempPreGstTotal * 0.1) * 100) / 100;
+        const tempTotal = Math.round((tempPreGstTotal + tempGst) * 100) / 100;
+
+        const storedTotal = parseFloat(row.order_total || 0);
+        if (storedTotal < tempTotal) {
+          const discountIncludingGst = tempTotal - storedTotal;
+          couponDiscount = discountIncludingGst / 1.1;
+          couponDiscount = Math.min(couponDiscount, subtotal);
+          couponCode = 'DELETED';
+        }
         }
       }
       
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      // GST is inclusive: calculate as 11% but display as 10%
       const deliveryFee = parseFloat(row.delivery_fee || 0);
-      const calculatedTotal = afterDiscount + deliveryFee; // Total is inclusive of GST
-      const gst = calculatedTotal * (11 / 111); // Calculate GST as 11% but display as 10%
+      const preGstTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
+      const gst = Math.round((preGstTotal * 0.1) * 100) / 100;
+      const calculatedTotal = Math.round((preGstTotal + gst) * 100) / 100;
 
       return {
         ...row,
-        order_total: calculatedTotal, // Use calculated total with all discounts
+        gst,
+        order_total: calculatedTotal,
         coupon_code: couponCode,
         coupon_discount: finalCouponDiscount,
       };
@@ -477,25 +480,27 @@ export class AdminQuotesService {
         couponDiscount = Math.min(couponDiscount, subtotal);
       } else {
         // Coupon was deleted but coupon_id exists - calculate discount from stored order_total
-        // Calculate what the total should be without coupon (GST is inclusive)
         const tempAfterDiscount = subtotal;
         const tempDeliveryFee = parseFloat(quote.delivery_fee || 0);
-        const tempTotal = tempAfterDiscount + tempDeliveryFee; // Total is inclusive of GST
-        const tempGst = tempTotal * (11 / 111); // Calculate GST as 11% but display as 10%
-        // The difference is the coupon discount
+        const tempPreGstTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100;
+        const tempGst = Math.round((tempPreGstTotal * 0.1) * 100) / 100;
+        const tempTotal = Math.round((tempPreGstTotal + tempGst) * 100) / 100;
+
         const storedTotal = parseFloat(quote.order_total || 0);
         if (storedTotal < tempTotal) {
-          couponDiscount = tempTotal - storedTotal;
-          couponCode = 'DELETED'; // Indicate coupon was deleted
+          const discountIncludingGst = tempTotal - storedTotal;
+          couponDiscount = discountIncludingGst / 1.1;
+          couponDiscount = Math.min(couponDiscount, subtotal);
+          couponCode = 'DELETED';
         }
       }
     }
 
     const finalCouponDiscount = couponDiscount;
     const afterDiscount = subtotal - finalCouponDiscount;
-    // GST is inclusive: calculate as 11% but display as 10%
-    const calculatedTotal = Math.round((afterDiscount + parseFloat(quote.delivery_fee || 0)) * 100) / 100; // Total is inclusive of GST
-    const gst = Math.round((calculatedTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
+    const preGstTotal = Math.round((afterDiscount + parseFloat(quote.delivery_fee || 0)) * 100) / 100;
+    const gst = Math.round((preGstTotal * 0.1) * 100) / 100;
+    const calculatedTotal = Math.round((preGstTotal + gst) * 100) / 100;
 
     quote.subtotal = subtotal;
     quote.coupon_discount = finalCouponDiscount;
@@ -505,6 +510,7 @@ export class AdminQuotesService {
     quote.after_discount = afterDiscount;
     quote.gst = gst;
     quote.calculated_total = calculatedTotal;
+    quote.order_total = calculatedTotal;
     quote.customer_id = quote.customer_id || quote.order_customer_id || null;
     // Explicitly ensure delivery fields are included
     quote.delivery_date_time = quote.delivery_date_time || null;
@@ -652,9 +658,9 @@ export class AdminQuotesService {
 
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      // GST is inclusive: calculate as 11% but display as 10%
-      const orderTotal = afterDiscount + parseFloat(delivery_fee.toString()); // Total is inclusive of GST
-      const gst = orderTotal * (11 / 111); // Calculate GST as 11% but display as 10%
+      const preGstTotal = Math.round((afterDiscount + parseFloat(delivery_fee.toString())) * 100) / 100;
+      const gst = Math.round((preGstTotal * 0.1) * 100) / 100;
+      const orderTotal = Math.round((preGstTotal + gst) * 100) / 100;
 
       // Build delivery_date_time: only set if both date and time are provided
       // If null/empty, consider it a future order/quote (no delivery date set)
@@ -949,9 +955,9 @@ export class AdminQuotesService {
 
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      // GST is inclusive: calculate as 11% but display as 10%
-      const orderTotal = afterDiscount + parseFloat(delivery_fee.toString()); // Total is inclusive of GST
-      const gst = orderTotal * (11 / 111); // Calculate GST as 11% but display as 10%
+      const preGstTotal = Math.round((afterDiscount + parseFloat(delivery_fee.toString())) * 100) / 100;
+      const gst = Math.round((preGstTotal * 0.1) * 100) / 100;
+      const orderTotal = Math.round((preGstTotal + gst) * 100) / 100;
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
@@ -1448,10 +1454,10 @@ export class AdminQuotesService {
 
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      // GST is inclusive: calculate as 11% but display as 10%
       const deliveryFee = parseFloat(quote.delivery_fee || 0);
-      const calculatedTotal = afterDiscount + deliveryFee; // Total is inclusive of GST
-      const gst = calculatedTotal * (11 / 111); // Calculate GST as 11% but display as 10% - no rounding to match findOne
+      const preGstTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
+      const gst = Math.round((preGstTotal * 0.1) * 100) / 100;
+      const calculatedTotal = Math.round((preGstTotal + gst) * 100) / 100;
 
       // Set calculated fields on quote object for email template
       quote.subtotal = subtotal;
