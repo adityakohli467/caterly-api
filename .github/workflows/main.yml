@@ -29,6 +29,10 @@ jobs:
             echo "📁 Moving to project directory"
             cd /home/ubuntu/zenn/zenn_api
 
+            echo "🧹 Cleaning local changes"
+            git reset --hard HEAD
+            git clean -fd
+
             echo "🔄 Pulling latest code using GitHub PAT"
             git pull https://kaushikaspace:${{ secrets.GH_PAT }}@github.com/kaushikaspace/zenn_api.git main
 
