@@ -458,6 +458,7 @@ export class StoreProductsService {
       SELECT DISTINCT
         o.option_id,
         o.name as option_name,
+        o.option_type,
         ov.option_value_id,
         ov.name as option_value,
         ov.sort_order,
@@ -465,7 +466,9 @@ export class StoreProductsService {
         po.option_required as required,
         po.option_price as product_option_price_base,
         po.option_price_prefix as product_option_price_prefix,
-        p.retail_discount_percentage
+        p.retail_discount_percentage,
+        ov.standard_price,
+        ov.wholesale_price
       FROM product_option po
       JOIN option_value ov ON po.option_value_id = ov.option_value_id
       JOIN options o ON ov.option_id = o.option_id
@@ -482,7 +485,7 @@ export class StoreProductsService {
         optionsMap.set(row.option_id, {
           option_id: row.option_id,
           option_name: row.option_name,
-          option_type: 'select',
+          option_type: row.option_type,
           required: row.required === 1,
           values: [],
         });
@@ -507,6 +510,8 @@ export class StoreProductsService {
         product_option_id: row.product_option_id,
         product_option_price: productOptionPrice,
         product_option_price_prefix: row.product_option_price_prefix,
+        standard_price: row.standard_price,
+        wholesale_price: row.wholesale_price,
       });
     }
     const options = Array.from(optionsMap.values());
