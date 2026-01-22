@@ -496,7 +496,7 @@ export class StoreProductsService {
       let productOptionPrice: number;
 
       if (isWholesaler) {
-        const discount = parseFloat(row.retail_discount_percentage || 40);
+        const discount = parseFloat(product.retail_discount_percentage || 40);
         productOptionPrice = baseOptionPrice * (1 - discount / 100);
       } else {
         productOptionPrice = baseOptionPrice;
