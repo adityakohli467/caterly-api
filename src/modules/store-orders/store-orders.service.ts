@@ -31,6 +31,7 @@ export class StoreOrdersService {
       notes?: string;
       coupon_code?: string;
       postcode?: string;
+      gst_status?: number;
     },
   ) {
     const {
@@ -43,6 +44,7 @@ export class StoreOrdersService {
       notes,
       coupon_code,
       postcode,
+      gst_status,
     } = orderData;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -198,13 +200,12 @@ export class StoreOrdersService {
         }
       }
 
-      // Apply discounts
       const afterDiscount = afterWholesaleDiscount - couponDiscount;
-
-      // Calculate GST and total (GST is inclusive: calculate as 11% but display as 10%)
       const deliveryFee = parseFloat((delivery_fee || 0).toString());
-      const total = afterDiscount + deliveryFee; // Total is inclusive of GST
-      const gst = total * (11 / 111); // Calculate GST as 11% but display as 10%
+      const gstStatus = Number(gst_status || 0);
+      const baseTotal = afterDiscount + deliveryFee;
+      const gst = gstStatus ? Math.round(afterDiscount * 0.10 * 100) / 100 : 0;
+      const total = Math.round((baseTotal + gst) * 100) / 100;
 
       // Parse delivery date and time
       let deliveryDateTime = new Date();
@@ -237,8 +238,9 @@ export class StoreOrdersService {
           pickup_delivery_notes,
           user_id,
           coupon_id,
-          coupon_discount
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          coupon_discount,
+          gst_status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING order_id
       `;
 
@@ -258,7 +260,8 @@ export class StoreOrdersService {
         (notes && notes.trim()) || null,
         userId,
         couponId,
-        couponDiscount, // Store coupon discount for historical accuracy
+        couponDiscount,
+        gstStatus
       ]);
 
       const orderId = orderResult[0].order_id;
