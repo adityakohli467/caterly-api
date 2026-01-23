@@ -181,21 +181,58 @@ export class AdminOptionsService {
       }
 
       if (values && Array.isArray(values)) {
-        await manager.query('DELETE FROM option_value WHERE option_id = $1', [id]);
+        // Get existing values to determine what to update, delete, or insert
+        const existingValuesResult = await manager.query(
+          'SELECT option_value_id FROM option_value WHERE option_id = $1',
+          [id]
+        );
+        const existingIds = existingValuesResult.map((v: any) => Number(v.option_value_id));
+        const newIds = values
+          .map((v: any) => v.option_value_id ? Number(v.option_value_id) : null)
+          .filter((id: any) => id !== null);
 
+        // Delete values that are not in the new list
+        const idsToDelete = existingIds.filter((id: number) => !newIds.includes(id));
+        if (idsToDelete.length > 0) {
+          await manager.query(
+            'DELETE FROM option_value WHERE option_value_id = ANY($1)',
+            [idsToDelete]
+          );
+        }
+
+        // Update or Insert values
         for (let i = 0; i < values.length; i++) {
           const value = values[i];
-          await manager.query(
-            `INSERT INTO option_value (option_id, name, sort_order, standard_price, wholesale_price) 
-             VALUES ($1, $2, $3, $4, $5)`,
-            [
-              id,
-              value.name,
-              value.sort_order || i + 1,
-              value.standard_price || 0,
-              value.wholesale_price || (value.standard_price || 0) * 0.9,
-            ]
-          );
+          const valueId = value.option_value_id ? Number(value.option_value_id) : null;
+          
+          if (valueId && existingIds.includes(valueId)) {
+            // Update existing value
+            await manager.query(
+              `UPDATE option_value 
+               SET name = $1, sort_order = $2, standard_price = $3, wholesale_price = $4
+               WHERE option_value_id = $5`,
+              [
+                value.name,
+                value.sort_order || i + 1,
+                value.standard_price || 0,
+                value.wholesale_price || (value.standard_price || 0) * 0.9,
+                valueId
+              ]
+            );
+          } else {
+            // Insert new value
+            await manager.query(
+              `INSERT INTO option_value (option_id, name, sort_order, standard_price, wholesale_price) 
+               VALUES ($1, $2, $3, $4, $5)`,
+              [
+                id,
+                value.name,
+                value.sort_order || i + 1,
+                value.standard_price || 0,
+                value.wholesale_price || (value.standard_price || 0) * 0.9,
+              ]
+            );
+          }
         }
       }
 
