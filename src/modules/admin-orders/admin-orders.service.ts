@@ -270,7 +270,7 @@ export class AdminOrdersService {
         location_id: row.location_id,
         delivery_date: row.delivery_date_time ? new Date(row.delivery_date_time).toISOString().split('T')[0] : null,
         delivery_time: row.delivery_date_time ? new Date(row.delivery_date_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : null,
-        order_total: calculatedTotal,
+        order_total: parseFloat(row.order_total || calculatedTotal),
         order_status: row.order_status,
         standing_order: row.standing_order,
         user_id: row.user_id,

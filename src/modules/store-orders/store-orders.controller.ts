@@ -40,6 +40,9 @@ export class StoreOrdersController {
       delivery_address: string;
       delivery_date?: string;
       delivery_time?: string;
+      standing_order?: number;
+      frequency_unit?: 'days' | 'weeks' | 'months';
+      frequency_value?: number;
       delivery_fee?: number;
       payment_method?: string;
       notes?: string;

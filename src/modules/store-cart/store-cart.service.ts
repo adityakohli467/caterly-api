@@ -171,7 +171,7 @@ export class StoreCartService {
         SELECT 
           coupon_id,
           coupon_code,
-          coupon_name,
+          coupon_description,
           coupon_discount,
           type,
           date_start,
@@ -202,7 +202,7 @@ export class StoreCartService {
 
         couponDetails = {
           code: coupon.coupon_code,
-          name: coupon.coupon_name,
+          name: coupon.coupon_description,
           discount_amount: discount,
           type: coupon.type === 'P' ? 'percentage' : 'fixed',
           value: parseFloat(coupon.coupon_discount),

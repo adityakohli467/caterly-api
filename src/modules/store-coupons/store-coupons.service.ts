@@ -8,6 +8,104 @@ export class StoreCouponsService {
   constructor(private dataSource: DataSource) {}
 
   /**
+   * List active coupons for storefront
+   */
+  async listActiveCoupons() {
+    const query = `
+      SELECT 
+        coupon_id,
+        coupon_code,
+        coupon_description,
+        coupon_discount,
+        type,
+        status,
+        date_start,
+        date_end
+      FROM coupon
+      WHERE status = 1
+        AND (date_start IS NULL OR date_start <= CURRENT_DATE)
+        AND (date_end IS NULL OR date_end >= CURRENT_DATE)
+      ORDER BY coupon_id DESC
+    `;
+
+    const result = await this.dataSource.query(query);
+
+    return {
+      coupons: result.map((c: any) => ({
+        id: c.coupon_id,
+        code: c.coupon_code,
+        name: c.coupon_description,
+        type: c.type === 'P' ? 'percentage' : 'fixed',
+        value: parseFloat(c.coupon_discount),
+        date_start: c.date_start,
+        date_end: c.date_end,
+      })),
+    };
+  }
+
+  /**
+   * Get coupon by code (optional discount preview via order_total)
+   */
+  async getCouponByCode(code: string, order_total?: number) {
+    if (!code) {
+      throw new BadRequestException('Coupon code is required');
+    }
+
+    const normalizedCouponCode = (code || '').trim().toUpperCase();
+    const query = `
+      SELECT 
+        coupon_id,
+        coupon_code,
+        coupon_description,
+        coupon_discount,
+        type,
+        status,
+        date_start,
+        date_end
+      FROM coupon
+      WHERE UPPER(TRIM(coupon_code)) = $1 AND status = 1
+    `;
+    const result = await this.dataSource.query(query, [normalizedCouponCode]);
+    const coupon = result[0];
+
+    if (!coupon) {
+      throw new NotFoundException('Coupon not found or expired');
+    }
+
+    const now = new Date();
+    if (coupon.date_start && new Date(coupon.date_start) > now) {
+      throw new BadRequestException('Coupon is not yet active');
+    }
+    if (coupon.date_end && new Date(coupon.date_end) < now) {
+      throw new BadRequestException('Coupon has expired');
+    }
+
+    let discountPreview = 0;
+    if (typeof order_total === 'number' && order_total > 0) {
+      if (coupon.type === 'P') {
+        discountPreview = (order_total * parseFloat(coupon.coupon_discount)) / 100;
+      } else if (coupon.type === 'F') {
+        discountPreview = parseFloat(coupon.coupon_discount);
+      }
+      discountPreview = Math.min(discountPreview, order_total);
+    }
+
+    return {
+      valid: true,
+      coupon: {
+        id: coupon.coupon_id,
+        code: coupon.coupon_code,
+        name: coupon.coupon_description,
+        type: coupon.type === 'P' ? 'percentage' : 'fixed',
+        value: parseFloat(coupon.coupon_discount),
+        date_start: coupon.date_start,
+        date_end: coupon.date_end,
+        discount_amount: parseFloat(discountPreview.toFixed(2)),
+      },
+    };
+  }
+
+  /**
    * Validate coupon code
    */
   async validateCoupon(data: { coupon_code: string; order_total?: number }) {
