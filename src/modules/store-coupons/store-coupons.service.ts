@@ -18,13 +18,9 @@ export class StoreCouponsService {
         coupon_description,
         coupon_discount,
         type,
-        status,
-        date_start,
-        date_end
+        status
       FROM coupon
       WHERE status = 1
-        AND (date_start IS NULL OR date_start <= CURRENT_DATE)
-        AND (date_end IS NULL OR date_end >= CURRENT_DATE)
       ORDER BY coupon_id DESC
     `;
 
@@ -36,9 +32,7 @@ export class StoreCouponsService {
         code: c.coupon_code,
         name: c.coupon_description,
         type: c.type === 'P' ? 'percentage' : 'fixed',
-        value: parseFloat(c.coupon_discount),
-        date_start: c.date_start,
-        date_end: c.date_end,
+        value: parseFloat(c.coupon_discount)
       })),
     };
   }
@@ -59,9 +53,7 @@ export class StoreCouponsService {
         coupon_description,
         coupon_discount,
         type,
-        status,
-        date_start,
-        date_end
+        status
       FROM coupon
       WHERE UPPER(TRIM(coupon_code)) = $1 AND status = 1
     `;
@@ -72,13 +64,7 @@ export class StoreCouponsService {
       throw new NotFoundException('Coupon not found or expired');
     }
 
-    const now = new Date();
-    if (coupon.date_start && new Date(coupon.date_start) > now) {
-      throw new BadRequestException('Coupon is not yet active');
-    }
-    if (coupon.date_end && new Date(coupon.date_end) < now) {
-      throw new BadRequestException('Coupon has expired');
-    }
+    // Skip date-based validation to support schemas without date columns
 
     let discountPreview = 0;
     if (typeof order_total === 'number' && order_total > 0) {
@@ -98,8 +84,6 @@ export class StoreCouponsService {
         name: coupon.coupon_description,
         type: coupon.type === 'P' ? 'percentage' : 'fixed',
         value: parseFloat(coupon.coupon_discount),
-        date_start: coupon.date_start,
-        date_end: coupon.date_end,
         discount_amount: parseFloat(discountPreview.toFixed(2)),
       },
     };
@@ -125,9 +109,7 @@ export class StoreCouponsService {
         coupon_description,
         coupon_discount,
         type,
-        status,
-        date_start,
-        date_end
+        status
       FROM coupon
       WHERE UPPER(TRIM(coupon_code)) = $1 AND status = 1
     `;
@@ -142,20 +124,7 @@ export class StoreCouponsService {
       });
     }
 
-    // Check if coupon is within valid date range
-    const now = new Date();
-    if (coupon.date_start && new Date(coupon.date_start) > now) {
-      throw new BadRequestException({
-        message: 'Coupon is not yet active',
-        valid: false,
-      });
-    }
-    if (coupon.date_end && new Date(coupon.date_end) < now) {
-      throw new BadRequestException({
-        message: 'Coupon has expired',
-        valid: false,
-      });
-    }
+    // Skip date-based validation to support schemas without date columns
 
     // Calculate discount
     let discount = 0;
