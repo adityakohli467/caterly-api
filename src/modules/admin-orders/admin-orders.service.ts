@@ -270,7 +270,7 @@ export class AdminOrdersService {
         location_id: row.location_id,
         delivery_date: row.delivery_date_time ? new Date(row.delivery_date_time).toISOString().split('T')[0] : null,
         delivery_time: row.delivery_date_time ? new Date(row.delivery_date_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : null,
-        order_total: calculatedTotal,
+        order_total: parseFloat(row.order_total || calculatedTotal),
         order_status: row.order_status,
         standing_order: row.standing_order,
         user_id: row.user_id,
@@ -441,6 +441,15 @@ export class AdminOrdersService {
     return {
       order: {
         ...orderWithoutProducts,
+        frequency_days: Number(order.standing_order || 0),
+        frequency_label: (() => {
+          const days = Number(order.standing_order || 0);
+          if (!days || days <= 0) return null;
+          if (days % 30 === 0) return `Every ${Math.floor(days / 30)} Months`;
+          if (days % 7 === 0) return `Every ${Math.floor(days / 7)} Weeks`;
+          return `Every ${days} Days`;
+        })(),
+        start_date: order.delivery_date_time || null,
         // Explicitly ensure delivery fields are included
         delivery_date_time: order.delivery_date_time || null,
         delivery_address: order.delivery_address || null,

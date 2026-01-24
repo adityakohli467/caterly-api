@@ -39,12 +39,18 @@ export class StoreOrdersController {
       items: any[];
       delivery_address: string;
       delivery_date?: string;
+      delivery_start_date?: string;
       delivery_time?: string;
+      delivery_frequency?: string;
+      standing_order?: number;
+      frequency_unit?: 'days' | 'weeks' | 'months';
+      frequency_value?: number;
       delivery_fee?: number;
       payment_method?: string;
       notes?: string;
       coupon_code?: string;
       postcode?: string;
+      gst_status?: number;
     },
   ) {
     const userId = req.user?.user_id;

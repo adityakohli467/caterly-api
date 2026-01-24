@@ -25,7 +25,12 @@ export class StoreOrdersService {
       items: any[];
       delivery_address: string;
       delivery_date?: string;
+      delivery_start_date?: string;
       delivery_time?: string;
+      standing_order?: number;
+      frequency_unit?: 'days' | 'weeks' | 'months';
+      frequency_value?: number;
+      delivery_frequency?: string;
       delivery_fee?: number;
       payment_method?: string;
       notes?: string;
@@ -38,7 +43,12 @@ export class StoreOrdersService {
       items,
       delivery_address,
       delivery_date,
+      delivery_start_date,
       delivery_time,
+      standing_order,
+      frequency_unit,
+      frequency_value,
+      delivery_frequency,
       delivery_fee = 0,
       payment_method,
       notes,
@@ -207,16 +217,45 @@ export class StoreOrdersService {
       const gst = gstStatus ? Math.round(afterDiscount * 0.10 * 100) / 100 : 0;
       const total = Math.round((baseTotal + gst) * 100) / 100;
 
-      // Parse delivery date and time
+      let parsedUnit = frequency_unit;
+      let parsedValue = frequency_value;
+      if (!parsedUnit && !parsedValue && delivery_frequency) {
+        const s = (delivery_frequency || '').toLowerCase().trim();
+        const m = s.match(/(\d+)\s*(day|week|month)s?/);
+        if (m) {
+          parsedValue = parseInt(m[1], 10);
+          parsedUnit = (m[2] + 's') as 'days' | 'weeks' | 'months';
+        } else if (s.includes('daily')) {
+          parsedUnit = 'days';
+          parsedValue = 1;
+        } else if (s.includes('weekly')) {
+          parsedUnit = 'weeks';
+          parsedValue = 1;
+        } else if (s.includes('monthly')) {
+          parsedUnit = 'months';
+          parsedValue = 1;
+        }
+      }
+      let standingOrderDays = 0;
+      if (typeof standing_order === 'number' && standing_order > 0) {
+        standingOrderDays = Math.floor(standing_order);
+      } else if (parsedUnit && typeof parsedValue === 'number' && parsedValue > 0) {
+        const val = Math.floor(parsedValue);
+        if (parsedUnit === 'days') standingOrderDays = val;
+        else if (parsedUnit === 'weeks') standingOrderDays = val * 7;
+        else if (parsedUnit === 'months') standingOrderDays = val * 30;
+      }
+
       let deliveryDateTime = new Date();
-      if (delivery_date) {
-        const [datePart, timePart] = delivery_date.split('T');
+      const startDateInput = delivery_start_date || delivery_date;
+      if (startDateInput) {
+        const [datePart, timePart] = startDateInput.split('T');
         if (timePart) {
-          deliveryDateTime = new Date(delivery_date);
+          deliveryDateTime = new Date(startDateInput);
         } else if (delivery_time) {
-          deliveryDateTime = new Date(`${delivery_date} ${delivery_time}`);
+          deliveryDateTime = new Date(`${startDateInput} ${delivery_time}`);
         } else {
-          deliveryDateTime = new Date(delivery_date);
+          deliveryDateTime = new Date(startDateInput);
         }
       }
 
@@ -239,8 +278,9 @@ export class StoreOrdersService {
           user_id,
           coupon_id,
           coupon_discount,
-          gst_status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          gst_status,
+          standing_order
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING order_id
       `;
 
@@ -261,7 +301,8 @@ export class StoreOrdersService {
         userId,
         couponId,
         couponDiscount,
-        gstStatus
+        gstStatus,
+        standingOrderDays
       ]);
 
       const orderId = orderResult[0].order_id;
