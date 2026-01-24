@@ -93,6 +93,27 @@ export class AdminSubscriptionsService {
     params.push(Number(limit), Number(offset));
 
     const result = await this.dataSource.query(query, params);
+    const subscriptions = result.map((row: any) => {
+      const days = Number(row.standing_order || 0);
+      let label = null;
+      if (days > 0) {
+        if (days % 30 === 0) {
+          const m = Math.floor(days / 30);
+          label = `Every ${m} Months`;
+        } else if (days % 7 === 0) {
+          const w = Math.floor(days / 7);
+          label = `Every ${w} Weeks`;
+        } else {
+          label = `Every ${days} Days`;
+        }
+      }
+      return {
+        ...row,
+        frequency_days: days,
+        frequency_label: label,
+        start_date: row.delivery_date_time || null,
+      };
+    });
 
     // Get total count
     let countQuery = `
@@ -124,7 +145,7 @@ export class AdminSubscriptionsService {
     const countResult = await this.dataSource.query(countQuery, countParams);
     const count = parseInt(countResult[0].count);
 
-    return { subscriptions: result, count };
+    return { subscriptions, count };
   }
 
   /**
@@ -173,7 +194,28 @@ export class AdminSubscriptionsService {
       throw new NotFoundException('Subscription not found');
     }
 
-    return { subscription };
+    const days = Number(subscription.standing_order || 0);
+    let label = null;
+    if (days > 0) {
+      if (days % 30 === 0) {
+        const m = Math.floor(days / 30);
+        label = `Every ${m} Months`;
+      } else if (days % 7 === 0) {
+        const w = Math.floor(days / 7);
+        label = `Every ${w} Weeks`;
+      } else {
+        label = `Every ${days} Days`;
+      }
+    }
+
+    return {
+      subscription: {
+        ...subscription,
+        frequency_days: days,
+        frequency_label: label,
+        start_date: subscription.delivery_date_time || null,
+      },
+    };
   }
 
   /**

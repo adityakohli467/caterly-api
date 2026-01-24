@@ -441,6 +441,15 @@ export class AdminOrdersService {
     return {
       order: {
         ...orderWithoutProducts,
+        frequency_days: Number(order.standing_order || 0),
+        frequency_label: (() => {
+          const days = Number(order.standing_order || 0);
+          if (!days || days <= 0) return null;
+          if (days % 30 === 0) return `Every ${Math.floor(days / 30)} Months`;
+          if (days % 7 === 0) return `Every ${Math.floor(days / 7)} Weeks`;
+          return `Every ${days} Days`;
+        })(),
+        start_date: order.delivery_date_time || null,
         // Explicitly ensure delivery fields are included
         delivery_date_time: order.delivery_date_time || null,
         delivery_address: order.delivery_address || null,
