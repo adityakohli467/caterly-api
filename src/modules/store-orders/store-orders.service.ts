@@ -348,12 +348,32 @@ export class StoreOrdersService {
 
       // Update coupon usage if applicable
       if (couponId) {
-        const updateCouponQuery = `
-          UPDATE coupon 
-          SET uses_total = uses_total + 1
-          WHERE coupon_id = $1
-        `;
-        await queryRunner.query(updateCouponQuery, [couponId]);
+        try {
+          const columnCheck = await queryRunner.query(
+            `SELECT 1 FROM information_schema.columns WHERE table_name = 'coupon' AND column_name = 'uses_total' LIMIT 1`
+          );
+          const hasColumn =
+            Array.isArray(columnCheck)
+              ? columnCheck.length > 0
+              : (columnCheck?.rows?.length || 0) > 0;
+          if (hasColumn) {
+            const updateCouponQuery = `
+              UPDATE coupon 
+              SET uses_total = COALESCE(uses_total, 0) + 1
+              WHERE coupon_id = $1
+            `;
+            await queryRunner.query(updateCouponQuery, [couponId]);
+          }
+        } catch (err) {
+          try {
+            const fallbackUpdate = `
+              UPDATE coupon 
+              SET uses_total = uses_total + 1
+              WHERE coupon_id = $1
+            `;
+            await queryRunner.query(fallbackUpdate, [couponId]);
+          } catch (_) {}
+        }
       }
 
       await queryRunner.commitTransaction();
