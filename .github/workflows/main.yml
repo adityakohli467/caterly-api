@@ -11,11 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repo (workflow context)
+      # 1️⃣ Checkout repository (only for workflow context)
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Deploy via SSH
+      # 2️⃣ Deploy to EC2 via SSH
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -29,10 +29,14 @@ jobs:
             echo "📁 Moving to project directory"
             cd /home/ubuntu/zenn/zenn_api
 
-            echo "🧹 Cleaning local repo"
-            git fetch origin
-            git reset --hard origin/main
+            echo "🧹 Cleaning local repository"
             git clean -fd
+
+            echo "🔄 Fetching latest code using GitHub PAT"
+            git fetch https://kaushikaspace:${{ secrets.GH_PAT }}@github.com/kaushikaspace/zenn_api.git main
+
+            echo "🔁 Resetting working tree to fetched commit"
+            git reset --hard FETCH_HEAD
 
             echo "📦 Installing dependencies"
             npm install
@@ -43,7 +47,7 @@ jobs:
             echo "🚀 Restarting PM2 process"
             pm2 restart zenn-api --update-env || pm2 start dist/main.js --name zenn-api
 
-            echo "💾 Saving PM2 state"
+            echo "💾 Saving PM2 process list"
             pm2 save
 
             echo "✅ Zenn API deployment completed successfully"
