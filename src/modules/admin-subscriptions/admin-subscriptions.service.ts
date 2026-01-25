@@ -67,17 +67,16 @@ export class AdminSubscriptionsService {
       LEFT JOIN company co ON c.company_id = co.company_id
       WHERE o.standing_order != 0
     `;
+
     const params: any[] = [];
     let paramIndex = 1;
 
-    // Filter by status (active/inactive)
     if (status === 'active') {
-      query += ` AND o.order_status IN (1, 2, 4, 7)`; // new, paid, awaiting_approval, approved
+      query += ` AND o.order_status IN (1, 2, 4, 7)`;
     } else if (status === 'inactive') {
-      query += ` AND o.order_status IN (0, 8)`; // cancelled, rejected
+      query += ` AND o.order_status IN (0, 8)`;
     }
 
-    // Search filter
     if (search) {
       query += ` AND (
         c.firstname ILIKE $${paramIndex} OR
@@ -93,9 +92,11 @@ export class AdminSubscriptionsService {
     params.push(Number(limit), Number(offset));
 
     const result = await this.dataSource.query(query, params);
+
     const subscriptions = result.map((row: any) => {
       const days = Number(row.standing_order || 0);
-      let label = null;
+      let label: string | null = null;
+
       if (days > 0) {
         if (days % 30 === 0) {
           const m = Math.floor(days / 30);
@@ -107,6 +108,7 @@ export class AdminSubscriptionsService {
           label = `Every ${days} Days`;
         }
       }
+
       return {
         ...row,
         frequency_days: days,
@@ -115,7 +117,6 @@ export class AdminSubscriptionsService {
       };
     });
 
-    // Get total count
     let countQuery = `
       SELECT COUNT(*) 
       FROM orders o
@@ -123,6 +124,7 @@ export class AdminSubscriptionsService {
       LEFT JOIN company co ON c.company_id = co.company_id
       WHERE o.standing_order != 0
     `;
+
     const countParams: any[] = [];
     let countParamIndex = 1;
 
@@ -143,7 +145,7 @@ export class AdminSubscriptionsService {
     }
 
     const countResult = await this.dataSource.query(countQuery, countParams);
-    const count = parseInt(countResult[0].count);
+    const count = parseInt(countResult[0].count, 10);
 
     return { subscriptions, count };
   }
@@ -195,7 +197,8 @@ export class AdminSubscriptionsService {
     }
 
     const days = Number(subscription.standing_order || 0);
-    let label = null;
+    let label: string | null = null;
+
     if (days > 0) {
       if (days % 30 === 0) {
         const m = Math.floor(days / 30);
@@ -219,12 +222,12 @@ export class AdminSubscriptionsService {
   }
 
   /**
-   * Cancel subscription (set status to cancelled)
+   * Cancel subscription
    */
   async cancelSubscription(id: number, cancelComment?: string) {
     const query = `
       UPDATE orders 
-      SET order_status = 0, 
+      SET order_status = 0,
           cancel_comment = $1,
           date_modified = CURRENT_TIMESTAMP
       WHERE order_id = $2 AND standing_order != 0
@@ -240,7 +243,6 @@ export class AdminSubscriptionsService {
       throw new NotFoundException('Subscription not found');
     }
 
-    // Cancel future orders for this subscription
     await this.schedulerService.cancelFutureOrders(Number(id));
 
     return {
@@ -249,9 +251,6 @@ export class AdminSubscriptionsService {
     };
   }
 
-  /**
-   * Activate subscription (set status to active)
-   */
   async activateSubscription(id: number) {
     const query = `
       UPDATE orders 
@@ -274,9 +273,6 @@ export class AdminSubscriptionsService {
     };
   }
 
-  /**
-   * Update subscription
-   */
   async updateSubscription(
     id: number,
     updateData: {
@@ -286,9 +282,6 @@ export class AdminSubscriptionsService {
       customer_order_name?: string;
     },
   ) {
-    const { standing_order, delivery_date_time, order_comments, customer_order_name } =
-      updateData;
-
     const query = `
       UPDATE orders 
       SET 
@@ -302,10 +295,10 @@ export class AdminSubscriptionsService {
     `;
 
     const result = await this.dataSource.query(query, [
-      standing_order,
-      delivery_date_time,
-      order_comments,
-      customer_order_name,
+      updateData.standing_order,
+      updateData.delivery_date_time,
+      updateData.order_comments,
+      updateData.customer_order_name,
       Number(id),
     ]);
 
@@ -319,9 +312,6 @@ export class AdminSubscriptionsService {
     };
   }
 
-  /**
-   * Send subscription to customer (mark as sent)
-   */
   async sendToCustomer(id: number) {
     const query = `
       UPDATE orders 
@@ -345,12 +335,11 @@ export class AdminSubscriptionsService {
     };
   }
 
-  /**
-   * Delete subscription
-   */
   async deleteSubscription(id: number) {
-    const query = 'DELETE FROM orders WHERE order_id = $1 AND standing_order != 0';
-    const result = await this.dataSource.query(query, [Number(id)]);
+    const result = await this.dataSource.query(
+      'DELETE FROM orders WHERE order_id = $1 AND standing_order != 0',
+      [Number(id)],
+    );
 
     if (result.rowCount === 0) {
       throw new NotFoundException('Subscription not found');
