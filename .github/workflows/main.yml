@@ -1,53 +1,36 @@
-name: Deploy Zenn API
+name: Deploy to Server
 
 on:
   push:
     branches:
-      - main
+      - "main"
 
 jobs:
-  deploy:
-    name: Deploy Zenn API to EC2
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository (only for workflow context)
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-      # 2️⃣ Deploy to EC2 via SSH
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          script: |
-            set -e
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-            echo "📁 Moving to project directory"
-            cd /home/ubuntu/zenn/zenn_api
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
 
-            echo "🧹 Cleaning local repository"
-            git clean -fd
+      - name: Build, tag, and push Docker image
+        env:
+          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          ECR_REPOSITORY: zenn-api
+          IMAGE_TAG: latest
+        run: |
+          # Build and tag the image directly for ECR
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
 
-            echo "🔄 Fetching latest code using GitHub PAT"
-            git fetch https://kaushikaspace:${{ secrets.GH_PAT }}@github.com/kaushikaspace/zenn_api.git main
-
-            echo "🔁 Resetting working tree to fetched commit"
-            git reset --hard FETCH_HEAD
-
-            echo "📦 Installing dependencies"
-            npm install
-
-            echo "🏗️ Building NestJS API"
-            npm run build
-
-            echo "🚀 Restarting PM2 process"
-            pm2 restart zenn-api --update-env || pm2 start dist/main.js --name zenn-api
-
-            echo "💾 Saving PM2 process list"
-            pm2 save
-
-            echo "✅ Zenn API deployment completed successfully"
+          # Push to ECR
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
