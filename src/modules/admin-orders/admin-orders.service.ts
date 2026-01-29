@@ -1881,19 +1881,19 @@ export class AdminOrdersService {
       }
 
       // Check if is_prepared column exists, if not add it
-      const columnCheck = await this.dataSource.query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'order_product' AND column_name = 'is_prepared'
-      `);
+      // const columnCheck = await this.dataSource.query(`
+      //   SELECT column_name 
+      //   FROM information_schema.columns 
+      //   WHERE table_name = 'order_product' AND column_name = 'is_prepared'
+      // `);
 
-      if (columnCheck.length === 0) {
-        // Add is_prepared column if it doesn't exist
-        await this.dataSource.query(`
-          ALTER TABLE order_product 
-          ADD COLUMN IF NOT EXISTS is_prepared BOOLEAN DEFAULT FALSE
-        `);
-      }
+      // if (columnCheck.length === 0) {
+      //   // Add is_prepared column if it doesn't exist
+      //   await this.dataSource.query(`
+      //     ALTER TABLE order_product 
+      //     ADD COLUMN IF NOT EXISTS is_prepared BOOLEAN DEFAULT FALSE
+      //   `);
+      // }
 
       const updateQuery = `
         UPDATE order_product
