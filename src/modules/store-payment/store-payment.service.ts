@@ -330,11 +330,20 @@ export class StorePaymentService {
   async handleFatZebraCallback(query: any): Promise<string> {
     const orderRef = query?.r;
     if (!orderRef) {
-      throw new BadRequestException('Order reference is required');
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
+                        this.configService.get<string>('ADMIN_PORTAL_URL') || 
+                        'http://localhost:3000';
+      const redirectUrl = `${frontendUrl}/payment/failed`;
+      return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
     }
-    const orderId = parseInt(orderRef as string);
+    const refMatch = String(orderRef).match(/\d+/);
+    const orderId = refMatch ? parseInt(refMatch[0]) : NaN;
     if (isNaN(orderId)) {
-      throw new BadRequestException('Invalid order ID format');
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
+                        this.configService.get<string>('ADMIN_PORTAL_URL') || 
+                        'http://localhost:3000';
+      const redirectUrl = `${frontendUrl}/payment/failed`;
+      return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -354,7 +363,12 @@ export class StorePaymentService {
       `;
       const orderResult = await queryRunner.query(orderQuery, [orderId]);
       if (orderResult.length === 0) {
-        throw new NotFoundException('Order not found');
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
+                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
+                          'http://localhost:3000';
+        const redirectUrl = `${frontendUrl}/payment/failed?order_id=${orderId}`;
+        await queryRunner.commitTransaction();
+        return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
       }
       const order = orderResult[0];
 
