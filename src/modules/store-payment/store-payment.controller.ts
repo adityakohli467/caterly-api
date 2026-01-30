@@ -7,6 +7,7 @@ import {
   Body,
   Req,
   Res,
+  UseGuards,
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -14,6 +15,7 @@ import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody } from '@nestjs/swag
 import { StorePaymentService } from './store-payment.service';
 import { PinPaymentsService } from '../../common/services/pinpayments.service';
 import { FatZebraService } from '../../common/services/fatzebra.service';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @ApiTags('Store Payment')
 @Controller('store/payment')
@@ -95,13 +97,12 @@ export class StorePaymentController {
   @Get(':orderId/fatzebra')
   @ApiOperation({ summary: 'Start FatZebra PayNow hosted payment' })
   @ApiParam({ name: 'orderId', type: Number })
+  @UseGuards(JwtAuthGuard)
   async startFatZebraPayment(
     @Param('orderId', ParseIntPipe) orderId: number,
-    @Res() res: Response,
   ) {
-    const html = await this.storePaymentService.processFatZebraPayment(orderId);
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
+    const paymentUrl = await this.storePaymentService.getFatZebraPaymentUrl(orderId);
+    return { success: true, payment_url: paymentUrl };
   }
 
   @Get('fatzebra/callback')
