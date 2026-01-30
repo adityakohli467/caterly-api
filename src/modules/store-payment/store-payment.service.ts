@@ -177,6 +177,73 @@ export class StorePaymentService {
   }
 
   /**
+   * Return FatZebra PayNow URL (for AJAX/JSON use)
+   */
+  async getFatZebraPaymentUrl(orderId: number): Promise<string> {
+    if (!orderId || isNaN(orderId) || orderId <= 0) {
+      throw new BadRequestException('Valid order ID is required');
+    }
+    if (!this.fatZebraService.isConfigured()) {
+      throw new InternalServerErrorException('FatZebra PayNow is not configured');
+    }
+
+    const orderQuery = `
+      SELECT 
+        o.*,
+        c.firstname,
+        c.lastname,
+        c.email
+      FROM orders o
+      LEFT JOIN customer c ON o.customer_id = c.customer_id
+      WHERE o.order_id = $1
+    `;
+    const orderResult = await this.dataSource.query(orderQuery, [orderId]);
+    if (orderResult.length === 0) {
+      throw new NotFoundException('Order not found');
+    }
+    const order = orderResult[0];
+
+    if (order.payment_status === 'paid' || order.payment_date) {
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
+                        this.configService.get<string>('ADMIN_PORTAL_URL') || 
+                        'http://localhost:3000';
+      const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
+      return alreadyPaidUrl;
+    }
+
+    let discount = 0;
+    if (order.coupon_id) {
+      if (order.coupon_type === 'F') {
+        discount = parseFloat(order.coupon_discount || 0);
+      } else {
+        const subtotal = parseFloat(order.order_total || 0) + 
+                        parseFloat(order.late_fee || 0) + 
+                        parseFloat(order.delivery_fee || 0);
+        discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
+      }
+    }
+    const total = parseFloat(order.order_total || 0) + 
+                  parseFloat(order.late_fee || 0) + 
+                  parseFloat(order.delivery_fee || 0) - 
+                  discount;
+    const totalCents = Math.round(total * 100);
+
+    const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
+    const returnPath = `${backendUrl}/store/payment/fatzebra/callback`;
+    const email = order.customer_order_email || order.email || undefined;
+
+    const payUrl = this.fatZebraService.buildPayNowUrl({
+      reference: String(orderId),
+      amountCents: totalCents,
+      currency: 'AUD',
+      returnPath,
+      iframe: false,
+      email,
+    });
+    return payUrl;
+  }
+
+  /**
    * Start FatZebra PayNow flow (Hosted Payment Page)
    */
   async processFatZebraPayment(orderId: number): Promise<string> {
