@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 import { EmailService } from '../../common/services/email.service';
 import { ConfigService } from '@nestjs/config';
 import { PinPaymentsService } from '../../common/services/pinpayments.service';
+import { FatZebraService } from '../../common/services/fatzebra.service';
 
 @Injectable()
 export class StorePaymentService {
@@ -20,6 +21,7 @@ export class StorePaymentService {
     private emailService: EmailService,
     private configService: ConfigService,
     private pinPaymentsService: PinPaymentsService,
+    private fatZebraService: FatZebraService,
   ) {}
 
   /**
@@ -166,6 +168,193 @@ export class StorePaymentService {
       await queryRunner.commitTransaction();
       return formHtml;
 
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Start FatZebra PayNow flow (Hosted Payment Page)
+   */
+  async processFatZebraPayment(orderId: number): Promise<string> {
+    if (!orderId || isNaN(orderId) || orderId <= 0) {
+      throw new BadRequestException('Valid order ID is required');
+    }
+    if (!this.fatZebraService.isConfigured()) {
+      throw new InternalServerErrorException('FatZebra PayNow is not configured');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const orderQuery = `
+        SELECT 
+          o.*,
+          c.firstname,
+          c.lastname,
+          c.email
+        FROM orders o
+        LEFT JOIN customer c ON o.customer_id = c.customer_id
+        WHERE o.order_id = $1
+      `;
+      const orderResult = await queryRunner.query(orderQuery, [orderId]);
+      if (orderResult.length === 0) {
+        throw new NotFoundException('Order not found');
+      }
+      const order = orderResult[0];
+
+      if (order.payment_status === 'paid' || order.payment_date) {
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
+                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
+                          'http://localhost:3006';
+        const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
+        await queryRunner.commitTransaction();
+        return this.generateRedirectHtml(alreadyPaidUrl, 'Order Already Paid');
+      }
+
+      let discount = 0;
+      if (order.coupon_id) {
+        if (order.coupon_type === 'F') {
+          discount = parseFloat(order.coupon_discount || 0);
+        } else {
+          const subtotal = parseFloat(order.order_total || 0) + 
+                          parseFloat(order.late_fee || 0) + 
+                          parseFloat(order.delivery_fee || 0);
+          discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
+        }
+      }
+      const total = parseFloat(order.order_total || 0) + 
+                    parseFloat(order.late_fee || 0) + 
+                    parseFloat(order.delivery_fee || 0) - 
+                    discount;
+      const totalCents = Math.round(total * 100);
+
+      const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
+      const returnPath = `${backendUrl}/store/payment/fatzebra/callback`;
+
+      const email = order.customer_order_email || order.email || undefined;
+      const payUrl = this.fatZebraService.buildPayNowUrl({
+        reference: String(orderId),
+        amountCents: totalCents,
+        currency: 'AUD',
+        returnPath,
+        iframe: false,
+        email,
+      });
+
+      await queryRunner.commitTransaction();
+      return this.generateRedirectHtml(payUrl, 'Redirecting to Payment');
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Handle FatZebra PayNow callback
+   */
+  async handleFatZebraCallback(query: any): Promise<string> {
+    const orderRef = query?.r;
+    if (!orderRef) {
+      throw new BadRequestException('Order reference is required');
+    }
+    const orderId = parseInt(orderRef as string);
+    if (isNaN(orderId)) {
+      throw new BadRequestException('Invalid order ID format');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const orderQuery = `
+        SELECT 
+          o.*,
+          c.firstname,
+          c.lastname,
+          c.email
+        FROM orders o
+        LEFT JOIN customer c ON o.customer_id = c.customer_id
+        WHERE o.order_id = $1
+      `;
+      const orderResult = await queryRunner.query(orderQuery, [orderId]);
+      if (orderResult.length === 0) {
+        throw new NotFoundException('Order not found');
+      }
+      const order = orderResult[0];
+
+      if (order.order_status === 2 || order.payment_status === 'paid' || order.payment_date) {
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
+                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
+                          'http://localhost:3000';
+        const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
+        await queryRunner.commitTransaction();
+        return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
+      }
+
+      const verified = this.fatZebraService.verifyCallback(query);
+      if (!verified) {
+        throw new BadRequestException('Security validation failed: Invalid payment signature');
+      }
+
+      const successful = String(query?.successful || '').toLowerCase() === 'true';
+      if (successful) {
+        const txnId = query?.id || '';
+        const token = query?.token || '';
+
+        const checkQuery = await queryRunner.query(
+          `SELECT order_status, payment_status, payment_date FROM orders WHERE order_id = $1 FOR UPDATE`,
+          [orderId]
+        );
+        if (checkQuery[0]?.order_status === 2 || 
+            checkQuery[0]?.payment_status === 'paid' || 
+            checkQuery[0]?.payment_date) {
+          await queryRunner.rollbackTransaction();
+          const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
+                            this.configService.get<string>('ADMIN_PORTAL_URL') || 
+                            'http://localhost:3000';
+          const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
+          return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
+        }
+
+        await queryRunner.query(
+          `UPDATE orders 
+           SET order_status = 2,
+               payment_status = 'paid', 
+               payment_date = NOW(),
+               payment_gateway = 'fatzebra',
+               payment_transaction_id = $2,
+               payment_response = COALESCE(payment_response, '{}'::jsonb) || $3::jsonb,
+               mark_paid_comment = 'Paid via FatZebra - Txn: ${txnId} Token: ${token}',
+               date_modified = NOW()
+           WHERE order_id = $1`,
+          [orderId, txnId, JSON.stringify(query)]
+        );
+
+        await queryRunner.commitTransaction();
+        await this.sendPaymentConfirmationEmail(orderId, order);
+
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
+                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
+                          'http://localhost:3000';
+        const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
+        return this.generateRedirectHtml(redirectUrl, 'Payment Successful');
+      } else {
+        await queryRunner.commitTransaction();
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
+                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
+                          'http://localhost:3000';
+        const redirectUrl = `${frontendUrl}/payment/failed?order_id=${orderId}`;
+        return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
+      }
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;

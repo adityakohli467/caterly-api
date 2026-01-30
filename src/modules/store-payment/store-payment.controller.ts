@@ -13,6 +13,7 @@ import type { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { StorePaymentService } from './store-payment.service';
 import { PinPaymentsService } from '../../common/services/pinpayments.service';
+import { FatZebraService } from '../../common/services/fatzebra.service';
 
 @ApiTags('Store Payment')
 @Controller('store/payment')
@@ -20,6 +21,7 @@ export class StorePaymentController {
   constructor(
     private readonly storePaymentService: StorePaymentService,
     private readonly pinPaymentsService: PinPaymentsService,
+    private readonly fatZebraService: FatZebraService,
   ) {}
 
   @Get(':orderId/pin-key')
@@ -90,6 +92,28 @@ export class StorePaymentController {
     res.redirect(paymentUrl);
   }
 
+  @Get(':orderId/fatzebra')
+  @ApiOperation({ summary: 'Start FatZebra PayNow hosted payment' })
+  @ApiParam({ name: 'orderId', type: Number })
+  async startFatZebraPayment(
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Res() res: Response,
+  ) {
+    const html = await this.storePaymentService.processFatZebraPayment(orderId);
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  }
+
+  @Get('fatzebra/callback')
+  @ApiOperation({ summary: 'Handle FatZebra PayNow callback' })
+  async handleFatZebraCallback(
+    @Query() query: any,
+    @Res() res: Response,
+  ) {
+    const html = await this.storePaymentService.handleFatZebraCallback(query);
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  }
   // Legacy SecurePay endpoints (deprecated - kept for backward compatibility)
   @Post('callback')
   @ApiOperation({ summary: 'Handle SecurePay payment callback (deprecated)' })
