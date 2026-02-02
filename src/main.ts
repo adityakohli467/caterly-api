@@ -13,6 +13,8 @@ if (typeof globalThis.crypto === 'undefined') {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     rawBody: true, // Enable raw body for webhook signature verification
+    // Enable all log levels so debug/verbose messages are printed to console
+    logger: ['error','warn','log','debug','verbose'],
   });
 
   // Enable CORS - Allow all origins for AWS deployment
