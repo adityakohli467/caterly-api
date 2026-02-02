@@ -54,7 +54,9 @@ export class FatZebraService {
     if (params.returnPath) {
       verificationString = `${verificationString}:${params.returnPath}`;
     }
+    this.logger.debug(`FatZebra verification string (no secret): ${verificationString}`);
     const hash = this.hmacMd5(verificationString);
+    this.logger.debug(`FatZebra generated hash length=${hash.length}`);
 
     const base = `${this.getBaseUrl()}/${encodeURIComponent(this.username)}/${encodeURIComponent(
       params.reference,
@@ -94,7 +96,10 @@ export class FatZebraService {
       query.id || '',
       query.token || '',
     ].join(':');
+    this.logger.debug(`FatZebra verify parts: ${parts}`);
     const expected = this.hmacMd5(parts);
-    return expected === query.v;
+    const ok = expected === query.v;
+    this.logger.debug(`FatZebra verify expected=${expected} actual=${query.v} ok=${ok}`);
+    return ok;
   }
 }

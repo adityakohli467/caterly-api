@@ -105,6 +105,19 @@ export class StorePaymentController {
     return { success: true, payment_url: paymentUrl };
   }
 
+  // Browser-friendly redirect endpoint (no auth) — returns HTML which redirects the browser to Fat Zebra
+  @Get(':orderId/fatzebra/redirect')
+  @ApiOperation({ summary: 'Redirect to FatZebra PayNow hosted payment (browser-friendly)' })
+  @ApiParam({ name: 'orderId', type: Number })
+  async redirectToFatZebra(
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Res() res: Response,
+  ) {
+    const html = await this.storePaymentService.processFatZebraPayment(orderId);
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  }
+
   @Get('fatzebra/callback')
   @ApiOperation({ summary: 'Handle FatZebra PayNow callback' })
   async handleFatZebraCallback(
