@@ -232,14 +232,39 @@ export class StorePaymentService {
     const returnPath = `${backendUrl}/store/payment/fatzebra/callback`;
     const email = order.customer_order_email || order.email || undefined;
 
+    // Create a unique reference to avoid ambiguity (orderId + random hex)
+    const uniqueRef = `${orderId}-${crypto.randomBytes(8).toString('hex')}`;
+
+    // Ensure support table exists and record the generated reference for later callback mapping
+    await this.dataSource.query(`
+      CREATE TABLE IF NOT EXISTS fatzebra_payment (
+        id SERIAL PRIMARY KEY,
+        reference TEXT UNIQUE,
+        order_id INTEGER NOT NULL,
+        amount_cents INTEGER,
+        currency TEXT,
+        status TEXT,
+        callback_payload JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await this.dataSource.query(
+      `INSERT INTO fatzebra_payment(reference, order_id, amount_cents, currency, status)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (reference) DO NOTHING`,
+      [uniqueRef, orderId, totalCents, 'AUD', 'created']
+    );
+
     const payUrl = this.fatZebraService.buildPayNowUrl({
-      reference: String(orderId),
+      reference: uniqueRef,
       amountCents: totalCents,
       currency: 'AUD',
       returnPath,
       iframe: false,
       email,
     });
+    this.logger.log(`FatZebra getPayUrl orderId=${orderId} amountCents=${totalCents} reference=${uniqueRef} payUrl=${payUrl}`);
     return payUrl;
   }
 
@@ -305,14 +330,39 @@ export class StorePaymentService {
       const returnPath = `${backendUrl}/store/payment/fatzebra/callback`;
 
       const email = order.customer_order_email || order.email || undefined;
+      // Create unique reference and save it with transaction so we can map callbacks to exact attempts
+      const uniqueRef = `${orderId}-${crypto.randomBytes(8).toString('hex')}`;
+
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS fatzebra_payment (
+          id SERIAL PRIMARY KEY,
+          reference TEXT UNIQUE,
+          order_id INTEGER NOT NULL,
+          amount_cents INTEGER,
+          currency TEXT,
+          status TEXT,
+          callback_payload JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await queryRunner.query(
+        `INSERT INTO fatzebra_payment(reference, order_id, amount_cents, currency, status)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (reference) DO NOTHING`,
+        [uniqueRef, orderId, totalCents, 'AUD', 'created']
+      );
+
       const payUrl = this.fatZebraService.buildPayNowUrl({
-        reference: String(orderId),
+        reference: uniqueRef,
         amountCents: totalCents,
         currency: 'AUD',
         returnPath,
         iframe: false,
         email,
       });
+
+      this.logger.log(`FatZebra processFatZebraPayment created payUrl for order=${orderId} amountCents=${totalCents} reference=${uniqueRef} payUrl=${payUrl}`);
 
       await queryRunner.commitTransaction();
       return this.generateRedirectHtml(payUrl, 'Redirecting to Payment');
@@ -328,21 +378,66 @@ export class StorePaymentService {
    * Handle FatZebra PayNow callback
    */
   async handleFatZebraCallback(query: any): Promise<string> {
+    this.logger.log(`FatZebra callback received query: ${JSON.stringify(query)}`);
     const orderRef = query?.r;
+    this.logger.log(`FatZebra callback r param: ${orderRef}`);
+
     if (!orderRef) {
       const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
                         this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                        'http://localhost:3000';
-      const redirectUrl = `${frontendUrl}/payment/failed`;
+                        'http://localhost:3006';
+      const redirectUrl = `${frontendUrl}/payment/cancel`;
       return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
     }
-    const refMatch = String(orderRef).match(/\d+/);
-    const orderId = refMatch ? parseInt(refMatch[0]) : NaN;
+
+    // Try to find exact reference in our fatzebra_payment table (preferred and safe)
+    let orderId: number = NaN;
+    try {
+      const rows: any[] = await this.dataSource.query(
+        `SELECT order_id, id FROM fatzebra_payment WHERE reference = $1 ORDER BY created_at DESC LIMIT 1`,
+        [String(orderRef)]
+      );
+      if (rows && rows.length > 0) {
+        orderId = rows[0].order_id;
+        // attach payment row id for later updates
+        (query as any)._fatzebra_payment_id = rows[0].id;
+        this.logger.log(`FatZebra callback matched stored reference. orderId=${orderId} payment_id=${rows[0].id}`);
+      }
+    } catch (e) {
+      // Table might not exist yet: fall back to legacy parsing
+      this.logger.warn('fatzebra_payment table lookup failed, falling back to legacy reference parsing');
+    }
+
+    // Fallback legacy behavior: parse first digits from r if no DB match
+    if (isNaN(orderId)) {
+      // STRICT PARSING: Only accept format {orderId}-{hex}
+      const parts = String(orderRef).split('-');
+      if (parts.length >= 2 && !isNaN(parseInt(parts[0]))) {
+        orderId = parseInt(parts[0]);
+        this.logger.log(`FatZebra callback parsed strict orderId: ${orderId} from ref: ${orderRef}`);
+      } else {
+        this.logger.warn(`FatZebra callback failed to parse orderId from ref: ${orderRef}`);
+      }
+      
+      // DISABLED LEGACY PARSING to avoid "99" mismatch
+      // Enable legacy parsing to support both simple integer references (e.g. "99")
+      // AND composite references (e.g. "99-abcdef") if DB lookup fails
+      if (isNaN(orderId)) {
+        // Match digits at the start of the string
+        const refMatch = String(orderRef).match(/^(\d+)/);
+        if (refMatch) {
+          orderId = parseInt(refMatch[1]);
+          this.logger.log(`FatZebra callback parsed orderId (fallback): ${orderId} from ref: ${orderRef}`);
+        }
+      }
+    }
+
     if (isNaN(orderId)) {
       const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
                         this.configService.get<string>('ADMIN_PORTAL_URL') || 
                         'http://localhost:3000';
-      const redirectUrl = `${frontendUrl}/payment/failed`;
+      const safeRef = encodeURIComponent(String(orderRef || 'missing'));
+      const redirectUrl = `${frontendUrl}/payment/failed?ref=${safeRef}&reason=invalid_order_id`;
       return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
     }
 
@@ -365,8 +460,8 @@ export class StorePaymentService {
       if (orderResult.length === 0) {
         const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
                           this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3000';
-        const redirectUrl = `${frontendUrl}/payment/failed?order_id=${orderId}`;
+                          'http://localhost:3006';
+        const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
         await queryRunner.commitTransaction();
         return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
       }
@@ -387,9 +482,25 @@ export class StorePaymentService {
       }
 
       const successful = String(query?.successful || '').toLowerCase() === 'true';
+
+      // If we have a stored payment id, update its status and payload accordingly
+      const paymentRowId = (query as any)?._fatzebra_payment_id;
+
       if (successful) {
         const txnId = query?.id || '';
         const token = query?.token || '';
+
+        // update fatzebra_payment record as successful
+        try {
+          if (paymentRowId) {
+            await queryRunner.query(
+              `UPDATE fatzebra_payment SET status=$1, callback_payload=$2 WHERE id=$3`,
+              ['successful', JSON.stringify(query), paymentRowId]
+            );
+          }
+        } catch (e) {
+          this.logger.warn('Failed to update fatzebra_payment record with success info', e?.message || e);
+        }
 
         const checkQuery = await queryRunner.query(
           `SELECT order_status, payment_status, payment_date FROM orders WHERE order_id = $1 FOR UPDATE`,
@@ -429,11 +540,24 @@ export class StorePaymentService {
         const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         return this.generateRedirectHtml(redirectUrl, 'Payment Successful');
       } else {
+        // mark payment row as failed if possible
+        try {
+          const paymentRowId = (query as any)?._fatzebra_payment_id;
+          if (paymentRowId) {
+            await queryRunner.query(
+              `UPDATE fatzebra_payment SET status=$1, callback_payload=$2 WHERE id=$3`,
+              ['failed', JSON.stringify(query), paymentRowId]
+            );
+          }
+        } catch (e) {
+          this.logger.warn('Failed to update fatzebra_payment record with failure info', e?.message || e);
+        }
+
         await queryRunner.commitTransaction();
         const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
                           this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3000';
-        const redirectUrl = `${frontendUrl}/payment/failed?order_id=${orderId}`;
+                          'http://localhost:3006';
+        const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
         return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
       }
     } catch (error) {
