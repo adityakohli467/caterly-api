@@ -109,28 +109,27 @@ export class StorePaymentController {
     return { success: true, payment_url: paymentUrl };
   }
 
-  // Browser-friendly redirect endpoint (no auth) — returns HTML which redirects the browser to Fat Zebra
+  // FatZebra redirect endpoint - now returns JSON with authentication
   @Get(':orderId/fatzebra/redirect')
   @ApiOperation({ summary: 'Redirect to FatZebra PayNow hosted payment (browser-friendly)' })
   @ApiParam({ name: 'orderId', type: Number })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   async redirectToFatZebra(
     @Param('orderId', ParseIntPipe) orderId: number,
-    @Res() res: Response,
   ) {
-    const html = await this.storePaymentService.processFatZebraPayment(orderId);
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
+    const paymentUrl = await this.storePaymentService.getFatZebraPaymentUrl(orderId);
+    return { success: true, payment_url: paymentUrl };
   }
 
   @Get('fatzebra/callback')
   @ApiOperation({ summary: 'Handle FatZebra PayNow callback' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   async handleFatZebraCallback(
     @Query() query: any,
-    @Res() res: Response,
   ) {
-    const html = await this.storePaymentService.handleFatZebraCallback(query);
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
+    return await this.storePaymentService.handleFatZebraCallback(query);
   }
   // Legacy SecurePay endpoints (deprecated - kept for backward compatibility)
   @Post('callback')

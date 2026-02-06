@@ -375,7 +375,7 @@ export class StorePaymentService {
   /**
    * Handle FatZebra PayNow callback
    */
-  async handleFatZebraCallback(query: any): Promise<string> {
+  async handleFatZebraCallback(query: any): Promise<any> {
     this.logger.log(`FatZebra callback received query: ${JSON.stringify(query)}`);
     const orderRef = query?.r;
     this.logger.log(`FatZebra callback r param: ${orderRef}`);
@@ -385,7 +385,7 @@ export class StorePaymentService {
         this.configService.get<string>('ADMIN_PORTAL_URL') ||
         'http://localhost:3006';
       const redirectUrl = `${frontendUrl}/payment/cancel`;
-      return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
+      return { success: false, message: 'Payment Failed', redirect_url: redirectUrl };
     }
 
     // Try to find exact reference in our fatzebra_payment table (preferred and safe)
@@ -436,7 +436,7 @@ export class StorePaymentService {
         'http://localhost:3000';
       const safeRef = encodeURIComponent(String(orderRef || 'missing'));
       const redirectUrl = `${frontendUrl}/payment/failed?ref=${safeRef}&reason=invalid_order_id`;
-      return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
+      return { success: false, message: 'Payment Failed', redirect_url: redirectUrl };
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -461,7 +461,7 @@ export class StorePaymentService {
           'http://localhost:3006';
         const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
         await queryRunner.commitTransaction();
-        return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
+        return { success: false, message: 'Payment Failed', redirect_url: redirectUrl };
       }
       const order = orderResult[0];
 
@@ -471,7 +471,7 @@ export class StorePaymentService {
           'http://localhost:3000';
         const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         await queryRunner.commitTransaction();
-        return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
+        return { success: true, message: 'Payment Already Processed', redirect_url: redirectUrl };
       }
 
       const verified = this.fatZebraService.verifyCallback(query);
@@ -512,7 +512,7 @@ export class StorePaymentService {
             this.configService.get<string>('ADMIN_PORTAL_URL') ||
             'http://localhost:3000';
           const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-          return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
+          return { success: true, message: 'Payment Already Processed', redirect_url: redirectUrl };
         }
 
         await queryRunner.query(
@@ -536,7 +536,7 @@ export class StorePaymentService {
           this.configService.get<string>('ADMIN_PORTAL_URL') ||
           'http://localhost:3000';
         const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-        return this.generateRedirectHtml(redirectUrl, 'Payment Successful');
+        return { success: true, message: 'Payment Successful', redirect_url: redirectUrl, order_id: orderId, transaction_id: txnId };
       } else {
         // mark payment row as failed if possible
         try {
@@ -556,7 +556,7 @@ export class StorePaymentService {
           this.configService.get<string>('ADMIN_PORTAL_URL') ||
           'http://localhost:3006';
         const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
-        return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
+        return { success: false, message: 'Payment Failed', redirect_url: redirectUrl };
       }
     } catch (error) {
       await queryRunner.rollbackTransaction();
