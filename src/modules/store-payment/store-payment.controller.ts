@@ -125,12 +125,16 @@ export class StorePaymentController {
   // FatZebra callback endpoint - PUBLIC (no JWT required)
   // FatZebra redirects users here, so we can't require JWT auth
   // Security is handled via FatZebra's signature verification
+  // Returns HTML to auto-redirect user's browser to success/failure page
   @Get('fatzebra/callback')
   @ApiOperation({ summary: 'Handle FatZebra PayNow callback (public endpoint)' })
   async handleFatZebraCallback(
     @Query() query: any,
+    @Res() res: Response,
   ) {
-    return await this.storePaymentService.handleFatZebraCallback(query);
+    const html = await this.storePaymentService.handleFatZebraCallback(query);
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
   }
   // Legacy SecurePay endpoints (deprecated - kept for backward compatibility)
   @Post('callback')

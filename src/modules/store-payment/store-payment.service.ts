@@ -180,6 +180,9 @@ export class StorePaymentService {
    * Return FatZebra PayNow URL (for AJAX/JSON use)
    */
   async getFatZebraPaymentUrl(orderId: number): Promise<string> {
+    // 🔍 DEBUG: Log the incoming orderId
+    this.logger.log(`🔍 getFatZebraPaymentUrl called with orderId=${orderId} (type: ${typeof orderId})`);
+
     if (!orderId || isNaN(orderId) || orderId <= 0) {
       throw new BadRequestException('Valid order ID is required');
     }
@@ -232,8 +235,14 @@ export class StorePaymentService {
     const returnPath = `${backendUrl}/store/payment/fatzebra/callback`;
     const email = order.customer_order_email || order.email || undefined;
 
+    // 🔍 DEBUG: Log before creating reference
+    this.logger.log(`🔍 Creating reference for orderId=${orderId}`);
+
     // Create a unique reference to avoid ambiguity (orderId + random hex)
     const uniqueRef = `${orderId}-${crypto.randomBytes(8).toString('hex')}`;
+
+    // 🔍 DEBUG: Log the created reference
+    this.logger.log(`🔍 Created uniqueRef="${uniqueRef}" for orderId=${orderId}`);
 
     // Ensure support table exists and record the generated reference for later callback mapping
     await this.dataSource.query(`
@@ -375,7 +384,7 @@ export class StorePaymentService {
   /**
    * Handle FatZebra PayNow callback
    */
-  async handleFatZebraCallback(query: any): Promise<any> {
+  async handleFatZebraCallback(query: any): Promise<string> {
     this.logger.log(`FatZebra callback received query: ${JSON.stringify(query)}`);
     const orderRef = query?.r;
     this.logger.log(`FatZebra callback r param: ${orderRef}`);
@@ -385,7 +394,7 @@ export class StorePaymentService {
         this.configService.get<string>('ADMIN_PORTAL_URL') ||
         'http://localhost:3006';
       const redirectUrl = `${frontendUrl}/payment/cancel`;
-      return { success: false, message: 'Payment Failed', redirect_url: redirectUrl };
+      return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
     }
 
     // Try to find exact reference in our fatzebra_payment table (preferred and safe)
@@ -436,7 +445,7 @@ export class StorePaymentService {
         'http://localhost:3000';
       const safeRef = encodeURIComponent(String(orderRef || 'missing'));
       const redirectUrl = `${frontendUrl}/payment/failed?ref=${safeRef}&reason=invalid_order_id`;
-      return { success: false, message: 'Payment Failed', redirect_url: redirectUrl };
+      return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -461,7 +470,7 @@ export class StorePaymentService {
           'http://localhost:3006';
         const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
         await queryRunner.commitTransaction();
-        return { success: false, message: 'Payment Failed', redirect_url: redirectUrl };
+        return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
       }
       const order = orderResult[0];
 
@@ -471,7 +480,7 @@ export class StorePaymentService {
           'http://localhost:3000';
         const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         await queryRunner.commitTransaction();
-        return { success: true, message: 'Payment Already Processed', redirect_url: redirectUrl };
+        return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
       }
 
       const verified = this.fatZebraService.verifyCallback(query);
@@ -512,7 +521,7 @@ export class StorePaymentService {
             this.configService.get<string>('ADMIN_PORTAL_URL') ||
             'http://localhost:3000';
           const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-          return { success: true, message: 'Payment Already Processed', redirect_url: redirectUrl };
+          return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
         }
 
         await queryRunner.query(
@@ -536,7 +545,7 @@ export class StorePaymentService {
           this.configService.get<string>('ADMIN_PORTAL_URL') ||
           'http://localhost:3000';
         const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-        return { success: true, message: 'Payment Successful', redirect_url: redirectUrl, order_id: orderId, transaction_id: txnId };
+        return this.generateRedirectHtml(redirectUrl, 'Payment Successful');
       } else {
         // mark payment row as failed if possible
         try {
@@ -556,7 +565,7 @@ export class StorePaymentService {
           this.configService.get<string>('ADMIN_PORTAL_URL') ||
           'http://localhost:3006';
         const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
-        return { success: false, message: 'Payment Failed', redirect_url: redirectUrl };
+        return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
       }
     } catch (error) {
       await queryRunner.rollbackTransaction();
