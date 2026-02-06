@@ -109,17 +109,19 @@ export class StorePaymentController {
     return { success: true, payment_url: paymentUrl };
   }
 
-  // FatZebra redirect endpoint - now returns JSON with authentication
+  // FatZebra redirect endpoint - PUBLIC (browser-friendly)
+  // Users click this link in their browser, so we can't require JWT auth
+  // This endpoint redirects the browser directly to FatZebra's payment page
   @Get(':orderId/fatzebra/redirect')
-  @ApiOperation({ summary: 'Redirect to FatZebra PayNow hosted payment (browser-friendly)' })
+  @ApiOperation({ summary: 'Redirect to FatZebra PayNow hosted payment (browser-friendly, public)' })
   @ApiParam({ name: 'orderId', type: Number })
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
   async redirectToFatZebra(
     @Param('orderId', ParseIntPipe) orderId: number,
+    @Res() res: Response,
   ) {
     const paymentUrl = await this.storePaymentService.getFatZebraPaymentUrl(orderId);
-    return { success: true, payment_url: paymentUrl };
+    // Redirect browser directly to FatZebra payment page
+    res.redirect(paymentUrl);
   }
 
   // FatZebra callback endpoint - PUBLIC (no JWT required)
