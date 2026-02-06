@@ -76,6 +76,11 @@ export class FatZebraService {
     return qs.length ? `${base}?${qs.join('&')}` : base;
   }
 
+  /**
+   * Verify FatZebra PayNow callback signature
+   * PayNow uses GET callbacks with query parameters and a 'v' verification hash
+   * The hash is HMAC-MD5 of: r:successful:amount:currency:id:token
+   */
   verifyCallback(query: {
     r?: string;
     successful?: string;
@@ -85,9 +90,14 @@ export class FatZebraService {
     token?: string;
     v?: string;
   }): boolean {
+    // If no verification hash provided, reject
     if (!query || !query.v) {
+      this.logger.warn('FatZebra callback missing verification hash (v parameter)');
       return false;
     }
+
+    // Build verification string from query parameters
+    // Order matters: r:successful:amount:currency:id:token
     const parts = [
       query.r || '',
       query.successful || '',
@@ -96,10 +106,26 @@ export class FatZebraService {
       query.id || '',
       query.token || '',
     ].join(':');
-    this.logger.log(`FatZebra verify parts: ${parts}`);
+
+    this.logger.log(`FatZebra verify string: ${parts}`);
+
+    // Generate expected hash using HMAC-MD5 with shared secret
     const expected = this.hmacMd5(parts);
-    const ok = expected === query.v;
-    this.logger.log(`FatZebra verify expected=${expected} actual=${query.v} ok=${ok}`);
-    return ok; 
+    const actual = query.v;
+    const ok = expected === actual;
+
+    this.logger.log(`FatZebra signature verification: ${ok ? '✅ VALID' : '❌ INVALID'}`);
+    this.logger.log(`Expected: ${expected}`);
+    this.logger.log(`Actual:   ${actual}`);
+
+    if (!ok) {
+      this.logger.error('FatZebra signature verification FAILED!');
+      this.logger.error('This could mean:');
+      this.logger.error('1. FATZEBRA_SHARED_SECRET in .env does not match FatZebra dashboard');
+      this.logger.error('2. Query parameters were modified in transit');
+      this.logger.error('3. Using wrong environment (sandbox vs live)');
+    }
+
+    return ok;
   }
 }

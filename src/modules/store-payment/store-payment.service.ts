@@ -385,7 +385,19 @@ export class StorePaymentService {
    * Handle FatZebra PayNow callback
    */
   async handleFatZebraCallback(query: any): Promise<string> {
-    this.logger.log(`FatZebra callback received query: ${JSON.stringify(query)}`);
+    this.logger.log('='.repeat(60));
+    this.logger.log('🔔 FatZebra Callback Received');
+    this.logger.log('='.repeat(60));
+    this.logger.log(`Full query object: ${JSON.stringify(query, null, 2)}`);
+    this.logger.log(`Reference (r): ${query?.r}`);
+    this.logger.log(`Successful: ${query?.successful}`);
+    this.logger.log(`Amount: ${query?.amount}`);
+    this.logger.log(`Currency: ${query?.currency}`);
+    this.logger.log(`Transaction ID (id): ${query?.id}`);
+    this.logger.log(`Token: ${query?.token}`);
+    this.logger.log(`Verification Hash (v): ${query?.v}`);
+    this.logger.log('='.repeat(60));
+
     const orderRef = query?.r;
     this.logger.log(`FatZebra callback r param: ${orderRef}`);
 
