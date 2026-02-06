@@ -9,9 +9,10 @@ import {
   Res,
   UseGuards,
   ParseIntPipe,
+  Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { StorePaymentService } from './store-payment.service';
 import { PinPaymentsService } from '../../common/services/pinpayments.service';
 import { FatZebraService } from '../../common/services/fatzebra.service';
@@ -20,11 +21,13 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 @ApiTags('Store Payment')
 @Controller('store/payment')
 export class StorePaymentController {
+  private readonly logger = new Logger(StorePaymentController.name);
+
   constructor(
     private readonly storePaymentService: StorePaymentService,
     private readonly pinPaymentsService: PinPaymentsService,
     private readonly fatZebraService: FatZebraService,
-  ) {}
+  ) { }
 
   @Get(':orderId/pin-key')
   @ApiOperation({ summary: 'Get Pin Payments publishable key for frontend' })
@@ -98,6 +101,7 @@ export class StorePaymentController {
   @ApiOperation({ summary: 'Start FatZebra PayNow hosted payment' })
   @ApiParam({ name: 'orderId', type: Number })
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   async startFatZebraPayment(
     @Param('orderId', ParseIntPipe) orderId: number,
   ) {

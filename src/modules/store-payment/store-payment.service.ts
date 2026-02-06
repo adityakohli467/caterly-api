@@ -22,7 +22,7 @@ export class StorePaymentService {
     private configService: ConfigService,
     private pinPaymentsService: PinPaymentsService,
     private fatZebraService: FatZebraService,
-  ) {}
+  ) { }
 
   /**
    * Process SecurePay payment (generate payment form)
@@ -69,9 +69,9 @@ export class StorePaymentService {
 
       // SECURITY: Check if order is already paid (prevent duplicate payment attempts)
       if (order.payment_status === 'paid' || order.payment_date) {
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3000';
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3000';
         const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         return this.generateRedirectHtml(alreadyPaidUrl, 'Order Already Paid');
       }
@@ -79,7 +79,7 @@ export class StorePaymentService {
       // Get merchant credentials (from user table first, then environment variables)
       let merchantId = order.merchant_id || this.configService.get<string>('SECUREPAY_MERCHANT_ID') || '';
       let merchantPass = order.merchant_pass || this.configService.get<string>('SECUREPAY_MERCHANT_PASS') || '';
-      
+
       // If still not found, try to get from any user (fallback to first admin user)
       if (!merchantId || !merchantPass) {
         this.logger.warn('Merchant credentials not found in order user, checking for admin user with credentials...');
@@ -112,18 +112,18 @@ export class StorePaymentService {
         if (order.coupon_type === 'F') {
           discount = parseFloat(order.coupon_discount || 0);
         } else {
-          const subtotal = parseFloat(order.order_total || 0) + 
-                          parseFloat(order.late_fee || 0) + 
-                          parseFloat(order.delivery_fee || 0);
+          const subtotal = parseFloat(order.order_total || 0) +
+            parseFloat(order.late_fee || 0) +
+            parseFloat(order.delivery_fee || 0);
           discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
         }
       }
 
-      const total = parseFloat(order.order_total || 0) + 
-                    parseFloat(order.late_fee || 0) + 
-                    parseFloat(order.delivery_fee || 0) - 
-                    discount;
-      
+      const total = parseFloat(order.order_total || 0) +
+        parseFloat(order.late_fee || 0) +
+        parseFloat(order.delivery_fee || 0) -
+        discount;
+
       // Convert to cents (as required by SecurePay)
       const totalCents = Math.round(total * 100);
 
@@ -136,11 +136,11 @@ export class StorePaymentService {
       const minutes = String(now.getUTCMinutes()).padStart(2, '0');
       const seconds = String(now.getUTCSeconds()).padStart(2, '0');
       const timestamp = `${year}${month}${day}${hours}${minutes}${seconds}`;
-      
+
       // Generate fingerprint hash (SHA1) - EXACTLY matching old PHP format
       const fingerprintString = `${merchantId}|${merchantPass}|0|${orderId}|${totalCents}|${timestamp}`;
       const fingerprint = crypto.createHash('sha1').update(fingerprintString).digest('hex');
-      
+
       // Build return URLs
       const baseUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
       const returnUrl = `${baseUrl}/store/payment/callback`;
@@ -148,7 +148,7 @@ export class StorePaymentService {
       const callbackUrl = `${baseUrl}/store/payment/callback`;
 
       // Determine SecurePay endpoint (use test in development)
-      const securePayUrl = this.configService.get<string>('NODE_ENV') === 'production' 
+      const securePayUrl = this.configService.get<string>('NODE_ENV') === 'production'
         ? 'https://payment.securepay.com.au/secureframe/invoice'
         : this.configService.get<string>('SECUREPAY_TEST_URL') || 'https://test.payment.securepay.com.au/secureframe/invoice';
 
@@ -204,9 +204,9 @@ export class StorePaymentService {
     const order = orderResult[0];
 
     if (order.payment_status === 'paid' || order.payment_date) {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                        this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                        'http://localhost:3000';
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+        this.configService.get<string>('ADMIN_PORTAL_URL') ||
+        'http://localhost:3000';
       const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
       return alreadyPaidUrl;
     }
@@ -216,16 +216,16 @@ export class StorePaymentService {
       if (order.coupon_type === 'F') {
         discount = parseFloat(order.coupon_discount || 0);
       } else {
-        const subtotal = parseFloat(order.order_total || 0) + 
-                        parseFloat(order.late_fee || 0) + 
-                        parseFloat(order.delivery_fee || 0);
+        const subtotal = parseFloat(order.order_total || 0) +
+          parseFloat(order.late_fee || 0) +
+          parseFloat(order.delivery_fee || 0);
         discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
       }
     }
-    const total = parseFloat(order.order_total || 0) + 
-                  parseFloat(order.late_fee || 0) + 
-                  parseFloat(order.delivery_fee || 0) - 
-                  discount;
+    const total = parseFloat(order.order_total || 0) +
+      parseFloat(order.late_fee || 0) +
+      parseFloat(order.delivery_fee || 0) -
+      discount;
     const totalCents = Math.round(total * 100);
 
     const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
@@ -301,9 +301,9 @@ export class StorePaymentService {
       const order = orderResult[0];
 
       if (order.payment_status === 'paid' || order.payment_date) {
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3006';
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3006';
         const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         await queryRunner.commitTransaction();
         return this.generateRedirectHtml(alreadyPaidUrl, 'Order Already Paid');
@@ -314,16 +314,16 @@ export class StorePaymentService {
         if (order.coupon_type === 'F') {
           discount = parseFloat(order.coupon_discount || 0);
         } else {
-          const subtotal = parseFloat(order.order_total || 0) + 
-                          parseFloat(order.late_fee || 0) + 
-                          parseFloat(order.delivery_fee || 0);
+          const subtotal = parseFloat(order.order_total || 0) +
+            parseFloat(order.late_fee || 0) +
+            parseFloat(order.delivery_fee || 0);
           discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
         }
       }
-      const total = parseFloat(order.order_total || 0) + 
-                    parseFloat(order.late_fee || 0) + 
-                    parseFloat(order.delivery_fee || 0) - 
-                    discount;
+      const total = parseFloat(order.order_total || 0) +
+        parseFloat(order.late_fee || 0) +
+        parseFloat(order.delivery_fee || 0) -
+        discount;
       const totalCents = Math.round(total * 100);
 
       const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
@@ -362,8 +362,6 @@ export class StorePaymentService {
         email,
       });
 
-      this.logger.log(`FatZebra processFatZebraPayment created payUrl for order=${orderId} amountCents=${totalCents} reference=${uniqueRef} payUrl=${payUrl}`);
-
       await queryRunner.commitTransaction();
       return this.generateRedirectHtml(payUrl, 'Redirecting to Payment');
     } catch (error) {
@@ -383,9 +381,9 @@ export class StorePaymentService {
     this.logger.log(`FatZebra callback r param: ${orderRef}`);
 
     if (!orderRef) {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                        this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                        'http://localhost:3006';
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+        this.configService.get<string>('ADMIN_PORTAL_URL') ||
+        'http://localhost:3006';
       const redirectUrl = `${frontendUrl}/payment/cancel`;
       return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
     }
@@ -418,7 +416,7 @@ export class StorePaymentService {
       } else {
         this.logger.warn(`FatZebra callback failed to parse orderId from ref: ${orderRef}`);
       }
-      
+
       // DISABLED LEGACY PARSING to avoid "99" mismatch
       // Enable legacy parsing to support both simple integer references (e.g. "99")
       // AND composite references (e.g. "99-abcdef") if DB lookup fails
@@ -433,9 +431,9 @@ export class StorePaymentService {
     }
 
     if (isNaN(orderId)) {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                        this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                        'http://localhost:3000';
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+        this.configService.get<string>('ADMIN_PORTAL_URL') ||
+        'http://localhost:3000';
       const safeRef = encodeURIComponent(String(orderRef || 'missing'));
       const redirectUrl = `${frontendUrl}/payment/failed?ref=${safeRef}&reason=invalid_order_id`;
       return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
@@ -458,9 +456,9 @@ export class StorePaymentService {
       `;
       const orderResult = await queryRunner.query(orderQuery, [orderId]);
       if (orderResult.length === 0) {
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3006';
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3006';
         const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
         await queryRunner.commitTransaction();
         return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
@@ -468,9 +466,9 @@ export class StorePaymentService {
       const order = orderResult[0];
 
       if (order.order_status === 2 || order.payment_status === 'paid' || order.payment_date) {
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3000';
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3000';
         const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         await queryRunner.commitTransaction();
         return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
@@ -506,13 +504,13 @@ export class StorePaymentService {
           `SELECT order_status, payment_status, payment_date FROM orders WHERE order_id = $1 FOR UPDATE`,
           [orderId]
         );
-        if (checkQuery[0]?.order_status === 2 || 
-            checkQuery[0]?.payment_status === 'paid' || 
-            checkQuery[0]?.payment_date) {
+        if (checkQuery[0]?.order_status === 2 ||
+          checkQuery[0]?.payment_status === 'paid' ||
+          checkQuery[0]?.payment_date) {
           await queryRunner.rollbackTransaction();
-          const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                            this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                            'http://localhost:3000';
+          const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+            this.configService.get<string>('ADMIN_PORTAL_URL') ||
+            'http://localhost:3000';
           const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
           return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
         }
@@ -534,9 +532,9 @@ export class StorePaymentService {
         await queryRunner.commitTransaction();
         await this.sendPaymentConfirmationEmail(orderId, order);
 
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3000';
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3000';
         const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         return this.generateRedirectHtml(redirectUrl, 'Payment Successful');
       } else {
@@ -554,9 +552,9 @@ export class StorePaymentService {
         }
 
         await queryRunner.commitTransaction();
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3006';
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3006';
         const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
         return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
       }
@@ -618,8 +616,8 @@ export class StorePaymentService {
       // SECURITY: Check if order is already paid (prevent duplicate payments)
       if (order.order_status === 2 || order.payment_status === 'paid' || order.payment_date) {
         this.logger.warn(`Payment callback received for already-paid order: ${orderId}`);
-        const redirectUrl = this.configService.get<string>('PAYMENT_SUCCESS_REDIRECT_URL') || 
-                          'https://caterly.com.au/externalRedirect.html';
+        const redirectUrl = this.configService.get<string>('PAYMENT_SUCCESS_REDIRECT_URL') ||
+          'https://caterly.com.au/externalRedirect.html';
         await queryRunner.commitTransaction();
         return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
       }
@@ -629,7 +627,7 @@ export class StorePaymentService {
         const expectedFingerprint = crypto.createHash('sha1')
           .update(`${order.merchant_id}|${order.merchant_pass}|0|${orderId}|${amount}|${fp_timestamp}`)
           .digest('hex');
-        
+
         if (fingerprint !== expectedFingerprint) {
           this.logger.error(`Fingerprint validation failed for order ${orderId}`);
           throw new BadRequestException('Security validation failed: Invalid payment signature');
@@ -643,18 +641,18 @@ export class StorePaymentService {
           if (order.coupon_type === 'F') {
             discount = parseFloat(order.coupon_discount || 0);
           } else {
-            const subtotal = parseFloat(order.order_total || 0) + 
-                            parseFloat(order.late_fee || 0) + 
-                            parseFloat(order.delivery_fee || 0);
+            const subtotal = parseFloat(order.order_total || 0) +
+              parseFloat(order.late_fee || 0) +
+              parseFloat(order.delivery_fee || 0);
             discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
           }
         }
-        const expectedTotal = parseFloat(order.order_total || 0) + 
-                             parseFloat(order.late_fee || 0) + 
-                             parseFloat(order.delivery_fee || 0) - 
-                             discount;
+        const expectedTotal = parseFloat(order.order_total || 0) +
+          parseFloat(order.late_fee || 0) +
+          parseFloat(order.delivery_fee || 0) -
+          discount;
         const expectedAmountCents = Math.round(expectedTotal * 100);
-        
+
         if (parseInt(amount as string) !== expectedAmountCents) {
           this.logger.error(`Amount mismatch for order ${orderId}`);
           throw new BadRequestException('Amount validation failed: Payment amount does not match order total');
@@ -671,14 +669,14 @@ export class StorePaymentService {
           `SELECT order_status, payment_status, payment_date FROM orders WHERE order_id = $1 FOR UPDATE`,
           [orderId]
         );
-        
-        if (checkQuery[0]?.order_status === 2 || 
-            checkQuery[0]?.payment_status === 'paid' || 
-            checkQuery[0]?.payment_date) {
+
+        if (checkQuery[0]?.order_status === 2 ||
+          checkQuery[0]?.payment_status === 'paid' ||
+          checkQuery[0]?.payment_date) {
           await queryRunner.rollbackTransaction();
           this.logger.warn(`Order ${orderId} was already paid (race condition detected)`);
-          const redirectUrl = this.configService.get<string>('PAYMENT_SUCCESS_REDIRECT_URL') || 
-                            'https://caterly.com.au/externalRedirect.html';
+          const redirectUrl = this.configService.get<string>('PAYMENT_SUCCESS_REDIRECT_URL') ||
+            'https://caterly.com.au/externalRedirect.html';
           return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
         }
 
@@ -699,8 +697,8 @@ export class StorePaymentService {
         // Send payment confirmation email
         await this.sendPaymentConfirmationEmail(orderId, order);
 
-        const redirectUrl = this.configService.get<string>('PAYMENT_SUCCESS_REDIRECT_URL') || 
-                          'https://caterly.com.au/externalRedirect.html';
+        const redirectUrl = this.configService.get<string>('PAYMENT_SUCCESS_REDIRECT_URL') ||
+          'https://caterly.com.au/externalRedirect.html';
         return this.generateRedirectHtml(redirectUrl, 'Payment Successful');
 
       } else {
@@ -868,9 +866,9 @@ export class StorePaymentService {
 
       // SECURITY: Check if order is already paid
       if (order.payment_status === 'paid' || order.payment_date) {
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3000';
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3000';
         const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         await queryRunner.commitTransaction();
         return this.generateRedirectHtml(alreadyPaidUrl, 'Order Already Paid');
@@ -882,26 +880,26 @@ export class StorePaymentService {
         if (order.coupon_type === 'F') {
           discount = parseFloat(order.coupon_discount || 0);
         } else {
-          const subtotal = parseFloat(order.order_total || 0) + 
-                          parseFloat(order.late_fee || 0) + 
-                          parseFloat(order.delivery_fee || 0);
+          const subtotal = parseFloat(order.order_total || 0) +
+            parseFloat(order.late_fee || 0) +
+            parseFloat(order.delivery_fee || 0);
           discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
         }
       }
 
-      const total = parseFloat(order.order_total || 0) + 
-                    parseFloat(order.late_fee || 0) + 
-                    parseFloat(order.delivery_fee || 0) - 
-                    discount;
-      
+      const total = parseFloat(order.order_total || 0) +
+        parseFloat(order.late_fee || 0) +
+        parseFloat(order.delivery_fee || 0) -
+        discount;
+
       // Convert to cents (Pin Payments uses cents)
       const totalCents = Math.round(total * 100);
 
       // Get customer email
       const customerEmail = order.customer_order_email || order.email || 'customer@example.com';
-      const customerName = order.customer_order_name || 
-            `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
-            'Customer';
+      const customerName = order.customer_order_name ||
+        `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
+        'Customer';
 
       // Create charge with Pin Payments
       const chargeResponse = await this.pinPaymentsService.createCharge({
@@ -919,15 +917,15 @@ export class StorePaymentService {
           `SELECT order_status, payment_status, payment_date FROM orders WHERE order_id = $1 FOR UPDATE`,
           [orderId]
         );
-        
-        if (checkQuery[0]?.order_status === 2 || 
-            checkQuery[0]?.payment_status === 'paid' || 
-            checkQuery[0]?.payment_date) {
+
+        if (checkQuery[0]?.order_status === 2 ||
+          checkQuery[0]?.payment_status === 'paid' ||
+          checkQuery[0]?.payment_date) {
           await queryRunner.rollbackTransaction();
           this.logger.warn(`Order ${orderId} was already paid (race condition detected)`);
-          const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                            this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                            'http://localhost:3000';
+          const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+            this.configService.get<string>('ADMIN_PORTAL_URL') ||
+            'http://localhost:3000';
           const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
           return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
         }
@@ -949,9 +947,9 @@ export class StorePaymentService {
         // Send payment confirmation email
         await this.sendPaymentConfirmationEmail(orderId, order);
 
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                          this.configService.get<string>('ADMIN_PORTAL_URL') || 
-                          'http://localhost:3000';
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3000';
         const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         return this.generateRedirectHtml(redirectUrl, 'Payment Successful');
 
@@ -959,22 +957,22 @@ export class StorePaymentService {
         // Payment failed
         await queryRunner.rollbackTransaction();
         this.logger.error("Pin Payments charge failed:", chargeResponse.response.error_message);
-        const errorMessage = chargeResponse.response.error_message || 
-                          "Payment failed. Please try again or contact support.";
+        const errorMessage = chargeResponse.response.error_message ||
+          "Payment failed. Please try again or contact support.";
         return this.generateErrorHtml(errorMessage);
       }
 
     } catch (error: any) {
       await queryRunner.rollbackTransaction();
       this.logger.error('Pin Payments processing error:', error);
-      
+
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      
-      const errorMessage = error.response?.data?.error_description || 
-                          error.message || 
-                          "An error occurred processing your payment. Please try again.";
+
+      const errorMessage = error.response?.data?.error_description ||
+        error.message ||
+        "An error occurred processing your payment. Please try again.";
       return this.generateErrorHtml(errorMessage);
     } finally {
       await queryRunner.release();
@@ -986,24 +984,24 @@ export class StorePaymentService {
    */
   private async sendPaymentConfirmationEmail(orderId: number, order: any): Promise<void> {
     try {
-      const customerName = order.customer_order_name || 
-            `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
-            'Customer';
+      const customerName = order.customer_order_name ||
+        `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
+        'Customer';
 
-          const orderTotal = parseFloat(order.order_total || 0);
+      const orderTotal = parseFloat(order.order_total || 0);
       const authToken = crypto.createHash('sha1')
         .update(`${customerName}|${customerName}|${orderId}|${orderTotal}`)
-            .digest('hex');
+        .digest('hex');
 
-          const toEmail = order.customer_order_email || order.email;
-          const managerEmail = order.accounts_email || null;
-          const emailList = managerEmail ? [toEmail, managerEmail].filter(Boolean) : [toEmail].filter(Boolean);
+      const toEmail = order.customer_order_email || order.email;
+      const managerEmail = order.accounts_email || null;
+      const emailList = managerEmail ? [toEmail, managerEmail].filter(Boolean) : [toEmail].filter(Boolean);
 
-          if (emailList.length > 0) {
+      if (emailList.length > 0) {
         const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
         const invoiceViewUrl = `${backendUrl}/admin/orders/${orderId}/invoice/view?auth=${authToken}&ofrom=backend`;
 
-            const emailBody = `
+        const emailBody = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -1041,13 +1039,13 @@ export class StorePaymentService {
 </html>
             `;
 
-            await this.emailService.sendEmail({
-              to: emailList,
-              subject: 'ZENN',
-              html: emailBody,
-            });
-        }
-      } catch (emailError) {
+        await this.emailService.sendEmail({
+          to: emailList,
+          subject: 'ZENN',
+          html: emailBody,
+        });
+      }
+    } catch (emailError) {
       this.logger.error("Failed to send payment confirmation email:", emailError);
     }
   }
