@@ -122,10 +122,11 @@ export class StorePaymentController {
     return { success: true, payment_url: paymentUrl };
   }
 
+  // FatZebra callback endpoint - PUBLIC (no JWT required)
+  // FatZebra redirects users here, so we can't require JWT auth
+  // Security is handled via FatZebra's signature verification
   @Get('fatzebra/callback')
-  @ApiOperation({ summary: 'Handle FatZebra PayNow callback' })
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Handle FatZebra PayNow callback (public endpoint)' })
   async handleFatZebraCallback(
     @Query() query: any,
   ) {
