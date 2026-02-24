@@ -8,13 +8,11 @@ import { InvoiceService } from './services/invoice.service';
 import { StripeService } from './services/stripe.service';
 import { PricingService } from './services/pricing.service';
 import { PinPaymentsService } from './services/pinpayments.service';
-import { FatZebraService } from './services/fatzebra.service';
 import { Order } from '../entities/Order';
 
 @Module({
   imports: [ConfigModule, TypeOrmModule.forFeature([Order])],
-  providers: [EmailService, NotificationService, S3Service, InvoiceService, StripeService, PricingService, PinPaymentsService, FatZebraService],
-  exports: [EmailService, NotificationService, S3Service, InvoiceService, StripeService, PricingService, PinPaymentsService, FatZebraService],
+  providers: [EmailService, NotificationService, S3Service, InvoiceService, StripeService, PricingService, PinPaymentsService],
+  exports: [EmailService, NotificationService, S3Service, InvoiceService, StripeService, PricingService, PinPaymentsService],
 })
-export class CommonModule {}
-
+export class CommonModule { }

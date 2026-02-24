@@ -14,7 +14,6 @@ import type { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { StorePaymentService } from './store-payment.service';
 import { PinPaymentsService } from '../../common/services/pinpayments.service';
-import { FatZebraService } from '../../common/services/fatzebra.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @ApiTags('Store Payment')
@@ -23,8 +22,7 @@ export class StorePaymentController {
   constructor(
     private readonly storePaymentService: StorePaymentService,
     private readonly pinPaymentsService: PinPaymentsService,
-    private readonly fatZebraService: FatZebraService,
-  ) {}
+  ) { }
 
   @Get(':orderId/pin-key')
   @ApiOperation({ summary: 'Get Pin Payments publishable key for frontend' })
@@ -94,40 +92,7 @@ export class StorePaymentController {
     res.redirect(paymentUrl);
   }
 
-  @Get(':orderId/fatzebra')
-  @ApiOperation({ summary: 'Start FatZebra PayNow hosted payment' })
-  @ApiParam({ name: 'orderId', type: Number })
-  @UseGuards(JwtAuthGuard)
-  async startFatZebraPayment(
-    @Param('orderId', ParseIntPipe) orderId: number,
-  ) {
-    const paymentUrl = await this.storePaymentService.getFatZebraPaymentUrl(orderId);
-    return { success: true, payment_url: paymentUrl };
-  }
 
-  // Browser-friendly redirect endpoint (no auth) — returns HTML which redirects the browser to Fat Zebra
-  @Get(':orderId/fatzebra/redirect')
-  @ApiOperation({ summary: 'Redirect to FatZebra PayNow hosted payment (browser-friendly)' })
-  @ApiParam({ name: 'orderId', type: Number })
-  async redirectToFatZebra(
-    @Param('orderId', ParseIntPipe) orderId: number,
-    @Res() res: Response,
-  ) {
-    const html = await this.storePaymentService.processFatZebraPayment(orderId);
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
-  }
-
-  @Get('fatzebra/callback')
-  @ApiOperation({ summary: 'Handle FatZebra PayNow callback' })
-  async handleFatZebraCallback(
-    @Query() query: any,
-    @Res() res: Response,
-  ) {
-    const html = await this.storePaymentService.handleFatZebraCallback(query);
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
-  }
   // Legacy SecurePay endpoints (deprecated - kept for backward compatibility)
   @Post('callback')
   @ApiOperation({ summary: 'Handle SecurePay payment callback (deprecated)' })
