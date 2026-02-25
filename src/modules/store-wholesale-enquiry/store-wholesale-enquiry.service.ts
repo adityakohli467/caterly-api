@@ -13,7 +13,7 @@ export class StoreWholesaleEnquiryService {
     private emailService: EmailService,
     private configService: ConfigService,
     private notificationsService: AdminNotificationsService,
-  ) {}
+  ) { }
 
   /**
    * Submit wholesale enquiry form
@@ -119,8 +119,8 @@ export class StoreWholesaleEnquiryService {
     const adminEmail =
       this.configService.get<string>('ADMIN_EMAIL') ||
       this.configService.get<string>('FROM_EMAIL') ||
-      'info@zenn.com.au';
-    const companyName = this.configService.get<string>('COMPANY_NAME') || 'St. Dreux Coffee';
+      'info@caterly.com.au';
+    const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
     const emailHtml = `
 <!DOCTYPE html>

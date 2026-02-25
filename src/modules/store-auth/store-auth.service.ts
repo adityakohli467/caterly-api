@@ -15,7 +15,7 @@ export class StoreAuthService {
     private configService: ConfigService,
     private emailService: EmailService,
     private notificationService: NotificationService,
-  ) {}
+  ) { }
 
   /**
    * Customer Login
@@ -160,7 +160,7 @@ export class StoreAuthService {
       ) VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `;
-    
+
     const userResult = await this.dataSource.query(userQuery, [
       email,
       `${firstname} ${lastname}`,
@@ -194,7 +194,7 @@ export class StoreAuthService {
         ) VALUES ($1, $2, $3, $4, $5)
         RETURNING company_id
       `;
-      
+
       const companyResult = await this.dataSource.query(companyQuery, [
         user.user_id,
         company_name,
@@ -202,7 +202,7 @@ export class StoreAuthService {
         1, // Active
         'storefront_registration',
       ]);
-      
+
       finalCompanyId = companyResult[0].company_id;
     }
 
@@ -370,7 +370,7 @@ export class StoreAuthService {
       token,
       user: userWithoutPassword,
       customer,
-      message: company_name 
+      message: company_name
         ? 'Registration successful. Your account is pending approval.'
         : 'Registration successful',
       expiresIn: 14400, // 4 hours in seconds
@@ -463,7 +463,7 @@ export class StoreAuthService {
     // Send reset email
     const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
-    
+
     const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -496,7 +496,7 @@ export class StoreAuthService {
       <p class="warning">This link will expire in 1 hour. If you didn't request this, please ignore this email.</p>
     </div>
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} ${this.configService.get<string>('COMPANY_NAME') || 'St. Dreux Coffee'}. All rights reserved.</p>
+      <p>&copy; ${new Date().getFullYear()} ${this.configService.get<string>('COMPANY_NAME') || 'Caterly'}. All rights reserved.</p>
     </div>
   </div>
 </body>

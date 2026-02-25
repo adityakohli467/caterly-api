@@ -5,7 +5,7 @@ import { DataSource } from 'typeorm';
 export class AdminSettingsService {
   private readonly logger = new Logger(AdminSettingsService.name);
 
-  constructor(private dataSource: DataSource) {}
+  constructor(private dataSource: DataSource) { }
 
   private async ensureSettingsTableExists(): Promise<void> {
     try {
@@ -42,8 +42,8 @@ export class AdminSettingsService {
         // Insert default settings
         await this.dataSource.query(`
           INSERT INTO settings (setting_key, setting_value, setting_category, setting_type, description) VALUES
-          ('company_name', 'ZENN', 'general', 'string', 'Company name'),
-          ('company_email', 'admin@stdreuxcoffee.com', 'general', 'string', 'Company email address'),
+          ('company_name', 'Caterly', 'general', 'string', 'Company name'),
+          ('company_email', 'admin@caterly.com.au', 'general', 'string', 'Company email address'),
           ('company_phone', '+61 3 1234 5678', 'general', 'string', 'Company phone number'),
           ('company_abn', 'ABN: 12 345 678 901', 'general', 'string', 'Company ABN'),
           ('currency', 'AUD', 'general', 'string', 'Default currency'),
@@ -55,7 +55,7 @@ export class AdminSettingsService {
           ('session_timeout', '30', 'security', 'number', 'Session timeout in minutes'),
           ('password_expiry', '90', 'security', 'number', 'Password expiry in days'),
           ('theme', 'light', 'appearance', 'string', 'Application theme'),
-          ('primary_color', '#055160', 'appearance', 'string', 'Primary color'),
+          ('primary_color', '#E03A3E', 'appearance', 'string', 'Primary color'),
           ('language', 'en', 'appearance', 'string', 'Application language'),
           ('maintenance_mode', 'false', 'system', 'boolean', 'Maintenance mode status')
           ON CONFLICT (setting_key) DO NOTHING;

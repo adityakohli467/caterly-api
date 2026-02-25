@@ -11,7 +11,7 @@ export class StoreNewsletterService {
     private dataSource: DataSource,
     private emailService: EmailService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   /**
    * Subscribe to newsletter
@@ -118,7 +118,7 @@ export class StoreNewsletterService {
    */
   private async sendWelcomeEmail(email: string): Promise<void> {
     try {
-      const companyName = this.configService.get<string>('COMPANY_NAME') || 'St. Dreux Coffee';
+      const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
       const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3006';
 
       const emailHtml = `
@@ -184,8 +184,8 @@ export class StoreNewsletterService {
       const adminEmail =
         this.configService.get<string>('ADMIN_EMAIL') ||
         this.configService.get<string>('FROM_EMAIL') ||
-        'info@stdreux.com.au';
-      const companyName = this.configService.get<string>('COMPANY_NAME') || 'St. Dreux Coffee';
+        'info@caterly.com.au';
+      const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
       const emailHtml = `
 <!DOCTYPE html>

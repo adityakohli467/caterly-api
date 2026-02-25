@@ -9,7 +9,7 @@ export class AdminBlogsService {
   constructor(
     private dataSource: DataSource,
     private s3Service: S3Service,
-  ) {}
+  ) { }
 
   /**
    * Generate URL-friendly slug from title
@@ -261,7 +261,7 @@ export class AdminBlogsService {
     let slug = data.slug;
     if (data.title && !slug) {
       slug = this.generateSlug(data.title);
-      
+
       // Check if new slug conflicts with existing blogs
       const conflictCheck = await this.dataSource.query(
         'SELECT blog_id FROM blogs WHERE slug = $1 AND blog_id != $2',
@@ -378,7 +378,7 @@ export class AdminBlogsService {
     if (blog.featured_image_url) {
       try {
         // Extract key from URL or use full URL as key
-        const key = blog.featured_image_url.includes('amazonaws.com/') 
+        const key = blog.featured_image_url.includes('amazonaws.com/')
           ? blog.featured_image_url.split('amazonaws.com/')[1]
           : blog.featured_image_url;
         await this.s3Service.deleteFromS3(key);
@@ -403,8 +403,8 @@ export class AdminBlogsService {
       // Clean filename to remove any path separators
       const cleanFileName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
       const fileName = `blogs/${Date.now()}-${cleanFileName}`;
-      const result = await this.s3Service.uploadToS3(file.buffer, 'zenn_assets', fileName, file.mimetype);
-      
+      const result = await this.s3Service.uploadToS3(file.buffer, 'caterly_assets', fileName, file.mimetype);
+
       // Log the upload result for debugging
       this.logger.log(`Blog image uploaded successfully: ${result.url}`);
       this.logger.log(`Blog image details:`, {
@@ -413,13 +413,13 @@ export class AdminBlogsService {
         bucket: result.bucket,
         fileName: fileName,
       });
-      
+
       // Ensure URL is properly formatted
       if (!result.url || !result.url.startsWith('http')) {
         this.logger.error(`Invalid image URL returned: ${result.url}`);
         throw new BadRequestException('Invalid image URL returned from upload');
       }
-      
+
       return result.url;
     } catch (error) {
       this.logger.error('Failed to upload blog image:', error);

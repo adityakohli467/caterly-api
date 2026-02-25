@@ -414,7 +414,7 @@ export class StorePaymentService {
       } else {
         // Payment failed
         this.logger.error("Payment failed:", { rescode, refid, summary_code, response_text });
-        const errorMessage = "The order has been cancelled successfully. To pay the invoice, please click on the link sent in the email. Thank You, ZENN team";
+        const errorMessage = "The order has been cancelled successfully. To pay the invoice, please click on the link sent in the email. Thank You, Caterly team";
         await queryRunner.commitTransaction();
         return this.generateErrorHtml(errorMessage);
       }
@@ -1044,16 +1044,16 @@ export class StorePaymentService {
     <p style="margin: 0; font-size: 18px; line-height: 21px;">&#160;</p>
     <div style="margin-top: 20px;">
       <p style="margin: 0; font-size: 18px; line-height: 31px;">
-        <strong>The Invoice for your order at ZENN (Order #${orderId}) can be viewed at</strong>
+        <strong>The Invoice for your order at Caterly (Order #${orderId}) can be viewed at</strong>
       </p>
       <br/><br/>
       <a href="${invoiceViewUrl}">
-        <button style="background-color:#46449B;border:solid 1px #46449B;cursor:pointer;border-radius:0.25rem;font-weight:600;font-size:0.8125rem;line-height:normal;padding:0.5rem 0.9rem;color:white">
+        <button style="background-color:#E03A3E;border:solid 1px #E03A3E;cursor:pointer;border-radius:0.25rem;font-weight:600;font-size:0.8125rem;line-height:normal;padding:0.5rem 0.9rem;color:white">
           View Invoice
         </button>
       </a>
       <br/>
-      <p>Please call us on ZENN (1300 827 286) for any queries.</p>
+      <p>Please call us on Caterly (1300 827 286) for any queries.</p>
     </div>
     <div style="margin-top: 20px;">
       <p style="font-size:18px;line-height:14px;"><strong>Note:</strong> Payment must be made 7 days from the delivery date. Late payment fees will incur after 21 days.</p>
@@ -1061,7 +1061,7 @@ export class StorePaymentService {
       <p style="margin: 0; font-size: 18px; line-height: 31px;">
         Thank you and have a great day!<br/><br/>
         Kind Regards,<br/>
-        ZENN Team
+        Caterly Team
       </p>
     </div>
   </div>
@@ -1071,7 +1071,7 @@ export class StorePaymentService {
 
         await this.emailService.sendEmail({
           to: emailList,
-          subject: 'ZENN',
+          subject: 'Caterly',
           html: emailBody,
         });
       }
