@@ -62,7 +62,7 @@ export class InvoiceService {
     private dataSource: DataSource,
     private s3Service: S3Service,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   /**
    * Generate PDF invoice for an order
@@ -246,14 +246,14 @@ export class InvoiceService {
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);
     // Check payment status: order_status 2 means Paid, OR payment_status is succeeded/paid/completed, OR there's a successful payment in payment_history
-    const hasSuccessfulPayment = amountPaid > 0 || 
-                                 order.order_status === 2 || 
-                                 order.payment_status === 'paid' || 
-                                 order.payment_status === 'succeeded' || 
-                                 order.payment_status === 'completed';
+    const hasSuccessfulPayment = amountPaid > 0 ||
+      order.order_status === 2 ||
+      order.payment_status === 'paid' ||
+      order.payment_status === 'succeeded' ||
+      order.payment_status === 'completed';
     const isPaid = hasSuccessfulPayment;
     const balance = isPaid ? 0 : Math.max(0, total - amountPaid);
-    
+
     // Determine payment status string
     let paymentStatusStr = 'pending';
     if (hasSuccessfulPayment) {
@@ -280,8 +280,8 @@ export class InvoiceService {
     }
 
     // Determine if this is a quote (payment_status = 'quote' or standing_order = 0 and order_status = 0)
-    const isQuote = order.payment_status === 'quote' || 
-                    (order.order_status === 0 && order.standing_order === 0);
+    const isQuote = order.payment_status === 'quote' ||
+      (order.order_status === 0 && order.standing_order === 0);
 
     // Parse delivery_contact to extract name and number
     let deliveryContactName: string | undefined = undefined;
@@ -356,8 +356,8 @@ export class InvoiceService {
       });
 
       return {
-        companyName: settings.company_name || this.configService.get<string>('COMPANY_NAME') || 'ZENN',
-        companyEmail: settings.company_email || this.configService.get<string>('COMPANY_EMAIL') || 'info@zenn.com.au',
+        companyName: settings.company_name || this.configService.get<string>('COMPANY_NAME') || 'Caterly',
+        companyEmail: settings.company_email || this.configService.get<string>('COMPANY_EMAIL') || 'info@caterly.com.au',
         companyPhone: settings.company_phone || this.configService.get<string>('COMPANY_PHONE') || '+61 3 1234 5678',
         companyAbn: settings.company_abn || this.configService.get<string>('COMPANY_ABN') || 'ABN: 12 345 678 901',
         companyAddress: settings.company_address || this.configService.get<string>('COMPANY_ADDRESS') || '123 Business Street\nMelbourne, VIC 3000',
@@ -365,8 +365,8 @@ export class InvoiceService {
     } catch (error) {
       this.logger.warn('Could not fetch company settings from database, using defaults:', error);
       return {
-        companyName: this.configService.get<string>('COMPANY_NAME') || 'ZENN',
-        companyEmail: this.configService.get<string>('COMPANY_EMAIL') || 'info@zenn.com.au',
+        companyName: this.configService.get<string>('COMPANY_NAME') || 'Caterly',
+        companyEmail: this.configService.get<string>('COMPANY_EMAIL') || 'info@caterly.com.au',
         companyPhone: this.configService.get<string>('COMPANY_PHONE') || '+61 3 1234 5678',
         companyAbn: this.configService.get<string>('COMPANY_ABN') || 'ABN: 12 345 678 901',
         companyAddress: this.configService.get<string>('COMPANY_ADDRESS') || '123 Business Street\nMelbourne, VIC 3000',
@@ -391,9 +391,9 @@ export class InvoiceService {
         // Force ZENN branding - completely ignore database settings
         // Fetch company settings for address and contact info
         const companySettings = await this.getCompanySettings();
-        const companyName = 'ZENN'; // Always use ZENN for branding
+        const companyName = 'Caterly'; // Always use Caterly for branding
         this.logger.log(`Generating ${data.order_status === 0 ? 'Quote' : 'Invoice'} #${data.order_id} for company: ${companyName}`);
-        
+
         const doc = new PDFDocument({
           margin: 40,
           size: 'A4',
@@ -412,8 +412,8 @@ export class InvoiceService {
         });
         doc.on('error', reject);
 
-        // Colors - ZENN theme (teal)
-        const primaryColor = '#055160'; // ZENN teal (rgba(5, 81, 96, 1))
+        // Colors - Caterly theme (red)
+        const primaryColor = '#E03A3E'; // Caterly red
         const darkGray = '#333333';
         const lightGray = '#666666';
         const borderGray = '#e0e0e0';
@@ -424,18 +424,18 @@ export class InvoiceService {
         const pageWidth = doc.page.width;
         const pageMargin = 40;
         const pageHeight = doc.page.height;
-        
+
         // Company Logo/Text - Centered at top (matching caterly format)
         // For kj4, use "ZENN" text branding instead of logo image
         let logoHeight = 0;
         const logoStartY = headerY; // Start at header position
-        const zennText = 'ZENN'; // Hardcode ZENN text for kj4 branding
+        const brandingText = 'Caterly'; // Hardcode Caterly text for branding
         doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
-        const logoTextWidth = doc.widthOfString(zennText);
+        const logoTextWidth = doc.widthOfString(brandingText);
         const logoTextX = (pageWidth - logoTextWidth) / 2; // Center horizontally
-        doc.text(zennText, logoTextX, logoStartY);
+        doc.text(brandingText, logoTextX, logoStartY);
         logoHeight = 35 + 5; // Add spacing
-        
+
         // Calculate total header height (company name + logo/text)
         const totalHeaderHeight = logoStartY + logoHeight - headerY;
 
@@ -449,10 +449,10 @@ export class InvoiceService {
         const addressStartY = headerY + 1; // Start at same level as company name/logo
         const addressWidth = 170; // Width for right-aligned text
         const addressStartX = pageWidth - pageMargin - addressWidth; // Right-aligned
-        
+
         const companyAddressLines = companyAddress.split('\n');
         let addressY = addressStartY;
-        
+
         // Address lines - right aligned (tight spacing) - matching caterly format
         companyAddressLines.forEach((line: string) => {
           if (line.trim()) {
@@ -460,10 +460,10 @@ export class InvoiceService {
             addressY += 7; // Very tight spacing
           }
         });
-        
+
         // Add spacing before contact information
         addressY += 1;
-        
+
         // Contact information - right aligned (tight) - matching caterly format
         doc.text(`Phone: ${companyPhone}`, addressStartX, addressY, { align: 'right', width: addressWidth });
         addressY += 7;
@@ -477,7 +477,7 @@ export class InvoiceService {
         const documentTitle = data.is_quote ? 'QUOTE' : 'INVOICE';
         const documentNumberLabel = data.is_quote ? 'Quote Number:' : 'Invoice Number:';
         const documentDateLabel = data.is_quote ? 'Quote Date:' : 'Invoice Date:';
-        
+
         const titleY = Math.max(headerY + totalHeaderHeight + 8, addressY + 5);
         doc.rect(40, titleY, 520, 25).fillColor(primaryColor).fill().fillColor('#ffffff');
 
@@ -514,7 +514,7 @@ export class InvoiceService {
             timeZone: 'Australia/Sydney',
           });
           doc.font('Helvetica').text(auDeliveryDateStr, 130, detailsY + 18);
-          
+
           // Add delivery time if available
           if (data.delivery_time) {
             doc.font('Helvetica-Bold').text('Delivery Time:', 40, detailsY + 27);
@@ -626,9 +626,9 @@ export class InvoiceService {
 
           doc.fontSize(7).font('Helvetica');
           doc.text(item.product_name, 50, tableY + 1, { width: 300 });
-          
+
           let extraHeight = 0;
-          
+
           // Show product comment if available
           if (item.comment) {
             doc.fontSize(6).fillColor(lightGray);
@@ -637,7 +637,7 @@ export class InvoiceService {
             doc.fontSize(7);
             extraHeight += 7;
           }
-          
+
           // Show options if available
           if (item.options && item.options.length > 0) {
             item.options.forEach((opt: any) => {
@@ -648,7 +648,7 @@ export class InvoiceService {
               extraHeight += 6;
             });
           }
-          
+
           doc.text(item.quantity.toString(), 360, tableY + 1);
           doc.text(`$${item.price.toFixed(2)}`, 410, tableY + 1);
           doc.font('Helvetica-Bold');
@@ -726,7 +726,7 @@ export class InvoiceService {
         // Balance
         doc.moveTo(totalsX, currentY).lineTo(totalsX + totalsWidth, currentY).strokeColor(borderGray).lineWidth(0.5).stroke();
         currentY += 4;
-        
+
         doc.fontSize(9).font('Helvetica-Bold');
         if (data.balance === 0) {
           doc.fillColor('#28a745'); // Green for paid
@@ -763,16 +763,16 @@ export class InvoiceService {
 
         if (footerY < pageHeight - 55) {
           let footerTextY = footerY + 5;
-          
+
           // Location Information
           if (data.location_name || data.location_address || data.location_phone) {
             doc.fontSize(6).font('Helvetica-Bold').fillColor(darkGray);
             doc.text('Location Information:', 40, footerTextY, { width: 520, align: 'left' });
             footerTextY += 7;
-            
+
             doc.font('Helvetica').fontSize(6).fillColor(lightGray);
             const locationInfo: string[] = [];
-            
+
             if (data.location_name) {
               locationInfo.push(data.location_name);
             }
@@ -782,7 +782,7 @@ export class InvoiceService {
             if (data.location_phone) {
               locationInfo.push(`Phone: ${data.location_phone}`);
             }
-            
+
             if (locationInfo.length > 0) {
               doc.text(locationInfo.join(' | '), 40, footerTextY, {
                 width: 520,
@@ -791,7 +791,7 @@ export class InvoiceService {
               footerTextY += 8;
             }
           }
-          
+
           // Thank you message
           doc.fontSize(6).font('Helvetica').fillColor(lightGray);
           doc.text(`Thank you for your business! For inquiries: ${companyEmail} or ${companyPhone}`, 40, footerTextY, {

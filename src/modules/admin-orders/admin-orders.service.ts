@@ -18,7 +18,7 @@ export class AdminOrdersService {
     private emailService: EmailService,
     private invoiceService: InvoiceService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   async findAll(query: any): Promise<any> {
     const {
@@ -88,13 +88,13 @@ export class AdminOrdersService {
     `;
 
     if (order_type) {
-        const now = new Date();
-        if (order_type === 'past') {
-          sqlQuery += ` AND o.standing_order = 0 AND o.delivery_date_time < $${paramIndex++}`;
-          params.push(now.toISOString());
-        } else if (order_type === 'future') {
-          // Include both regular future orders and subscription-generated future orders
-          sqlQuery += ` AND (
+      const now = new Date();
+      if (order_type === 'past') {
+        sqlQuery += ` AND o.standing_order = 0 AND o.delivery_date_time < $${paramIndex++}`;
+        params.push(now.toISOString());
+      } else if (order_type === 'future') {
+        // Include both regular future orders and subscription-generated future orders
+        sqlQuery += ` AND (
             (o.standing_order = 0 AND (o.delivery_date_time >= $${paramIndex} OR o.delivery_date_time IS NULL))
             OR o.order_id IN (
               SELECT generated_order_id FROM future_orders 
@@ -105,15 +105,15 @@ export class AdminOrdersService {
               WHERE status = 'pending' AND scheduled_delivery_date >= $${paramIndex}
             )
           )`;
-          params.push(now.toISOString());
-          paramIndex++;
-        } else if (order_type === 'reminder') {
-          sqlQuery += ` AND o.standing_order = 1`;
-        } else if (order_type === 'late') {
-          // Late orders: past delivery date, not standing order, not cancelled, not completed
-          sqlQuery += ` AND o.standing_order = 0 AND o.delivery_date_time < $${paramIndex++} AND o.delivery_date_time IS NOT NULL AND o.order_status NOT IN (0, 4, 5)`;
-          params.push(now.toISOString());
-        }
+        params.push(now.toISOString());
+        paramIndex++;
+      } else if (order_type === 'reminder') {
+        sqlQuery += ` AND o.standing_order = 1`;
+      } else if (order_type === 'late') {
+        // Late orders: past delivery date, not standing order, not cancelled, not completed
+        sqlQuery += ` AND o.standing_order = 0 AND o.delivery_date_time < $${paramIndex++} AND o.delivery_date_time IS NOT NULL AND o.order_status NOT IN (0, 4, 5)`;
+        params.push(now.toISOString());
+      }
     }
 
     if (status !== undefined) {
@@ -427,7 +427,7 @@ export class AdminOrdersService {
     `;
     const paymentStatusResult = await this.dataSource.query(paymentStatusQuery, [id]);
     const hasSuccessfulPayment = paymentStatusResult.length > 0;
-    
+
     // Determine payment status
     let paymentStatus = 'Not Paid';
     if (hasSuccessfulPayment || order.order_status === 2) {
@@ -436,7 +436,7 @@ export class AdminOrdersService {
       paymentStatus = 'Completed';
     }
 
-      const { order_products: _, ...orderWithoutProducts } = order;
+    const { order_products: _, ...orderWithoutProducts } = order;
 
     return {
       order: {
@@ -507,7 +507,7 @@ export class AdminOrdersService {
         location_id,
         delivery_date, // New: separate date field
         delivery_date_time, // Optional - for backward compatibility
-        delivery_time, // New: separate time field for St Dreux
+        delivery_time, // New: separate time field for Caterly
         delivery_fee = 0,
         order_comments,
         coupon_code,
@@ -560,16 +560,16 @@ export class AdminOrdersService {
       }
 
       const totalDiscount = couponDiscount;
-    const afterDiscount = subtotal - couponDiscount;
-    // GST is inclusive: calculate as 11% but display as 10%
-    const deliveryFeeAmount = parseFloat(delivery_fee || 0);
-    const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100; // Total is inclusive of GST
-    const gst = Math.round((orderTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
+      const afterDiscount = subtotal - couponDiscount;
+      // GST is inclusive: calculate as 11% but display as 10%
+      const deliveryFeeAmount = parseFloat(delivery_fee || 0);
+      const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100; // Total is inclusive of GST
+      const gst = Math.round((orderTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
       let finalDeliveryDateTime: string | null = null;
-      
+
       if (delivery_date_time && typeof delivery_date_time === 'string' && delivery_date_time.trim()) {
         // Use provided delivery_date_time if available (could be ISO format or "YYYY-MM-DD HH:MM:SS")
         const trimmedDateTime = delivery_date_time.trim();
@@ -624,7 +624,7 @@ export class AdminOrdersService {
       const shipping_method = delivery_method === 'pickup' ? 2 : 1;
       // Set user_id from authenticated user, default to 1 if not provided
       const user_id = userId || 1;
-      
+
       const orderResult = await queryRunner.query(
         `INSERT INTO orders (
           customer_id, location_id, branch_id, shipping_method, delivery_date_time, delivery_fee, order_total,
@@ -664,17 +664,17 @@ export class AdminOrdersService {
         const productTotal = (product.price || 0) * (product.quantity || 0);
         const sortOrder = product.sort_order !== undefined ? product.sort_order : index + 1; // Use provided sort_order or index + 1
         const excludeGst = product.exclude_gst !== undefined ? product.exclude_gst : 0; // Default to 0 (include GST)
-        
+
         const orderProductResult = await queryRunner.query(
           `INSERT INTO order_product (order_id, product_id, quantity, price, total, order_product_comment, sort_order, exclude_gst)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING order_product_id`,
           [
-            order.order_id, 
-            product.product_id, 
-            product.quantity || 1, 
-            product.price || 0, 
-            productTotal, 
+            order.order_id,
+            product.product_id,
+            product.quantity || 1,
+            product.price || 0,
+            productTotal,
             product.comment?.trim() || null,
             sortOrder,
             excludeGst
@@ -689,7 +689,7 @@ export class AdminOrdersService {
             const optionQuantity = addon.option_quantity || 1;
             const optionPrice = parseFloat(addon.option_price || 0);
             const optionTotal = optionQuantity * optionPrice;
-            
+
             await queryRunner.query(
               `INSERT INTO order_product_option (
                 order_id, order_product_id, product_option_id, option_name, option_value,
@@ -754,11 +754,11 @@ export class AdminOrdersService {
 
       const currentOrderStatus = currentOrderCheck[0].order_status;
       const currentPaymentStatus = currentOrderCheck[0].payment_status;
-      
+
       // Ensure payment_status is set to 'order' if it's NULL or 'quote' (to prevent disappearing from orders list)
       // Only update if it's NULL or 'quote', otherwise preserve existing value
-      const preservedPaymentStatus = currentPaymentStatus && currentPaymentStatus !== 'quote' 
-        ? currentPaymentStatus 
+      const preservedPaymentStatus = currentPaymentStatus && currentPaymentStatus !== 'quote'
+        ? currentPaymentStatus
         : 'order';
       const {
         customer_id,
@@ -817,16 +817,16 @@ export class AdminOrdersService {
       }
 
       const totalDiscount = couponDiscount;
-    const afterDiscount = subtotal - couponDiscount;
-    // GST is inclusive: calculate as 11% but display as 10%
-    const deliveryFeeAmount = parseFloat(delivery_fee || 0);
-    const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100; // Total is inclusive of GST
-    const gst = Math.round((orderTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
+      const afterDiscount = subtotal - couponDiscount;
+      // GST is inclusive: calculate as 11% but display as 10%
+      const deliveryFeeAmount = parseFloat(delivery_fee || 0);
+      const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100; // Total is inclusive of GST
+      const gst = Math.round((orderTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
       let finalDeliveryDateTime: string | null = null;
-      
+
       if (delivery_date_time && typeof delivery_date_time === 'string' && delivery_date_time.trim()) {
         // Use provided delivery_date_time if available
         finalDeliveryDateTime = delivery_date_time.trim();
@@ -860,13 +860,13 @@ export class AdminOrdersService {
         `SELECT standing_order FROM orders WHERE order_id = $1`,
         [id],
       );
-      const currentStandingOrder = currentStandingOrderCheck.length > 0 
-        ? currentStandingOrderCheck[0].standing_order 
+      const currentStandingOrder = currentStandingOrderCheck.length > 0
+        ? currentStandingOrderCheck[0].standing_order
         : 0;
-      
+
       // Use provided standing_order or preserve existing value
-      const finalStandingOrder = standing_order !== undefined && standing_order !== null 
-        ? standing_order 
+      const finalStandingOrder = standing_order !== undefined && standing_order !== null
+        ? standing_order
         : currentStandingOrder;
 
       const orderResult = await queryRunner.query(
@@ -934,7 +934,7 @@ export class AdminOrdersService {
         const productTotal = (product.price || 0) * (product.quantity || 0);
         const sortOrder = product.sort_order !== undefined ? product.sort_order : index + 1;
         const excludeGst = product.exclude_gst !== undefined ? product.exclude_gst : 0;
-        
+
         await queryRunner.query(
           `INSERT INTO order_product (order_id, product_id, quantity, price, total, order_product_comment, sort_order, exclude_gst)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -1001,7 +1001,7 @@ export class AdminOrdersService {
       const orderData = await this.findOne(id);
       const orderDetails = orderData.order;
       const recipientEmail = orderDetails.customer_order_email || orderDetails.email || orderDetails.customer_email;
-      
+
       if (recipientEmail && oldStatus !== orderStatus) {
         const statusMessages: Record<number, string> = {
           0: 'cancelled',
@@ -1014,8 +1014,8 @@ export class AdminOrdersService {
         };
 
         const statusMessage = statusMessages[orderStatus] || 'updated';
-        const customerName = orderDetails.customer_order_name || 
-          `${orderDetails.firstname || ''} ${orderDetails.lastname || ''}`.trim() || 
+        const customerName = orderDetails.customer_order_name ||
+          `${orderDetails.firstname || ''} ${orderDetails.lastname || ''}`.trim() ||
           'Customer';
         const companyName = this.configService.get<string>('COMPANY_NAME') || 'Sendrix';
 
@@ -1470,13 +1470,13 @@ export class AdminOrdersService {
     // Parse products JSON
     const orders = result.map((row: any) => {
       const products = typeof row.products === 'string' ? JSON.parse(row.products) : row.products || [];
-      
+
       // Extract suburb and postcode from shipping address
       const address = row.shipping_address_1 || '';
       const addressParts = address.split(',').map((p: string) => p.trim());
       let suburb = '';
       let postcode = '';
-      
+
       // Try to extract postcode (usually last part)
       const postcodeMatch = address.match(/\b\d{4}\b/);
       if (postcodeMatch) {
@@ -1551,11 +1551,11 @@ export class AdminOrdersService {
         WHERE order_id = $2
         RETURNING order_id, order_comments
       `;
-      
+
       const result = await queryRunner.query(updateQuery, [notes, id]);
-      
+
       await queryRunner.commitTransaction();
-      
+
       return {
         order_id: result[0].order_id,
         notes: result[0].order_comments,
@@ -1615,7 +1615,7 @@ export class AdminOrdersService {
     let total = parseFloat(order.order_total || 0);
     const deliveryFee = parseFloat(order.delivery_fee || 0);
     const lateFee = parseFloat(order.late_fee || 0);
-    
+
     // Calculate coupon discount
     let couponDiscount = 0;
     if (order.coupon_id) {
@@ -1637,10 +1637,10 @@ export class AdminOrdersService {
 
     // Determine recipient emails
     const customerEmail = order.email || order.customer_order_email;
-    const emailToList = emailPayment 
-      ? [emailPayment] 
-      : customerEmail 
-        ? [customerEmail] 
+    const emailToList = emailPayment
+      ? [emailPayment]
+      : customerEmail
+        ? [customerEmail]
         : [];
 
     if (emailToList.length === 0) {
@@ -1650,18 +1650,18 @@ export class AdminOrdersService {
     // Generate payment link (SecurePay route)
     const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
     const paymentLink = `${backendUrl}/store/payment/${id}/process`;
-    
+
     // Generate invoice download link
     const invoiceLink = `${backendUrl}/admin/orders/${id}/invoice/download`;
 
     // Customer name
     const customerName = order.customer_order_name || `${order.firstname || ''} ${order.lastname || ''}`.trim() || 'Customer';
-    const companyName = this.configService.get<string>('COMPANY_NAME') || 'ZENN';
+    const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
     const companyPhone = this.configService.get<string>('COMPANY_PHONE') || '1300 827 286';
 
     // Prepare email content (matching caterly format)
     const emailSubject = `Payment Request - Order #${id} - ${companyName}`;
-    
+
     const emailBody = `
 <!DOCTYPE html>
 <html>
@@ -1724,14 +1724,14 @@ export class AdminOrdersService {
     // Send email using centralized email service
     let emailSent = false;
     let emailError: string | null = null;
-    
+
     try {
       const emailResult = await this.emailService.sendEmail({
         to: emailToList,
         subject: emailSubject,
         html: emailBody,
       });
-      
+
       if (emailResult.success) {
         emailSent = true;
       } else {
@@ -1746,8 +1746,8 @@ export class AdminOrdersService {
 
     return {
       success: emailSent,
-      message: emailSent 
-        ? "Payment link email sent successfully" 
+      message: emailSent
+        ? "Payment link email sent successfully"
         : emailError
           ? `Failed to send email: ${emailError}`
           : "Payment link email prepared (email service not configured)",
@@ -1931,7 +1931,7 @@ export class AdminOrdersService {
 
     // Remove duplicates and ensure all IDs are valid numbers
     const uniqueOrderIds = [...new Set(orderIds.map(id => Number(id)).filter(id => !isNaN(id) && id > 0))];
-    
+
     if (uniqueOrderIds.length === 0) {
       throw new BadRequestException('No valid order IDs provided');
     }
@@ -1953,12 +1953,12 @@ export class AdminOrdersService {
           WHERE order_id IN (${placeholders})
           RETURNING order_id, late_fee
         `;
-        
+
         const result = await queryRunner.query(
           updateQuery,
           [...uniqueOrderIds, lateFee]
         );
-        
+
         this.logger.log(`Successfully updated ${result.length} order(s) with late fee`);
 
         await queryRunner.commitTransaction();

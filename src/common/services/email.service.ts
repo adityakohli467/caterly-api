@@ -24,7 +24,7 @@ export class EmailService {
   private mailerSend: MailerSend | null = null;
   private transporter: nodemailer.Transporter | null = null;
 
-  constructor(private configService: ConfigService) {}
+  constructor(private configService: ConfigService) { }
 
   /**
    * Get or create the SMTP transporter
@@ -34,7 +34,7 @@ export class EmailService {
       return this.transporter;
     }
 
-    // Use SMTP settings for ZENN Cafe
+    // Use SMTP settings for Caterly
     const smtpHost = this.configService.get<string>('SMTP_HOST') || 'mail.zenncafe.com.au';
     const smtpPort = this.configService.get<number>('SMTP_PORT') || 587;
     const smtpUser = this.configService.get<string>('SMTP_USER') || 'catering@zenncafe.com.au';
@@ -49,7 +49,7 @@ export class EmailService {
     }
     const smtpSecure = this.configService.get<string>('SMTP_SECURE') === 'true';
     const fromEmail = this.configService.get<string>('FROM_EMAIL') || 'catering@zenncafe.com.au';
-    const fromName = this.configService.get<string>('COMPANY_NAME') || 'ZENN';
+    const fromName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
     // Note: We allow SMTP to work without explicit config for backward compatibility
     // but log a warning if using defaults
@@ -92,7 +92,7 @@ export class EmailService {
       // Use opportunistic STARTTLS
       transporterOptions.opportunisticTLS = true;
     }
-    
+
     // For port 465, use SSL/TLS
     if (smtpSecure && smtpPort === 465) {
       transporterOptions.secure = true;
@@ -124,7 +124,7 @@ export class EmailService {
     }
 
     const apiKey = this.configService.get<string>('MAILERSEND_API_KEY');
-    
+
     if (!apiKey) {
       this.logger.error('MailerSend API key is not configured. Please set MAILERSEND_API_KEY in environment variables.');
       throw new Error('MailerSend API key is not configured');
@@ -181,13 +181,13 @@ export class EmailService {
   private async sendEmailViaSMTP(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
       const transporter = this.getSMTPTransporter();
-      
-      // Get configuration - use ZENN Cafe defaults
-      const fromEmail = this.configService.get<string>('FROM_EMAIL') || 
-                       this.configService.get<string>('SMTP_USER') || 
-                       'catering@zenncafe.com.au';
-      const fromName = this.configService.get<string>('COMPANY_NAME') || 
-                      'ZENN';
+
+      // Get configuration - use Caterly defaults
+      const fromEmail = this.configService.get<string>('FROM_EMAIL') ||
+        this.configService.get<string>('SMTP_USER') ||
+        'catering@zenncafe.com.au';
+      const fromName = this.configService.get<string>('COMPANY_NAME') ||
+        'Caterly';
 
       // Prepare recipients
       const toEmails = Array.isArray(options.to) ? options.to : [options.to];
@@ -236,7 +236,7 @@ export class EmailService {
 
       // Send email
       const info = await transporter.sendMail(mailOptions);
-      
+
       const messageId = info.messageId || 'unknown';
       this.logger.log(`Email sent successfully via SMTP. Message ID: ${messageId}`);
 
@@ -248,17 +248,17 @@ export class EmailService {
       const errorMessage = error.message || error.toString() || 'Unknown error';
       const smtpHost = this.configService.get<string>('SMTP_HOST') || 'unknown';
       const smtpPort = this.configService.get<number>('SMTP_PORT') || 587;
-      
+
       this.logger.error(`SMTP email sending error (${smtpHost}:${smtpPort}):`, errorMessage);
-      
+
       // Provide helpful error messages
       let helpfulError = errorMessage;
       if (errorMessage.includes('Invalid login') || errorMessage.includes('Authentication failed') || errorMessage.includes('535')) {
         helpfulError = `Authentication failed. Please verify:
 - SMTP_HOST: ${smtpHost}
-- SMTP_USER: ${this.configService.get<string>('SMTP_USER') || 'catering@zenncafe.com.au'}
+- SMTP_USER: ${this.configService.get<string>('SMTP_USER') || 'catering@caterly.com.au'}
 - SMTP_PASSWORD: (check if correct)
-- Try alternative SMTP hosts: mail.zenncafe.com.au, smtp.zenncafe.com.au, smtp.gmail.com, or smtp.office365.com
+- Try alternative SMTP hosts: mail.caterly.com.au, smtp.caterly.com.au, smtp.gmail.com, or smtp.office365.com
 - Try port 465 with SMTP_SECURE=true if port 587 doesn't work`;
       } else if (errorMessage.includes('timeout') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('ENOTFOUND')) {
         helpfulError = `Connection failed to ${smtpHost}:${smtpPort}. DNS lookup failed - the SMTP host may not exist. Please try:
@@ -269,7 +269,7 @@ export class EmailService {
 - If using Google Workspace: smtp.gmail.com
 - If using Microsoft 365: smtp.office365.com`;
       }
-      
+
       // Log full error for debugging
       if (error.response) {
         this.logger.error('SMTP error response:', JSON.stringify(error.response, null, 2));
@@ -291,14 +291,14 @@ export class EmailService {
   private async sendEmailViaMailerSend(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
       const client = this.getMailerSendClient();
-      
-      // Get configuration - use ZENN Cafe defaults
-      const fromEmail = this.configService.get<string>('MAILERSEND_FROM_EMAIL') || 
-                       this.configService.get<string>('FROM_EMAIL') || 
-                       'catering@zenncafe.com.au';
-      const fromName = this.configService.get<string>('MAILERSEND_FROM_NAME') || 
-                      this.configService.get<string>('COMPANY_NAME') || 
-                      'ZENN';
+
+      // Get configuration - use Caterly defaults
+      const fromEmail = this.configService.get<string>('MAILERSEND_FROM_EMAIL') ||
+        this.configService.get<string>('FROM_EMAIL') ||
+        'catering@zenncafe.com.au';
+      const fromName = this.configService.get<string>('MAILERSEND_FROM_NAME') ||
+        this.configService.get<string>('COMPANY_NAME') ||
+        'Caterly';
 
       // Prepare recipients
       const toEmails = Array.isArray(options.to) ? options.to : [options.to];
@@ -359,7 +359,7 @@ export class EmailService {
       if (options.attachments && options.attachments.length > 0) {
         const attachments = options.attachments.map(att => {
           let content: string;
-          
+
           if (Buffer.isBuffer(att.content)) {
             // Convert Buffer to base64 string
             content = att.content.toString('base64');
@@ -381,12 +381,12 @@ export class EmailService {
 
       // Send email
       const response = await client.email.send(emailParams);
-      
+
       // Extract message ID from response
       // MailerSend returns response with headers containing X-Message-Id
-      const messageId = response.headers?.['x-message-id'] || 
-                       response.headers?.['X-Message-Id'] ||
-                       'unknown';
+      const messageId = response.headers?.['x-message-id'] ||
+        response.headers?.['X-Message-Id'] ||
+        'unknown';
 
       this.logger.log(`Email sent successfully via MailerSend. Message ID: ${messageId}`);
 
@@ -397,7 +397,7 @@ export class EmailService {
     } catch (error: any) {
       const errorMessage = error.message || error.toString() || 'Unknown error';
       this.logger.error('MailerSend email sending error:', errorMessage);
-      
+
       // Log full error for debugging
       if (error.response) {
         this.logger.error('MailerSend API response:', JSON.stringify(error.response.data || error.response, null, 2));
@@ -421,9 +421,9 @@ export class EmailService {
     customerName?: string,
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const name = customerName || 'Customer';
-    const companyName = this.configService.get<string>('COMPANY_NAME') || 
-                       this.configService.get<string>('MAILERSEND_FROM_NAME') || 
-                       'ZENN';
+    const companyName = this.configService.get<string>('COMPANY_NAME') ||
+      this.configService.get<string>('MAILERSEND_FROM_NAME') ||
+      'Caterly';
     const emailSubject = `Invoice #${orderId} - ${companyName}`;
 
     const emailBody = `

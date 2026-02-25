@@ -16,5 +16,4 @@ import { Order } from '../entities/Order';
   providers: [EmailService, NotificationService, S3Service, InvoiceService, StripeService, PricingService, PinPaymentsService, FatZebraService],
   exports: [EmailService, NotificationService, S3Service, InvoiceService, StripeService, PricingService, PinPaymentsService, FatZebraService],
 })
-export class CommonModule {}
-
+export class CommonModule { }

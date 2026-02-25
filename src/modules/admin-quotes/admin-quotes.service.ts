@@ -12,7 +12,7 @@ export class AdminQuotesService {
     private dataSource: DataSource,
     private emailService: EmailService,
     private invoiceService: InvoiceService,
-  ) {}
+  ) { }
 
   async findAll(query: any): Promise<any> {
     const { limit = 20, offset = 0, search, status, customer_id, location_id, date_from, date_to, sort_field, sort_direction } = query;
@@ -122,7 +122,7 @@ export class AdminQuotesService {
       const dbField = fieldMap[sort_field] || 'o.date_added';
       orderByClause = `ORDER BY ${dbField} ${direction}`;
     }
-    
+
     sqlQuery += ` ${orderByClause} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(Number(limit), Number(offset));
 
@@ -225,7 +225,7 @@ export class AdminQuotesService {
     // Fetch custom discounts for all customers in the result set to check if wholesale discount should be applied
     const customerIds = [...new Set(result.map((row: any) => row.customer_id).filter(Boolean))];
     const customerDiscountsMap = new Map<number, { hasProductDiscounts: boolean; hasOptionDiscounts: boolean }>();
-    
+
     if (customerIds.length > 0) {
       // Check for product-level discounts
       const productDiscountsQuery = `
@@ -279,23 +279,23 @@ export class AdminQuotesService {
           }
           couponDiscount = Math.min(couponDiscount, subtotal);
         } else {
-        // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
-        const tempAfterDiscount = subtotal;
-        const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
-        const tempPreGstTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100;
-        const tempGst = Math.round((tempPreGstTotal * 0.1) * 100) / 100;
-        const tempTotal = Math.round((tempPreGstTotal + tempGst) * 100) / 100;
+          // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
+          const tempAfterDiscount = subtotal;
+          const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
+          const tempPreGstTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100;
+          const tempGst = Math.round((tempPreGstTotal * 0.1) * 100) / 100;
+          const tempTotal = Math.round((tempPreGstTotal + tempGst) * 100) / 100;
 
-        const storedTotal = parseFloat(row.order_total || 0);
-        if (storedTotal < tempTotal) {
-          const discountIncludingGst = tempTotal - storedTotal;
-          couponDiscount = discountIncludingGst / 1.1;
-          couponDiscount = Math.min(couponDiscount, subtotal);
-          couponCode = 'DELETED';
-        }
+          const storedTotal = parseFloat(row.order_total || 0);
+          if (storedTotal < tempTotal) {
+            const discountIncludingGst = tempTotal - storedTotal;
+            couponDiscount = discountIncludingGst / 1.1;
+            couponDiscount = Math.min(couponDiscount, subtotal);
+            couponCode = 'DELETED';
+          }
         }
       }
-      
+
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
       const deliveryFee = parseFloat(row.delivery_fee || 0);
@@ -388,7 +388,7 @@ export class AdminQuotesService {
     const optionDiscountsMap = new Map();
     // Fetch product-level discounts
     const productDiscountsMap = new Map();
-    
+
     if (quote.customer_id) {
       // Get option-level discounts
       const optionDiscountQuery = `
@@ -423,7 +423,7 @@ export class AdminQuotesService {
 
         // Check if product has options
         const hasOptions = product.options && Array.isArray(product.options) && product.options.length > 0;
-        
+
         if (hasOptions) {
           // Product has options - apply option-level discounts
           for (const option of product.options) {
@@ -449,7 +449,7 @@ export class AdminQuotesService {
         } else {
           // Product has no options - apply product-level discount
           const productDiscountPercentage = productDiscountsMap.get(product.product_id) || 0;
-          
+
           if (productDiscountPercentage > 0) {
             const discountAmount = productSubtotal * (productDiscountPercentage / 100);
             subtotal += productSubtotal - discountAmount;
@@ -530,7 +530,7 @@ export class AdminQuotesService {
       const {
         customer_id,
         location_id,
-        delivery_date, // Optional - not required for St Dreux
+        delivery_date, // Optional - not required for Caterly
         delivery_time,
         delivery_method,
         delivery_address,
@@ -556,7 +556,7 @@ export class AdminQuotesService {
       const optionDiscountsMap = new Map();
       // Get customer product discounts (product-level)
       const productDiscountsMap = new Map();
-      
+
       if (customer_id) {
         // Fetch option-level discounts
         const optionDiscountQuery = `
@@ -615,7 +615,7 @@ export class AdminQuotesService {
         } else {
           // Product has no options - apply product-level discount
           const productDiscountPercentage = productDiscountsMap.get(product.product_id) || 0;
-          
+
           if (productDiscountPercentage > 0) {
             const discountAmount = productSubtotal * (productDiscountPercentage / 100);
             subtotal += productSubtotal - discountAmount;
@@ -627,7 +627,7 @@ export class AdminQuotesService {
 
       let couponDiscount = 0;
       let couponId = null;
-      
+
       if (coupon_code) {
         // Trim whitespace and make case-insensitive lookup
         const normalizedCouponCode = (coupon_code || '').trim().toUpperCase();
@@ -755,11 +755,11 @@ export class AdminQuotesService {
           ) VALUES ($1, $2, $3, $4, $5, $6, $7)
           RETURNING order_product_id`,
           [
-            orderId, 
-            product.product_id, 
-            product.quantity, 
-            product.price, 
-            product.price * product.quantity, 
+            orderId,
+            product.product_id,
+            product.quantity,
+            product.price,
+            product.price * product.quantity,
             i + 1,
             product.comment?.trim() || null
           ],
@@ -853,7 +853,7 @@ export class AdminQuotesService {
       // Get customer product discounts
       const optionDiscountsMap = new Map();
       const productDiscountsMap = new Map();
-      
+
       if (customer_id) {
         // Fetch option-level discounts
         const optionDiscountQuery = `
@@ -912,7 +912,7 @@ export class AdminQuotesService {
         } else {
           // Product has no options - apply product-level discount
           const productDiscountPercentage = productDiscountsMap.get(product.product_id) || 0;
-          
+
           if (productDiscountPercentage > 0) {
             const discountAmount = productSubtotal * (productDiscountPercentage / 100);
             subtotal += productSubtotal - discountAmount;
@@ -924,7 +924,7 @@ export class AdminQuotesService {
 
       let couponDiscount = 0;
       let couponId = null;
-      
+
       if (coupon_code) {
         // Trim whitespace and make case-insensitive lookup
         const normalizedCouponCode = (coupon_code || '').trim().toUpperCase();
@@ -962,7 +962,7 @@ export class AdminQuotesService {
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
       let deliveryDateTime: string | null = null;
-      
+
       if (delivery_date && typeof delivery_date === 'string' && delivery_date.trim()) {
         // Build from delivery_date and delivery_time
         const normalizedDate = delivery_date.trim();
@@ -988,7 +988,7 @@ export class AdminQuotesService {
         `SELECT order_status FROM orders WHERE order_id = $1`,
         [id],
       );
-      
+
       const currentStatus = currentOrderCheck.length > 0 ? currentOrderCheck[0].order_status : null;
       // If updating a quote and order_status is not explicitly provided, keep current status
       // If order_status is explicitly provided, use that value (allows manual conversion)
@@ -1054,13 +1054,13 @@ export class AdminQuotesService {
 
       // Handle different query result structures (array vs object with rows)
       const resultArray = Array.isArray(orderResult) ? orderResult : (orderResult?.rows || []);
-      
+
       if (!resultArray || resultArray.length === 0) {
         throw new NotFoundException('Quote not found');
       }
 
       const updatedOrder = resultArray[0];
-      
+
       // Auto-convert to order when quote status changes to Approved (7)
       if (order_status === 7) {
         // Get previous status to check if it's a status change
@@ -1068,14 +1068,14 @@ export class AdminQuotesService {
           `SELECT order_status FROM orders WHERE order_id = $1`,
           [id]
         );
-        
+
         const previousOrderArray = Array.isArray(previousOrderResult) ? previousOrderResult : (previousOrderResult?.rows || []);
         const previousStatus = previousOrderArray.length > 0 ? previousOrderArray[0].order_status : null;
-        
+
         // Only convert if status is changing to approved (not already approved)
         if (previousStatus !== 7) {
           this.logger.log(`Quote ${id} approved. Auto-converting to order.`);
-          
+
           // Convert to order by updating payment_status from 'quote' to 'order'
           // This ensures it will show in orders list and not in quotes list
           await manager.query(
@@ -1087,7 +1087,7 @@ export class AdminQuotesService {
              RETURNING *`,
             ['order', 2, id], // Set payment_status to 'order' and order_status to 2 (Paid/Approved)
           );
-          
+
           // Auto-generate invoice asynchronously after transaction commits
           setTimeout(async () => {
             try {
@@ -1116,13 +1116,13 @@ export class AdminQuotesService {
       if (productsArray && productsArray.length > 0) {
         for (let i = 0; i < productsArray.length; i++) {
           const product = productsArray[i];
-          
+
           // Validate product data
           if (!product || !product.product_id) {
             this.logger.warn(`Skipping invalid product at index ${i} for quote ${id}`);
             continue;
           }
-          
+
           const productResult = await manager.query(
             `INSERT INTO order_product (
               order_id,
@@ -1135,18 +1135,18 @@ export class AdminQuotesService {
             ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING order_product_id`,
             [
-              id, 
-              product.product_id, 
-              product.quantity || 1, 
-              product.price || 0, 
-              (product.price || 0) * (product.quantity || 1), 
+              id,
+              product.product_id,
+              product.quantity || 1,
+              product.price || 0,
+              (product.price || 0) * (product.quantity || 1),
               i + 1,
               product.comment?.trim() || null
             ],
           );
 
           const orderProductId = productResult && productResult[0] ? productResult[0].order_product_id : null;
-          
+
           if (!orderProductId) {
             this.logger.warn(`Failed to insert product ${product.product_id} for quote ${id}`);
             continue;
@@ -1155,32 +1155,32 @@ export class AdminQuotesService {
           // Insert product options (only if add_ons array exists and is not empty)
           if (product.add_ons && Array.isArray(product.add_ons) && product.add_ons.length > 0) {
             for (const addon of product.add_ons) {
-            const nameParts = (addon.name || 'Add-on').split(':').map((s: string) => s.trim());
-            const optionName = nameParts[0] || 'Add-on';
-            const optionValue = nameParts.length > 1 ? nameParts.slice(1).join(':') : addon.name || 'Add-on';
-            const optionQuantity = addon.quantity || 1;
-            const optionPrice = parseFloat((addon.price || 0).toString());
-            const optionTotal = optionPrice * optionQuantity;
+              const nameParts = (addon.name || 'Add-on').split(':').map((s: string) => s.trim());
+              const optionName = nameParts[0] || 'Add-on';
+              const optionValue = nameParts.length > 1 ? nameParts.slice(1).join(':') : addon.name || 'Add-on';
+              const optionQuantity = addon.quantity || 1;
+              const optionPrice = parseFloat((addon.price || 0).toString());
+              const optionTotal = optionPrice * optionQuantity;
 
-            let productOptionId = addon.product_option_id;
-            if (!productOptionId && addon.option_value_id) {
-              const optionQuery = await manager.query(
-                `SELECT product_option_id FROM product_option 
+              let productOptionId = addon.product_option_id;
+              if (!productOptionId && addon.option_value_id) {
+                const optionQuery = await manager.query(
+                  `SELECT product_option_id FROM product_option 
                  WHERE product_id = $1 AND option_value_id = $2 
                  LIMIT 1`,
-                [product.product_id, addon.option_value_id],
-              );
-              if (optionQuery.length > 0) {
-                productOptionId = optionQuery[0].product_option_id;
+                  [product.product_id, addon.option_value_id],
+                );
+                if (optionQuery.length > 0) {
+                  productOptionId = optionQuery[0].product_option_id;
+                }
               }
-            }
 
-            if (!productOptionId) {
-              productOptionId = 0;
-            }
+              if (!productOptionId) {
+                productOptionId = 0;
+              }
 
-            await manager.query(
-              `INSERT INTO order_product_option (
+              await manager.query(
+                `INSERT INTO order_product_option (
                 order_id,
                 order_product_id,
                 product_option_id,
@@ -1190,8 +1190,8 @@ export class AdminQuotesService {
                 option_price,
                 option_total
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-              [id, orderProductId, productOptionId, optionName, optionValue, optionQuantity, optionPrice, optionTotal],
-            );
+                [id, orderProductId, productOptionId, optionName, optionValue, optionQuantity, optionPrice, optionTotal],
+              );
             }
           }
         }
@@ -1204,9 +1204,9 @@ export class AdminQuotesService {
         `SELECT * FROM orders WHERE order_id = $1`,
         [id]
       );
-      
+
       const updatedQuote = updatedQuoteResult && updatedQuoteResult[0] ? updatedQuoteResult[0] : (orderResult && orderResult[0] ? orderResult[0] : null);
-      
+
       if (!updatedQuote) {
         throw new NotFoundException('Quote not found after update');
       }
@@ -1234,13 +1234,13 @@ export class AdminQuotesService {
 
     const currentStatus = quoteCheck[0].order_status;
     const currentPaymentStatus = quoteCheck[0].payment_status;
-    
+
     // Only allow conversion if it's still a quote (payment_status = 'quote' or NULL for legacy quotes)
     // Also allow conversion from status 4 (Awaiting Approval) and 7 (Approved) if still a quote
     if (currentPaymentStatus && currentPaymentStatus !== 'quote') {
       throw new BadRequestException('This quote has already been converted to an order');
     }
-    
+
     if (currentStatus !== 1 && currentStatus !== 4 && currentStatus !== 7) {
       throw new BadRequestException('Quote has already been converted to order or is in an invalid status');
     }
@@ -1352,7 +1352,7 @@ export class AdminQuotesService {
       const optionDiscountsMap = new Map();
       // Fetch product-level discounts
       const productDiscountsMap = new Map();
-      
+
       if (quote.customer_id) {
         // Get option-level discounts
         const optionDiscountQuery = `
@@ -1394,7 +1394,7 @@ export class AdminQuotesService {
 
         // Check if product has options
         const hasOptions = product.options && Array.isArray(product.options) && product.options.length > 0;
-        
+
         if (hasOptions) {
           // Product has options - apply option-level discounts
           for (const option of product.options) {
@@ -1421,7 +1421,7 @@ export class AdminQuotesService {
         } else {
           // Product has no options - apply product-level discount
           const productDiscountPercentage = productDiscountsMap.get(product.product_id) || 0;
-          
+
           if (productDiscountPercentage > 0) {
             const discountAmount = productSubtotal * (productDiscountPercentage / 100);
             subtotal += productSubtotal - discountAmount;
@@ -1477,7 +1477,7 @@ export class AdminQuotesService {
       if (!quoteToken) {
         // Generate a secure random token
         quoteToken = crypto.randomBytes(32).toString('hex');
-        
+
         // Store the token in the database
         await manager.query(
           `UPDATE orders SET quote_token = $1 WHERE order_id = $2`,
@@ -1491,7 +1491,7 @@ export class AdminQuotesService {
 
       const customerName = quote.firstname && quote.lastname ? `${quote.firstname} ${quote.lastname}` : 'Customer';
       // Normalize company name - remove "Email" suffix if present and ensure proper formatting
-      const companyName = (process.env.COMPANY_NAME || 'ZENN').replace(/\s*–\s*Email\s*$/i, '').replace(/^Zenn\s/i, 'ZENN ');
+      const companyName = (process.env.COMPANY_NAME || 'Caterly').replace(/\s*–\s*Email\s*$/i, '');
       const emailSubject = `Quote #${quote.order_id} - ${companyName}`;
 
       const emailBody = `
@@ -1501,12 +1501,12 @@ export class AdminQuotesService {
           <style>
             body { font-family: Arial, sans-serif; line-height: 1.6; color: #333333 !important; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #055160; color: white; padding: 20px; text-align: center; }
+            .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
             .header h1 { color: white !important; }
             .content { padding: 20px; background-color: #f9f9f9; color: #333333 !important; }
             .content p { color: #333333 !important; }
             .quote-details { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; color: #333333 !important; }
-            .quote-details h2 { color: #055160 !important; margin-top: 0; }
+            .quote-details h2 { color: #E03A3E !important; margin-top: 0; }
             .quote-details p { color: #333333 !important; }
             .quote-details strong { color: #333333 !important; }
             .product-item { padding: 10px; border-bottom: 1px solid #eee; color: #333333 !important; }
@@ -1539,40 +1539,40 @@ export class AdminQuotesService {
               <div class="quote-details">
                 <h2 style="color: #055160 !important; margin-top: 0;">Delivery/Pick Up Details</h2>
                 ${quote.delivery_date_time ? (() => {
-                  const date = new Date(quote.delivery_date_time);
-                  const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-                  return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Date:</strong> ${formattedDate}</p>`;
-                })() : ''}
+          const date = new Date(quote.delivery_date_time);
+          const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+          return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Date:</strong> ${formattedDate}</p>`;
+        })() : ''}
                 ${quote.delivery_date_time ? (() => {
-                  const date = new Date(quote.delivery_date_time);
-                  const hours = date.getHours();
-                  const minutes = date.getMinutes();
-                  const hour12 = hours % 12 || 12;
-                  const ampm = hours >= 12 ? 'PM' : 'AM';
-                  const timeStr = quote.delivery_time || `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                  const [h, m] = timeStr.split(':').map(Number);
-                  const h12 = h % 12 || 12;
-                  const ap = h >= 12 ? 'PM' : 'AM';
-                  return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Time:</strong> ${h12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ap}</p>`;
-                })() : ''}
+          const date = new Date(quote.delivery_date_time);
+          const hours = date.getHours();
+          const minutes = date.getMinutes();
+          const hour12 = hours % 12 || 12;
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          const timeStr = quote.delivery_time || `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          const [h, m] = timeStr.split(':').map(Number);
+          const h12 = h % 12 || 12;
+          const ap = h >= 12 ? 'PM' : 'AM';
+          return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Time:</strong> ${h12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ap}</p>`;
+        })() : ''}
                 ${quote.delivery_address ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Address:</strong> ${quote.delivery_address}</p>` : ''}
                 ${quote.delivery_contact ? (() => {
-                  const parts = quote.delivery_contact.split('|');
-                  const contactName = parts[0]?.trim() || '';
-                  const contactNumber = parts[1]?.trim() || '';
-                  return `
+          const parts = quote.delivery_contact.split('|');
+          const contactName = parts[0]?.trim() || '';
+          const contactNumber = parts[1]?.trim() || '';
+          return `
                     ${contactName ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Contact:</strong> ${contactName}</p>` : ''}
                     ${contactNumber ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Contact Number:</strong> ${contactNumber}</p>` : ''}
                   `;
-                })() : ''}
+        })() : ''}
                 ${quote.delivery_details ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Notes:</strong> ${quote.delivery_details.replace(/\n/g, '<br>')}</p>` : ''}
               </div>
 
               <div class="quote-details">
                 <h2 style="color: #055160 !important; margin-top: 0;">Quote Items</h2>
                 ${quoteProducts
-                  .map(
-                    (product: any) => `
+          .map(
+            (product: any) => `
                   <div class="product-item" style="color: #333333 !important;">
                     <strong style="color: #333333 !important;">${product.product_name}</strong> - Qty: ${product.quantity} × $${Number(product.price).toFixed(2)} = $${Number(product.total).toFixed(2)}
                     ${product.order_product_comment ? `<div style="margin-left: 20px; margin-top: 5px; font-size: 0.9em; color: #666666 !important; font-style: italic;">Note: ${product.order_product_comment}</div>` : ''}
@@ -1583,8 +1583,8 @@ export class AdminQuotesService {
                     ` : ''}
                   </div>
                 `,
-                  )
-                  .join('')}
+          )
+          .join('')}
                 <hr>
                 <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Subtotal:</strong> $${Number(quote.subtotal || 0).toFixed(2)}</p>
                 ${quote.coupon_code && quote.coupon_discount ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Coupon Discount (${quote.coupon_code}):</strong> -$${Number(quote.coupon_discount).toFixed(2)}</p>` : ''}

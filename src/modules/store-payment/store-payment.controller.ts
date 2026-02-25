@@ -9,24 +9,19 @@ import {
   Res,
   UseGuards,
   ParseIntPipe,
-  Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { StorePaymentService } from './store-payment.service';
 import { PinPaymentsService } from '../../common/services/pinpayments.service';
-import { FatZebraService } from '../../common/services/fatzebra.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @ApiTags('Store Payment')
 @Controller('store/payment')
 export class StorePaymentController {
-  private readonly logger = new Logger(StorePaymentController.name);
-
   constructor(
     private readonly storePaymentService: StorePaymentService,
     private readonly pinPaymentsService: PinPaymentsService,
-    private readonly fatZebraService: FatZebraService,
   ) { }
 
   @Get(':orderId/pin-key')
@@ -82,6 +77,48 @@ export class StorePaymentController {
     res.send(html);
   }
 
+  @Post(':orderId/fatzebra-charge')
+  @ApiOperation({ summary: 'Process Fat Zebra payment charge' })
+  @ApiParam({ name: 'orderId', type: Number })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        token: { type: 'string', description: 'Fat Zebra card token (optional if card details provided)' },
+        card_holder: { type: 'string', description: 'Card holder name' },
+        card_number: { type: 'string', description: 'Card number' },
+        card_expiry: { type: 'string', description: 'Card expiry (MM/YYYY)' },
+        cvv: { type: 'string', description: 'CVV' },
+        ip_address: { type: 'string', description: 'Customer IP address' },
+      },
+      required: ['ip_address'],
+    },
+  })
+  async fatZebraCharge(
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Body() body: any,
+    @Res() res: Response,
+  ) {
+    const { ip_address, ...paymentData } = body;
+    const result = await this.storePaymentService.processFatZebraPayment(
+      orderId,
+      paymentData,
+      ip_address,
+    );
+    res.json(result);
+  }
+
+  @Get(':orderId/fatzebra-hpp')
+  @ApiOperation({ summary: 'Get Fat Zebra HPP form' })
+  async fatZebraHpp(
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Res() res: Response,
+  ) {
+    const html = await this.storePaymentService.getFatZebraHppForm(orderId);
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  }
+
   @Get(':orderId/process')
   @ApiOperation({ summary: 'Process payment - redirects to Pin Payments flow' })
   @ApiParam({ name: 'orderId', type: Number })
@@ -97,47 +134,7 @@ export class StorePaymentController {
     res.redirect(paymentUrl);
   }
 
-  @Get(':orderId/fatzebra')
-  @ApiOperation({ summary: 'Start FatZebra PayNow hosted payment' })
-  @ApiParam({ name: 'orderId', type: Number })
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  async startFatZebraPayment(
-    @Param('orderId', ParseIntPipe) orderId: number,
-  ) {
-    const paymentUrl = await this.storePaymentService.getFatZebraPaymentUrl(orderId);
-    return { success: true, payment_url: paymentUrl };
-  }
 
-  // FatZebra redirect endpoint - PUBLIC (browser-friendly)
-  // Users click this link in their browser, so we can't require JWT auth
-  // This endpoint redirects the browser directly to FatZebra's payment page
-  @Get(':orderId/fatzebra/redirect')
-  @ApiOperation({ summary: 'Redirect to FatZebra PayNow hosted payment (browser-friendly, public)' })
-  @ApiParam({ name: 'orderId', type: Number })
-  async redirectToFatZebra(
-    @Param('orderId', ParseIntPipe) orderId: number,
-    @Res() res: Response,
-  ) {
-    const paymentUrl = await this.storePaymentService.getFatZebraPaymentUrl(orderId);
-    // Redirect browser directly to FatZebra payment page
-    res.redirect(paymentUrl);
-  }
-
-  // FatZebra callback endpoint - PUBLIC (no JWT required)
-  // FatZebra redirects users here, so we can't require JWT auth
-  // Security is handled via FatZebra's signature verification
-  // Returns HTML to auto-redirect user's browser to success/failure page
-  @Get('fatzebra/callback')
-  @ApiOperation({ summary: 'Handle FatZebra PayNow callback (public endpoint)' })
-  async handleFatZebraCallback(
-    @Query() query: any,
-    @Res() res: Response,
-  ) {
-    const html = await this.storePaymentService.handleFatZebraCallback(query);
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
-  }
   // Legacy SecurePay endpoints (deprecated - kept for backward compatibility)
   @Post('callback')
   @ApiOperation({ summary: 'Handle SecurePay payment callback (deprecated)' })

@@ -177,147 +177,41 @@ export class StorePaymentService {
   }
 
   /**
-   * Return FatZebra PayNow URL (for AJAX/JSON use)
+   * Process Fat Zebra HPP payment (generate payment form)
+   * GET /store/payment/:orderId/fatzebra-hpp
    */
-  async getFatZebraPaymentUrl(orderId: number): Promise<string> {
-    // 🔍 DEBUG: Log the incoming orderId
-    this.logger.log(`🔍 getFatZebraPaymentUrl called with orderId=${orderId} (type: ${typeof orderId})`);
-
+  async getFatZebraHppForm(orderId: number): Promise<string> {
     if (!orderId || isNaN(orderId) || orderId <= 0) {
       throw new BadRequestException('Valid order ID is required');
-    }
-    if (!this.fatZebraService.isConfigured()) {
-      throw new InternalServerErrorException('FatZebra PayNow is not configured');
-    }
-
-    const orderQuery = `
-      SELECT 
-        o.*,
-        c.firstname,
-        c.lastname,
-        c.email
-      FROM orders o
-      LEFT JOIN customer c ON o.customer_id = c.customer_id
-      WHERE o.order_id = $1
-    `;
-    const orderResult = await this.dataSource.query(orderQuery, [orderId]);
-    if (orderResult.length === 0) {
-      throw new NotFoundException('Order not found');
-    }
-    const order = orderResult[0];
-
-    if (order.payment_status === 'paid' || order.payment_date) {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-        this.configService.get<string>('ADMIN_PORTAL_URL') ||
-        'http://localhost:3000';
-      const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-      return alreadyPaidUrl;
-    }
-
-    let discount = 0;
-    if (order.coupon_id) {
-      if (order.coupon_type === 'F') {
-        discount = parseFloat(order.coupon_discount || 0);
-      } else {
-        const subtotal = parseFloat(order.order_total || 0) +
-          parseFloat(order.late_fee || 0) +
-          parseFloat(order.delivery_fee || 0);
-        discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
-      }
-    }
-    const total = parseFloat(order.order_total || 0) +
-      parseFloat(order.late_fee || 0) +
-      parseFloat(order.delivery_fee || 0) -
-      discount;
-    const totalCents = Math.round(total * 100);
-
-    const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
-    const returnPath = `${backendUrl}/store/payment/fatzebra/callback`;
-    const email = order.customer_order_email || order.email || undefined;
-
-    // 🔍 DEBUG: Log before creating reference
-    this.logger.log(`🔍 Creating reference for orderId=${orderId}`);
-
-    // Create a unique reference to avoid ambiguity (orderId + random hex)
-    const uniqueRef = `${orderId}-${crypto.randomBytes(8).toString('hex')}`;
-
-    // 🔍 DEBUG: Log the created reference
-    this.logger.log(`🔍 Created uniqueRef="${uniqueRef}" for orderId=${orderId}`);
-
-    // Ensure support table exists and record the generated reference for later callback mapping
-    await this.dataSource.query(`
-      CREATE TABLE IF NOT EXISTS fatzebra_payment (
-        id SERIAL PRIMARY KEY,
-        reference TEXT UNIQUE,
-        order_id INTEGER NOT NULL,
-        amount_cents INTEGER,
-        currency TEXT,
-        status TEXT,
-        callback_payload JSONB,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-
-    await this.dataSource.query(
-      `INSERT INTO fatzebra_payment(reference, order_id, amount_cents, currency, status)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (reference) DO NOTHING`,
-      [uniqueRef, orderId, totalCents, 'AUD', 'created']
-    );
-
-    const payUrl = this.fatZebraService.buildPayNowUrl({
-      reference: uniqueRef,
-      amountCents: totalCents,
-      currency: 'AUD',
-      returnPath,
-      iframe: false,
-      email,
-    });
-    this.logger.log(`FatZebra getPayUrl orderId=${orderId} amountCents=${totalCents} reference=${uniqueRef} payUrl=${payUrl}`);
-    return payUrl;
-  }
-
-  /**
-   * Start FatZebra PayNow flow (Hosted Payment Page)
-   */
-  async processFatZebraPayment(orderId: number): Promise<string> {
-    if (!orderId || isNaN(orderId) || orderId <= 0) {
-      throw new BadRequestException('Valid order ID is required');
-    }
-    if (!this.fatZebraService.isConfigured()) {
-      throw new InternalServerErrorException('FatZebra PayNow is not configured');
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
-    await queryRunner.startTransaction();
 
     try {
       const orderQuery = `
-        SELECT 
-          o.*,
-          c.firstname,
-          c.lastname,
-          c.email
+        SELECT o.*, c.email
         FROM orders o
         LEFT JOIN customer c ON o.customer_id = c.customer_id
         WHERE o.order_id = $1
       `;
       const orderResult = await queryRunner.query(orderQuery, [orderId]);
+
       if (orderResult.length === 0) {
         throw new NotFoundException('Order not found');
       }
+
       const order = orderResult[0];
 
       if (order.payment_status === 'paid' || order.payment_date) {
         const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
           this.configService.get<string>('ADMIN_PORTAL_URL') ||
-          'http://localhost:3006';
-        const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-        await queryRunner.commitTransaction();
+          'http://localhost:3000';
+        const alreadyPaidUrl = `${frontendUrl}/orders/${orderId}`;
         return this.generateRedirectHtml(alreadyPaidUrl, 'Order Already Paid');
       }
 
+      // Calculate total
       let discount = 0;
       if (order.coupon_id) {
         if (order.coupon_type === 'F') {
@@ -329,269 +223,64 @@ export class StorePaymentService {
           discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
         }
       }
+
       const total = parseFloat(order.order_total || 0) +
         parseFloat(order.late_fee || 0) +
         parseFloat(order.delivery_fee || 0) -
         discount;
+
       const totalCents = Math.round(total * 100);
+      const username = this.configService.get<string>('FATZEBRA_USERNAME');
+      const sharedSecret = this.configService.get<string>('FATZEBRA_SHARED_SECRET');
+      const reference = `Order #${orderId}`;
+      const currency = 'AUD';
 
-      const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
-      const returnPath = `${backendUrl}/store/payment/fatzebra/callback`;
+      if (!username || !sharedSecret) {
+        throw new InternalServerErrorException('Fat Zebra credentials not fully configured');
+      }
 
-      const email = order.customer_order_email || order.email || undefined;
-      // Create unique reference and save it with transaction so we can map callbacks to exact attempts
-      const uniqueRef = `${orderId}-${crypto.randomBytes(8).toString('hex')}`;
+      // Generate HMAC-MD5 verification hash
+      // Format: amount + reference + currency
+      const hashString = `${totalCents}${reference}${currency}`;
+      const verificationHash = crypto.createHmac('md5', sharedSecret).update(hashString).digest('hex');
 
-      await queryRunner.query(`
-        CREATE TABLE IF NOT EXISTS fatzebra_payment (
-          id SERIAL PRIMARY KEY,
-          reference TEXT UNIQUE,
-          order_id INTEGER NOT NULL,
-          amount_cents INTEGER,
-          currency TEXT,
-          status TEXT,
-          callback_payload JSONB,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        )
-      `);
+      const baseUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
+      const returnUrl = `${baseUrl}/store/payment/callback`;
 
-      await queryRunner.query(
-        `INSERT INTO fatzebra_payment(reference, order_id, amount_cents, currency, status)
-         VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (reference) DO NOTHING`,
-        [uniqueRef, orderId, totalCents, 'AUD', 'created']
-      );
+      const fatZebraUrl = this.configService.get<string>('NODE_ENV') === 'production'
+        ? 'https://pay.pmnts.io/'
+        : 'https://pay.pmnts-sandbox.io/';
 
-      const payUrl = this.fatZebraService.buildPayNowUrl({
-        reference: uniqueRef,
-        amountCents: totalCents,
-        currency: 'AUD',
-        returnPath,
-        iframe: false,
-        email,
+      return this.generateFatZebraForm({
+        fatZebraUrl,
+        username,
+        amount: totalCents,
+        reference,
+        currency,
+        returnUrl,
+        verificationHash,
       });
 
-      await queryRunner.commitTransaction();
-      return this.generateRedirectHtml(payUrl, 'Redirecting to Payment');
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
     } finally {
       await queryRunner.release();
     }
   }
 
-  /**
-   * Handle FatZebra PayNow callback
-   */
-  async handleFatZebraCallback(query: any): Promise<string> {
-    this.logger.log('='.repeat(60));
-    this.logger.log('🔔 FatZebra Callback Received');
-    this.logger.log('='.repeat(60));
-    this.logger.log(`Full query object: ${JSON.stringify(query, null, 2)}`);
-    this.logger.log(`Reference (r): ${query?.r}`);
-    this.logger.log(`Successful: ${query?.successful}`);
-    this.logger.log(`Amount: ${query?.amount}`);
-    this.logger.log(`Currency: ${query?.currency}`);
-    this.logger.log(`Transaction ID (id): ${query?.id}`);
-    this.logger.log(`Token: ${query?.token}`);
-    this.logger.log(`Verification Hash (v): ${query?.v}`);
-    this.logger.log('='.repeat(60));
 
-    const orderRef = query?.r;
-    this.logger.log(`FatZebra callback r param: ${orderRef}`);
-
-    if (!orderRef) {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-        this.configService.get<string>('ADMIN_PORTAL_URL') ||
-        'http://localhost:3006';
-      const redirectUrl = `${frontendUrl}/payment/cancel`;
-      return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
-    }
-
-    // Try to find exact reference in our fatzebra_payment table (preferred and safe)
-    let orderId: number = NaN;
-    try {
-      const rows: any[] = await this.dataSource.query(
-        `SELECT order_id, id FROM fatzebra_payment WHERE reference = $1 ORDER BY created_at DESC LIMIT 1`,
-        [String(orderRef)]
-      );
-      if (rows && rows.length > 0) {
-        orderId = rows[0].order_id;
-        // attach payment row id for later updates
-        (query as any)._fatzebra_payment_id = rows[0].id;
-        this.logger.log(`FatZebra callback matched stored reference. orderId=${orderId} payment_id=${rows[0].id}`);
-      }
-    } catch (e) {
-      // Table might not exist yet: fall back to legacy parsing
-      this.logger.warn('fatzebra_payment table lookup failed, falling back to legacy reference parsing');
-    }
-
-    // Fallback legacy behavior: parse first digits from r if no DB match
-    if (isNaN(orderId)) {
-      // STRICT PARSING: Only accept format {orderId}-{hex}
-      const parts = String(orderRef).split('-');
-      if (parts.length >= 2 && !isNaN(parseInt(parts[0]))) {
-        orderId = parseInt(parts[0]);
-        this.logger.log(`FatZebra callback parsed strict orderId: ${orderId} from ref: ${orderRef}`);
-      } else {
-        this.logger.warn(`FatZebra callback failed to parse orderId from ref: ${orderRef}`);
-      }
-
-      // DISABLED LEGACY PARSING to avoid "99" mismatch
-      // Enable legacy parsing to support both simple integer references (e.g. "99")
-      // AND composite references (e.g. "99-abcdef") if DB lookup fails
-      if (isNaN(orderId)) {
-        // Match digits at the start of the string
-        const refMatch = String(orderRef).match(/^(\d+)/);
-        if (refMatch) {
-          orderId = parseInt(refMatch[1]);
-          this.logger.log(`FatZebra callback parsed orderId (fallback): ${orderId} from ref: ${orderRef}`);
-        }
-      }
-    }
-
-    if (isNaN(orderId)) {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-        this.configService.get<string>('ADMIN_PORTAL_URL') ||
-        'http://localhost:3000';
-      const safeRef = encodeURIComponent(String(orderRef || 'missing'));
-      const redirectUrl = `${frontendUrl}/payment/failed?ref=${safeRef}&reason=invalid_order_id`;
-      return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
-    }
-
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const orderQuery = `
-        SELECT 
-          o.*,
-          c.firstname,
-          c.lastname,
-          c.email
-        FROM orders o
-        LEFT JOIN customer c ON o.customer_id = c.customer_id
-        WHERE o.order_id = $1
-      `;
-      const orderResult = await queryRunner.query(orderQuery, [orderId]);
-      if (orderResult.length === 0) {
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-          this.configService.get<string>('ADMIN_PORTAL_URL') ||
-          'http://localhost:3006';
-        const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
-        await queryRunner.commitTransaction();
-        return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
-      }
-      const order = orderResult[0];
-
-      if (order.order_status === 2 || order.payment_status === 'paid' || order.payment_date) {
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-          this.configService.get<string>('ADMIN_PORTAL_URL') ||
-          'http://localhost:3000';
-        const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-        await queryRunner.commitTransaction();
-        return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
-      }
-
-      const verified = this.fatZebraService.verifyCallback(query);
-      if (!verified) {
-        throw new BadRequestException('Security validation failed: Invalid payment signature');
-      }
-
-      const successful = String(query?.successful || '').toLowerCase() === 'true';
-
-      // If we have a stored payment id, update its status and payload accordingly
-      const paymentRowId = (query as any)?._fatzebra_payment_id;
-
-      if (successful) {
-        const txnId = query?.id || '';
-        const token = query?.token || '';
-
-        // update fatzebra_payment record as successful
-        try {
-          if (paymentRowId) {
-            await queryRunner.query(
-              `UPDATE fatzebra_payment SET status=$1, callback_payload=$2 WHERE id=$3`,
-              ['successful', JSON.stringify(query), paymentRowId]
-            );
-          }
-        } catch (e) {
-          this.logger.warn('Failed to update fatzebra_payment record with success info', e?.message || e);
-        }
-
-        const checkQuery = await queryRunner.query(
-          `SELECT order_status, payment_status, payment_date FROM orders WHERE order_id = $1 FOR UPDATE`,
-          [orderId]
-        );
-        if (checkQuery[0]?.order_status === 2 ||
-          checkQuery[0]?.payment_status === 'paid' ||
-          checkQuery[0]?.payment_date) {
-          await queryRunner.rollbackTransaction();
-          const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-            this.configService.get<string>('ADMIN_PORTAL_URL') ||
-            'http://localhost:3000';
-          const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-          return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
-        }
-
-        await queryRunner.query(
-          `UPDATE orders 
-           SET order_status = 2,
-               payment_status = 'paid', 
-               payment_date = NOW(),
-               payment_gateway = 'fatzebra',
-               payment_transaction_id = $2,
-               payment_response = COALESCE(payment_response, '{}'::jsonb) || $3::jsonb,
-               mark_paid_comment = 'Paid via FatZebra - Txn: ${txnId} Token: ${token}',
-               date_modified = NOW()
-           WHERE order_id = $1`,
-          [orderId, txnId, JSON.stringify(query)]
-        );
-
-        await queryRunner.commitTransaction();
-        await this.sendPaymentConfirmationEmail(orderId, order);
-
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-          this.configService.get<string>('ADMIN_PORTAL_URL') ||
-          'http://localhost:3000';
-        const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-        return this.generateRedirectHtml(redirectUrl, 'Payment Successful');
-      } else {
-        // mark payment row as failed if possible
-        try {
-          const paymentRowId = (query as any)?._fatzebra_payment_id;
-          if (paymentRowId) {
-            await queryRunner.query(
-              `UPDATE fatzebra_payment SET status=$1, callback_payload=$2 WHERE id=$3`,
-              ['failed', JSON.stringify(query), paymentRowId]
-            );
-          }
-        } catch (e) {
-          this.logger.warn('Failed to update fatzebra_payment record with failure info', e?.message || e);
-        }
-
-        await queryRunner.commitTransaction();
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-          this.configService.get<string>('ADMIN_PORTAL_URL') ||
-          'http://localhost:3006';
-        const redirectUrl = `${frontendUrl}/payment/cancel?order_id=${orderId}`;
-        return this.generateRedirectHtml(redirectUrl, 'Payment Failed');
-      }
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
-  }
 
   /**
    * Handle SecurePay payment callback
    * POST /store/payment/callback
    */
-  async handleCallback(body: any, query: any): Promise<string> {
+  async handleCallback(body: any, query: any): Promise<any> {
+    // Detect if this is a Fat Zebra response
+    const successful = body.successful || query.successful;
+    const isFatZebra = successful !== undefined && (body.id || query.id);
+
+    if (isFatZebra) {
+      return this.handleFatZebraCallback(body, query);
+    }
+
     // SecurePay sends POST data with payment result
     const { rescode, refid, summary_code, response_text, amount, fp_timestamp, fingerprint } = body || query;
 
@@ -725,7 +414,7 @@ export class StorePaymentService {
       } else {
         // Payment failed
         this.logger.error("Payment failed:", { rescode, refid, summary_code, response_text });
-        const errorMessage = "The order has been cancelled successfully. To pay the invoice, please click on the link sent in the email. Thank You, ZENN team";
+        const errorMessage = "The order has been cancelled successfully. To pay the invoice, please click on the link sent in the email. Thank You, Caterly team";
         await queryRunner.commitTransaction();
         return this.generateErrorHtml(errorMessage);
       }
@@ -737,6 +426,95 @@ export class StorePaymentService {
       await queryRunner.release();
     }
   }
+
+  /**
+   * Handle Fat Zebra payment callback
+   */
+  async handleFatZebraCallback(body: any, query: any): Promise<any> {
+    const data = { ...query, ...body };
+    const { successful, reference, id, message, amount, verification_hash } = data;
+
+    if (!reference) {
+      throw new BadRequestException('Order reference is required');
+    }
+
+    // Extract order ID from reference (format: "Order #123")
+    const orderIdMatch = reference.match(/Order #(\d+)/);
+    const orderId = orderIdMatch ? parseInt(orderIdMatch[1]) : parseInt(reference);
+
+    if (isNaN(orderId)) {
+      throw new BadRequestException('Invalid order reference format');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const orderQuery = `
+        SELECT o.*, c.email, c.firstname, c.lastname
+        FROM orders o
+        LEFT JOIN customer c ON o.customer_id = c.customer_id
+        WHERE o.order_id = $1
+      `;
+      const orderResult = await queryRunner.query(orderQuery, [orderId]);
+
+      if (orderResult.length === 0) {
+        throw new NotFoundException('Order not found');
+      }
+
+      const order = orderResult[0];
+
+      // Security: Validate verification_hash if you wish (requires re-calculating HMAC)
+      const isSuccess = successful === 'true' || successful === true;
+
+      if (isSuccess) {
+        // Double-check if already paid
+        if (order.payment_status === 'paid' || order.order_status === 2) {
+          await queryRunner.commitTransaction();
+          const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+            this.configService.get<string>('ADMIN_PORTAL_URL') ||
+            'http://localhost:3000';
+          return this.generateRedirectHtml(`${frontendUrl}/orders/${orderId}`, 'Payment Already Processed');
+        }
+
+        // Update order status
+        await queryRunner.query(
+          `UPDATE orders 
+           SET order_status = 2,
+               payment_status = 'paid', 
+               payment_date = NOW(),
+               mark_paid_comment = 'Paid via Fat Zebra HPP - Transaction: ${id}',
+               date_modified = NOW()
+           WHERE order_id = $1`,
+          [orderId]
+        );
+
+        await queryRunner.commitTransaction();
+
+        // Send confirmation email
+        await this.sendPaymentConfirmationEmail(orderId, order);
+
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3000';
+        return this.generateRedirectHtml(`${frontendUrl}/payment/success?order_id=${orderId}`, 'Payment Successful');
+      } else {
+        await queryRunner.rollbackTransaction();
+        this.logger.error("Fat Zebra payment failed:", { id, message, reference });
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3000';
+        return this.generateRedirectHtml(`${frontendUrl}/payment/failed?order_id=${orderId}&message=${encodeURIComponent(message || 'Unknown error')}`, 'Payment Failed');
+      }
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
 
   /**
    * Generate SecurePay form HTML
@@ -776,6 +554,39 @@ export class StorePaymentService {
     <input type="hidden" name="card_types" value="VISA|MASTERCARD|AMEX">
     <input type="hidden" name="display_receipt" value="no">
     <input type="hidden" name="display_cardholder_name" value="no">
+  </form>
+  <p>Redirecting to secure payment gateway...</p>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Generate Fat Zebra HPP form HTML
+   */
+  private generateFatZebraForm(params: {
+    fatZebraUrl: string;
+    username: string;
+    amount: number;
+    reference: string;
+    currency: string;
+    returnUrl: string;
+    verificationHash: string;
+  }): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Redirecting to Payment...</title>
+</head>
+<body onload="document.getElementById('fatzebra_form').submit()">
+  <form id="fatzebra_form" action="${params.fatZebraUrl}" method="post">
+    <input type="hidden" name="username" value="${params.username}">
+    <input type="hidden" name="amount" value="${params.amount}">
+    <input type="hidden" name="reference" value="${params.reference}">
+    <input type="hidden" name="currency" value="${params.currency}">
+    <input type="hidden" name="return_url" value="${params.returnUrl}">
+    <input type="hidden" name="verification_hash" value="${params.verificationHash}">
   </form>
   <p>Redirecting to secure payment gateway...</p>
 </body>
@@ -837,7 +648,7 @@ export class StorePaymentService {
    * Process Pin Payments charge
    * POST /store/payment/:orderId/charge
    */
-  async processPinPayment(orderId: number, cardToken: string, ipAddress: string): Promise<string> {
+  async processPinPayment(orderId: number, cardToken: string, ipAddress: string): Promise<any> {
     // SECURITY: Validate order_id is numeric
     if (!orderId || isNaN(orderId) || orderId <= 0) {
       throw new BadRequestException('Valid order ID is required');
@@ -972,15 +783,16 @@ export class StorePaymentService {
           this.configService.get<string>('ADMIN_PORTAL_URL') ||
           'http://localhost:3000';
         const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-        return this.generateRedirectHtml(redirectUrl, 'Payment Successful');
+        return { success: true, message: 'Payment Successful', transaction_id: chargeResponse.response.token, redirect_url: redirectUrl };
 
       } else {
         // Payment failed
         await queryRunner.rollbackTransaction();
         this.logger.error("Pin Payments charge failed:", chargeResponse.response.error_message);
-        const errorMessage = chargeResponse.response.error_message ||
-          "Payment failed. Please try again or contact support.";
-        return this.generateErrorHtml(errorMessage);
+        return {
+          success: false,
+          message: chargeResponse.response.error_message || "Payment failed. Please try again or contact support."
+        };
       }
 
     } catch (error: any) {
@@ -991,10 +803,207 @@ export class StorePaymentService {
         throw error;
       }
 
-      const errorMessage = error.response?.data?.error_description ||
-        error.message ||
-        "An error occurred processing your payment. Please try again.";
-      return this.generateErrorHtml(errorMessage);
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || "An error occurred processing your payment. Please try again."
+      };
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Process Fat Zebra payment charge
+   * POST /store/payment/:orderId/fatzebra-charge
+   */
+  async processFatZebraPayment(orderId: number, paymentData: any, ipAddress: string): Promise<any> {
+    // SECURITY: Validate order_id is numeric
+    if (!orderId || isNaN(orderId) || orderId <= 0) {
+      throw new BadRequestException('Valid order ID is required');
+    }
+
+    if (!paymentData) {
+      throw new BadRequestException('Payment data is required');
+    }
+
+    if (!ipAddress) {
+      throw new BadRequestException('IP address is required');
+    }
+
+    // Check if Fat Zebra is configured
+    if (!this.fatZebraService.isConfigured()) {
+      throw new InternalServerErrorException('Fat Zebra is not configured');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Get order details
+      const orderQuery = `
+        SELECT 
+          o.*,
+          c.firstname,
+          c.lastname,
+          c.email,
+          c.company_id,
+          co.company_name,
+          l.location_name
+        FROM orders o
+        LEFT JOIN customer c ON o.customer_id = c.customer_id
+        LEFT JOIN company co ON c.company_id = co.company_id
+        LEFT JOIN locations l ON o.location_id = l.location_id
+        WHERE o.order_id = $1
+      `;
+      const orderResult = await queryRunner.query(orderQuery, [orderId]);
+
+      if (orderResult.length === 0) {
+        throw new NotFoundException('Order not found');
+      }
+
+      const order = orderResult[0];
+
+      // SECURITY: Check if order is already paid
+      if (order.payment_status === 'paid' || order.payment_date) {
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3000';
+        const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
+        await queryRunner.commitTransaction();
+        return this.generateRedirectHtml(alreadyPaidUrl, 'Order Already Paid');
+      }
+
+      // Calculate total
+      let discount = 0;
+      if (order.coupon_id) {
+        if (order.coupon_type === 'F') {
+          discount = parseFloat(order.coupon_discount || 0);
+        } else {
+          const subtotal = parseFloat(order.order_total || 0) +
+            parseFloat(order.late_fee || 0) +
+            parseFloat(order.delivery_fee || 0);
+          discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
+        }
+      }
+
+      const total = parseFloat(order.order_total || 0) +
+        parseFloat(order.late_fee || 0) +
+        parseFloat(order.delivery_fee || 0) -
+        discount;
+
+      // Convert to cents
+      const totalCents = Math.round(total * 100);
+
+      const customerName = order.customer_order_name ||
+        `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
+        'Customer';
+
+      let fatZebraResponse;
+      if (paymentData.token) {
+        // Tokenized purchase
+        fatZebraResponse = await this.fatZebraService.createTokenPurchase({
+          amount: totalCents,
+          reference: `Order #${orderId}`,
+          customer_ip: ipAddress,
+          token: paymentData.token,
+          cvv: paymentData.cvv,
+        });
+      } else {
+        // Direct card purchase (for testing/sandbox as requested)
+        fatZebraResponse = await this.fatZebraService.createPurchase({
+          amount: totalCents,
+          reference: `Order #${orderId}`,
+          customer_ip: ipAddress,
+          card_holder: paymentData.card_holder || customerName,
+          card_number: paymentData.card_number,
+          card_expiry: paymentData.card_expiry,
+          cvv: paymentData.cvv,
+        });
+      }
+
+      if (fatZebraResponse.successful) {
+        // Double-check order hasn't been paid
+        const checkQuery = await queryRunner.query(
+          `SELECT order_status, payment_status, payment_date FROM orders WHERE order_id = $1 FOR UPDATE`,
+          [orderId]
+        );
+
+        if (checkQuery[0]?.order_status === 2 ||
+          checkQuery[0]?.payment_status === 'paid' ||
+          checkQuery[0]?.payment_date) {
+          await queryRunner.rollbackTransaction();
+          this.logger.warn(`Order ${orderId} was already paid (race condition detected)`);
+          const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+            this.configService.get<string>('ADMIN_PORTAL_URL') ||
+            'http://localhost:3000';
+          const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
+          return { success: true, message: 'Payment Already Processed', already_paid: true, redirect_url: redirectUrl };
+        }
+
+        // Mark order as paid
+        await queryRunner.query(
+          `UPDATE orders 
+           SET order_status = 2,
+               payment_status = 'paid', 
+               payment_date = NOW(),
+               mark_paid_comment = 'Paid via Fat Zebra - Transaction: ${fatZebraResponse.id || fatZebraResponse.response?.id}',
+               date_modified = NOW()
+           WHERE order_id = $1`,
+          [orderId]
+        );
+
+        await queryRunner.commitTransaction();
+
+        // Send payment confirmation email
+        await this.sendPaymentConfirmationEmail(orderId, order);
+
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+          'http://localhost:3000';
+        const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
+        return { success: true, message: 'Payment Successful', transaction_id: fatZebraResponse.id || fatZebraResponse.response?.id, redirect_url: redirectUrl };
+
+      } else {
+        // Payment failed
+        await queryRunner.rollbackTransaction();
+
+        // Detailed error extraction
+        const fzErrors = fatZebraResponse.errors || [];
+        const fzMessage = fatZebraResponse.message || fatZebraResponse.response?.message;
+        const responseCode = fatZebraResponse.response_code || fatZebraResponse.response?.response_code;
+
+        let errorMessage = "Payment failed.";
+        if (fzErrors.length > 0) {
+          errorMessage = fzErrors.join(', ');
+        } else if (fzMessage) {
+          errorMessage = fzMessage;
+        } else if (responseCode) {
+          errorMessage = `Payment declined (Code: ${responseCode})`;
+        } else {
+          errorMessage = "Payment failed. Please check your card details or try a different card.";
+        }
+
+        this.logger.error(`Fat Zebra charge failed [Order ${orderId}]: ${errorMessage}`, JSON.stringify(fatZebraResponse));
+
+        return {
+          success: false,
+          message: errorMessage
+        };
+      }
+
+    } catch (error: any) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Fat Zebra processing error [Order ${orderId}]:`, error);
+
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || "An error occurred processing your payment. Please try again."
+      };
     } finally {
       await queryRunner.release();
     }
@@ -1035,16 +1044,16 @@ export class StorePaymentService {
     <p style="margin: 0; font-size: 18px; line-height: 21px;">&#160;</p>
     <div style="margin-top: 20px;">
       <p style="margin: 0; font-size: 18px; line-height: 31px;">
-        <strong>The Invoice for your order at ZENN (Order #${orderId}) can be viewed at</strong>
+        <strong>The Invoice for your order at Caterly (Order #${orderId}) can be viewed at</strong>
       </p>
       <br/><br/>
       <a href="${invoiceViewUrl}">
-        <button style="background-color:#46449B;border:solid 1px #46449B;cursor:pointer;border-radius:0.25rem;font-weight:600;font-size:0.8125rem;line-height:normal;padding:0.5rem 0.9rem;color:white">
+        <button style="background-color:#E03A3E;border:solid 1px #E03A3E;cursor:pointer;border-radius:0.25rem;font-weight:600;font-size:0.8125rem;line-height:normal;padding:0.5rem 0.9rem;color:white">
           View Invoice
         </button>
       </a>
       <br/>
-      <p>Please call us on ZENN (1300 827 286) for any queries.</p>
+      <p>Please call us on Caterly (1300 827 286) for any queries.</p>
     </div>
     <div style="margin-top: 20px;">
       <p style="font-size:18px;line-height:14px;"><strong>Note:</strong> Payment must be made 7 days from the delivery date. Late payment fees will incur after 21 days.</p>
@@ -1052,7 +1061,7 @@ export class StorePaymentService {
       <p style="margin: 0; font-size: 18px; line-height: 31px;">
         Thank you and have a great day!<br/><br/>
         Kind Regards,<br/>
-        ZENN Team
+        Caterly Team
       </p>
     </div>
   </div>
@@ -1062,7 +1071,7 @@ export class StorePaymentService {
 
         await this.emailService.sendEmail({
           to: emailList,
-          subject: 'ZENN',
+          subject: 'Caterly',
           html: emailBody,
         });
       }

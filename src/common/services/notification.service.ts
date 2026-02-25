@@ -31,7 +31,7 @@ export class NotificationService {
     private dataSource: DataSource,
     private emailService: EmailService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   /**
    * Load email configuration from database
@@ -62,7 +62,7 @@ export class NotificationService {
       this.emailConfigCache.set('smtp_user', this.configService.get<string>('SMTP_USER') || '');
       this.emailConfigCache.set('smtp_password', this.configService.get<string>('SMTP_PASSWORD') || '');
       this.emailConfigCache.set('from_email', this.configService.get<string>('FROM_EMAIL') || '');
-      this.emailConfigCache.set('from_name', this.configService.get<string>('COMPANY_NAME') || 'St Dreux Coffee Roasters');
+      this.emailConfigCache.set('from_name', this.configService.get<string>('COMPANY_NAME') || 'Caterly');
     }
 
     return this.emailConfigCache;
@@ -180,8 +180,8 @@ export class NotificationService {
 
       // Get email configuration
       const emailConfig = await this.loadEmailConfig();
-      const fromEmail = emailConfig.get('from_email') || this.configService.get<string>('FROM_EMAIL') || 'noreply@stdreux.com';
-      const fromName = emailConfig.get('from_name') || this.configService.get<string>('COMPANY_NAME') || 'St Dreux Coffee Roasters';
+      const fromEmail = emailConfig.get('from_email') || this.configService.get<string>('FROM_EMAIL') || 'noreply@caterly.com.au';
+      const fromName = emailConfig.get('from_name') || this.configService.get<string>('COMPANY_NAME') || 'Caterly';
       const replyTo = emailConfig.get('reply_to') || fromEmail;
 
       // Log email as pending
