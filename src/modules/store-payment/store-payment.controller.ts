@@ -77,6 +77,48 @@ export class StorePaymentController {
     res.send(html);
   }
 
+  @Post(':orderId/fatzebra-charge')
+  @ApiOperation({ summary: 'Process Fat Zebra payment charge' })
+  @ApiParam({ name: 'orderId', type: Number })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        token: { type: 'string', description: 'Fat Zebra card token (optional if card details provided)' },
+        card_holder: { type: 'string', description: 'Card holder name' },
+        card_number: { type: 'string', description: 'Card number' },
+        card_expiry: { type: 'string', description: 'Card expiry (MM/YYYY)' },
+        cvv: { type: 'string', description: 'CVV' },
+        ip_address: { type: 'string', description: 'Customer IP address' },
+      },
+      required: ['ip_address'],
+    },
+  })
+  async fatZebraCharge(
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Body() body: any,
+    @Res() res: Response,
+  ) {
+    const { ip_address, ...paymentData } = body;
+    const result = await this.storePaymentService.processFatZebraPayment(
+      orderId,
+      paymentData,
+      ip_address,
+    );
+    res.json(result);
+  }
+
+  @Get(':orderId/fatzebra-hpp')
+  @ApiOperation({ summary: 'Get Fat Zebra HPP form' })
+  async fatZebraHpp(
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Res() res: Response,
+  ) {
+    const html = await this.storePaymentService.getFatZebraHppForm(orderId);
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  }
+
   @Get(':orderId/process')
   @ApiOperation({ summary: 'Process payment - redirects to Pin Payments flow' })
   @ApiParam({ name: 'orderId', type: Number })

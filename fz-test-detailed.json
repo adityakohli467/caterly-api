@@ -1,0 +1,34 @@
+[
+  {
+    "url": "https://gateway.pmnts-sandbox.io/v1.0/ping",
+    "status": "SUCCESS",
+    "data": {
+      "timestamp": 1772005926,
+      "echo": "NONE"
+    }
+  },
+  {
+    "url": "https://gateway.pmnts.io/v1.0/ping",
+    "status": "SUCCESS",
+    "data": {
+      "timestamp": 1772005926,
+      "echo": "NONE"
+    }
+  },
+  {
+    "url": "https://gateway.sandbox.fatzebra.com.au/v1.0/ping",
+    "status": "SUCCESS",
+    "data": {
+      "timestamp": 1772005927,
+      "echo": "NONE"
+    }
+  },
+  {
+    "url": "https://gateway.fatzebra.com.au/v1.0/ping",
+    "status": "SUCCESS",
+    "data": {
+      "timestamp": 1772005928,
+      "echo": "NONE"
+    }
+  }
+]
