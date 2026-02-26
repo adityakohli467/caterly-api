@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, UnauthorizedException, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
@@ -6,7 +6,7 @@ import { EmailService } from '../../common/services/email.service';
 import * as crypto from 'crypto';
 
 @Injectable()
-export class StoreOrdersService {
+export class StoreOrdersService implements OnModuleInit {
   private readonly logger = new Logger(StoreOrdersService.name);
 
   constructor(
@@ -14,15 +14,36 @@ export class StoreOrdersService {
     private notificationsService: AdminNotificationsService,
     private emailService: EmailService,
     private configService: ConfigService,
-  ) {}
+  ) { }
+
+  async onModuleInit() {
+    try {
+      this.logger.log('Ensuring orders table supports guest checkouts...');
+      // Drop NOT NULL constraint on customer_id to allow guest orders
+      await this.dataSource.query(`ALTER TABLE orders ALTER COLUMN customer_id DROP NOT NULL;`);
+      // Also ensure firstname, lastname, email, telephone are nullable (though they should be already)
+      await this.dataSource.query(`ALTER TABLE orders ALTER COLUMN firstname DROP NOT NULL;`);
+      await this.dataSource.query(`ALTER TABLE orders ALTER COLUMN lastname DROP NOT NULL;`);
+      await this.dataSource.query(`ALTER TABLE orders ALTER COLUMN email DROP NOT NULL;`);
+      await this.dataSource.query(`ALTER TABLE orders ALTER COLUMN telephone DROP NOT NULL;`);
+
+      this.logger.log('Orders table updated successfully.');
+    } catch (error) {
+      this.logger.warn('Failed to update orders table schema (it might already be updated): ' + error.message);
+    }
+  }
 
   /**
    * Create order (checkout)
    */
   async createOrder(
-    userId: number,
+    userId: number | null,
     orderData: {
       items: any[];
+      firstname?: string;
+      lastname?: string;
+      email?: string;
+      telephone?: string;
       delivery_address: string;
       delivery_date?: string;
       delivery_start_date?: string;
@@ -41,6 +62,10 @@ export class StoreOrdersService {
   ) {
     const {
       items,
+      firstname,
+      lastname,
+      email,
+      telephone,
       delivery_address,
       delivery_date,
       delivery_start_date,
@@ -70,45 +95,52 @@ export class StoreOrdersService {
     await queryRunner.startTransaction();
 
     try {
-      // Get customer with customer_type
-      const customerQuery = `
-        SELECT c.customer_id, c.telephone, c.email, c.customer_type 
-        FROM customer c 
-        WHERE c.user_id = $1
-      `;
-      const customerResult = await queryRunner.query(customerQuery, [userId]);
-      const customer = customerResult[0];
+      let customer: any = null;
+      if (userId) {
+        // Get customer with customer_type
+        const customerQuery = `
+          SELECT c.customer_id, c.telephone, c.email, c.customer_type 
+          FROM customer c 
+          WHERE c.user_id = $1
+        `;
+        const customerResult = await queryRunner.query(customerQuery, [userId]);
+        customer = customerResult[0];
 
-      if (!customer) {
-        throw new NotFoundException('Customer not found');
+        if (!customer) {
+          throw new NotFoundException('Customer not found');
+        }
       }
 
       // Get customer product option discounts (option-level)
       const optionDiscountsMap = new Map();
       // Get customer product discounts (product-level)
       const productDiscountsMap = new Map();
-      
-      const optionDiscountQuery = `
-        SELECT product_id, option_value_id, discount_percentage
-        FROM customer_product_option_discount
-        WHERE customer_id = $1
-      `;
-      const optionDiscountResult = await queryRunner.query(optionDiscountQuery, [customer.customer_id]);
-      optionDiscountResult.forEach((row: any) => {
-        const key = `${row.product_id}_${row.option_value_id}`;
-        optionDiscountsMap.set(key, parseFloat(row.discount_percentage));
-      });
 
-      // Get product-level discounts
-      const productDiscountQuery = `
-        SELECT product_id, discount_percentage
-        FROM customer_product_discount
-        WHERE customer_id = $1
-      `;
-      const productDiscountResult = await queryRunner.query(productDiscountQuery, [customer.customer_id]);
-      productDiscountResult.forEach((row: any) => {
-        productDiscountsMap.set(row.product_id, parseFloat(row.discount_percentage));
-      });
+      if (customer) {
+        const optionDiscountQuery = `
+          SELECT product_id, option_value_id, discount_percentage
+          FROM customer_product_option_discount
+          WHERE customer_id = $1
+        `;
+        const optionDiscountResult = await queryRunner.query(optionDiscountQuery, [customer.customer_id]);
+        optionDiscountResult.forEach((row: any) => {
+          const key = `${row.product_id}_${row.option_value_id}`;
+          optionDiscountsMap.set(key, parseFloat(row.discount_percentage));
+        });
+      }
+
+      if (customer) {
+        // Get product-level discounts
+        const productDiscountQuery = `
+          SELECT product_id, discount_percentage
+          FROM customer_product_discount
+          WHERE customer_id = $1
+        `;
+        const productDiscountResult = await queryRunner.query(productDiscountQuery, [customer.customer_id]);
+        productDiscountResult.forEach((row: any) => {
+          productDiscountsMap.set(row.product_id, parseFloat(row.discount_percentage));
+        });
+      }
 
       // Calculate order total with product-option-level and product-level discounts
       let subtotal = 0;
@@ -153,7 +185,7 @@ export class StoreOrdersService {
         } else {
           // Product has no options - apply product-level discount
           const productDiscountPercentage = productDiscountsMap.get(product.product_id) || 0;
-          
+
           if (productDiscountPercentage > 0) {
             const discountAmount = itemTotal * (productDiscountPercentage / 100);
             itemTotal = itemTotal - discountAmount;
@@ -172,11 +204,10 @@ export class StoreOrdersService {
         });
       }
 
-      // Calculate wholesale discount based on customer type
       let wholesaleDiscount = 0;
-      const customerType = customer.customer_type || 'Retail';
+      const customerType = customer?.customer_type || 'Retail';
       const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-      
+
       if (isWholesale) {
         const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
         wholesaleDiscount = subtotal * (discountPercentage / 100);
@@ -279,13 +310,17 @@ export class StoreOrdersService {
           coupon_id,
           coupon_discount,
           gst_status,
-          standing_order
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+          standing_order,
+          firstname,
+          lastname,
+          email,
+          telephone
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
         RETURNING order_id
       `;
 
       const orderResult = await queryRunner.query(orderQuery, [
-        customer.customer_id,
+        customer?.customer_id || null,
         1, // branch_id
         1, // shipping_method
         total,
@@ -293,16 +328,20 @@ export class StoreOrdersService {
         deliveryDateTime,
         deliveryFee,
         delivery_address,
-        customer.telephone || null,
-        customer.email || null,
+        telephone || customer?.telephone || null,
+        email || customer?.email || null,
         parseInt((postcode || '3000').toString()) || 3000,
         (notes && notes.trim()) || null,
         (notes && notes.trim()) || null,
-        userId,
+        userId || null,
         couponId,
         couponDiscount,
         gstStatus,
-        standingOrderDays
+        standingOrderDays,
+        firstname || null,
+        lastname || null,
+        email || null,
+        telephone || null
       ]);
 
       const orderId = orderResult[0].order_id;
@@ -413,7 +452,7 @@ export class StoreOrdersService {
               WHERE coupon_id = $1
             `;
             await queryRunner.query(fallbackUpdate, [couponId]);
-          } catch (_) {}
+          } catch (_) { }
         }
       }
 
@@ -423,22 +462,23 @@ export class StoreOrdersService {
       const completeOrderQuery = `
         SELECT 
           o.*,
-          c.firstname,
-          c.lastname,
-          c.email,
-          c.telephone
+          c.firstname as account_firstname,
+          c.lastname as account_lastname,
+          c.email as account_email,
+          c.telephone as account_telephone
         FROM orders o
-        JOIN customer c ON o.customer_id = c.customer_id
+        LEFT JOIN customer c ON o.customer_id = c.customer_id
         WHERE o.order_id = $1
       `;
       const completeOrder = await this.dataSource.query(completeOrderQuery, [orderId]);
 
       // Create notification for admin users
       if (this.notificationsService) {
-        const customerName = completeOrder[0].customer_order_name || 
-          `${completeOrder[0].firstname || ''} ${completeOrder[0].lastname || ''}`.trim() || 
-          'Customer';
-        
+        const order = completeOrder[0];
+        const customerName = order.customer_order_name ||
+          `${order.firstname || order.account_firstname || ''} ${order.lastname || order.account_lastname || ''}`.trim() ||
+          'Guest';
+
         this.notificationsService.createNotification({
           type: 'order',
           message: `New order #${orderId} placed by ${customerName} for $${total.toFixed(2)}`,
@@ -457,22 +497,22 @@ export class StoreOrdersService {
       // Send order confirmation email to customer
       try {
         const order = completeOrder[0];
-        const customerEmail = order.customer_order_email || order.email;
-        const customerName = order.customer_order_name || 
-          `${order.firstname || ''} ${order.lastname || ''}`.trim() || 
-          'Customer';
+        const customerEmail = order.customer_order_email || order.email || order.account_email;
+        const customerName = order.customer_order_name ||
+          `${order.firstname || order.account_firstname || ''} ${order.lastname || order.account_lastname || ''}`.trim() ||
+          'Guest';
 
         if (customerEmail) {
-          const backendUrl = this.configService.get<string>('BACKEND_URL') || 
-                           this.configService.get<string>('FRONTEND_URL') || 
-                           'http://localhost:9000';
-          const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 
-                            this.configService.get<string>('STORE_URL') || 
-                            'http://localhost:3000';
-          
+          const backendUrl = this.configService.get<string>('BACKEND_URL') ||
+            this.configService.get<string>('FRONTEND_URL') ||
+            'http://localhost:9000';
+          const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
+            this.configService.get<string>('STORE_URL') ||
+            'http://localhost:3000';
+
           // Generate payment link (deep link)
           const paymentLink = `${frontendUrl}/payment?order_id=${orderId}`;
-          
+
           // Generate invoice view link
           const orderTotal = parseFloat(order.order_total || total);
           const authToken = crypto
@@ -482,7 +522,7 @@ export class StoreOrdersService {
           const invoiceUrl = `${backendUrl}/admin/orders/${orderId}/invoice/view?auth=${authToken}&ofrom=frontend`;
 
           const companyName = this.configService.get<string>('COMPANY_NAME') || 'Sendrix';
-          
+
           const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -646,22 +686,9 @@ export class StoreOrdersService {
   }
 
   /**
-   * Get single order details
+   * Get single guest order details (for payment)
    */
-  async getOrder(userId: number, orderId: number) {
-    // Get customer with customer_type
-    const customerQuery = `
-      SELECT c.customer_id, c.customer_type 
-      FROM customer c 
-      WHERE c.user_id = $1
-    `;
-    const customerResult = await this.dataSource.query(customerQuery, [userId]);
-    const customer = customerResult[0];
-
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
-    }
-
+  async getGuestOrder(orderId: number) {
     // Get order with coupon info
     const orderQuery = `
       SELECT 
@@ -670,14 +697,14 @@ export class StoreOrdersService {
         cp.type as coupon_type
       FROM orders o
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
-      WHERE o.order_id = $1 AND o.customer_id = $2
+      WHERE o.order_id = $1 AND (o.customer_id IS NULL OR o.user_id IS NULL)
     `;
 
-    const orderResult = await this.dataSource.query(orderQuery, [orderId, customer.customer_id]);
+    const orderResult = await this.dataSource.query(orderQuery, [orderId]);
     const order = orderResult[0];
 
     if (!order) {
-      throw new NotFoundException('Order not found');
+      throw new NotFoundException('Guest order not found');
     }
 
     // Get order products with product names
@@ -696,7 +723,97 @@ export class StoreOrdersService {
     // Get order product options for each product
     const items: any[] = [];
     let subtotal = 0;
-    
+
+    for (const product of productsResult) {
+      const optionsQuery = `
+        SELECT * FROM order_product_option 
+        WHERE order_product_id = $1
+      `;
+      const optionsResult = await this.dataSource.query(optionsQuery, [product.order_product_id]);
+
+      // Calculate item total
+      const itemTotal = parseFloat(product.total || product.price || '0') * parseInt(product.quantity || '1', 10);
+      subtotal += itemTotal;
+
+      items.push({
+        ...product,
+        options: optionsResult,
+        item_total: itemTotal,
+      });
+    }
+
+    // Ensure frontend gets total consistently
+    order.total = order.order_total;
+
+    return {
+      order: {
+        ...order,
+        subtotal,
+        items,
+      },
+    };
+  }
+
+  /**
+   * Get single order details
+   */
+  async getOrder(userId: number, orderId: number) {
+    // 1. Get order with coupon info first
+    const orderQuery = `
+      SELECT 
+        o.*,
+        cp.coupon_code,
+        cp.type as coupon_type
+      FROM orders o
+      LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
+      WHERE o.order_id = $1
+    `;
+
+    const orderResult = await this.dataSource.query(orderQuery, [orderId]);
+    const order = orderResult[0];
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // 2. Clear customer lookup to verify ownership
+    const customerQuery = `
+      SELECT c.customer_id, c.customer_type 
+      FROM customer c 
+      WHERE c.user_id = $1
+    `;
+    const customerResult = await this.dataSource.query(customerQuery, [userId]);
+    const customer = customerResult[0];
+    const customerId = customer?.customer_id || null;
+
+    // Verify ownership: must match either user_id OR customer_id
+    const isOwner = (order.user_id && Number(order.user_id) === Number(userId)) ||
+      (order.customer_id && customerId && Number(order.customer_id) === Number(customerId));
+
+    if (!isOwner) {
+      throw new NotFoundException('Order not found or access denied');
+    }
+
+    // Ensure frontend gets total consistently
+    order.total = order.order_total;
+
+    // Get order products with product names
+    const productsQuery = `
+      SELECT 
+        op.*,
+        p.product_name,
+        p.product_image
+      FROM order_product op
+      LEFT JOIN product p ON op.product_id = p.product_id
+      WHERE op.order_id = $1
+      ORDER BY op.sort_order, op.order_product_id
+    `;
+    const productsResult = await this.dataSource.query(productsQuery, [orderId]);
+
+    // Get order product options for each product
+    const items: any[] = [];
+    let subtotal = 0;
+
     for (const product of productsResult) {
       const optionsQuery = `
         SELECT * FROM order_product_option 
@@ -726,23 +843,23 @@ export class StoreOrdersService {
     // Calculate breakdown
     const orderTotal = parseFloat(order.order_total || '0');
     const deliveryFee = parseFloat(order.delivery_fee || '0');
-    
+
     // Calculate wholesale discount based on customer type
     let wholesaleDiscount = 0;
     const customerType = customer.customer_type || 'Retail';
     const isWholesale = customerType && (customerType.includes('Wholesale') || customerType.includes('Wholesaler'));
-    
+
     if (isWholesale) {
       const discountPercentage = customerType.includes('Full Service') ? 15 : 10;
       wholesaleDiscount = subtotal * (discountPercentage / 100);
     }
-    
+
     const afterWholesaleDiscount = subtotal - wholesaleDiscount;
-    
+
     // Get coupon discount (use stored value if available, otherwise calculate)
     let couponDiscount = 0;
     let couponCode = order.coupon_code || null;
-    
+
     if (order.coupon_id) {
       // Use stored coupon_discount if available (for historical accuracy)
       if (order.coupon_discount && parseFloat(order.coupon_discount) > 0) {
