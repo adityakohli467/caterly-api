@@ -53,10 +53,10 @@ export class AdminOrdersService {
         o.coupon_id,
         o.coupon_discount as stored_coupon_discount,
         o.user_id,
-        c.firstname,
-        c.lastname,
-        c.email,
-        c.telephone,
+        COALESCE(o.firstname, c.firstname) as firstname,
+        COALESCE(o.lastname, c.lastname) as lastname,
+        COALESCE(o.email, c.email) as email,
+        COALESCE(o.telephone, c.telephone) as telephone,
         c.customer_type,
         co.company_name,
         d.department_name,
@@ -157,6 +157,9 @@ export class AdminOrdersService {
         c.firstname ILIKE $${paramIndex} OR
         c.lastname ILIKE $${paramIndex} OR
         c.email ILIKE $${paramIndex} OR
+        o.firstname ILIKE $${paramIndex} OR
+        o.lastname ILIKE $${paramIndex} OR
+        o.email ILIKE $${paramIndex} OR
         co.company_name ILIKE $${paramIndex} OR
         d.department_name ILIKE $${paramIndex}
       )`;
@@ -294,10 +297,10 @@ export class AdminOrdersService {
       SELECT 
         o.*,
         o.coupon_id,
-        c.firstname,
-        c.lastname,
-        c.email,
-        c.telephone,
+        COALESCE(o.firstname, c.firstname) as firstname,
+        COALESCE(o.lastname, c.lastname) as lastname,
+        COALESCE(o.email, c.email) as email,
+        COALESCE(o.telephone, c.telephone) as telephone,
         c.customer_type,
         c.company_id,
         c.department_id,
@@ -480,8 +483,8 @@ export class AdminOrdersService {
 
   async create(createOrderDto: any, userId?: number): Promise<any> {
     // Validate required fields BEFORE starting transaction
-    if (!createOrderDto || !createOrderDto.customer_id) {
-      throw new BadRequestException('Customer ID is required');
+    if (!createOrderDto) {
+      throw new BadRequestException('Order data is required');
     }
 
     if (!createOrderDto.location_id) {
@@ -504,6 +507,10 @@ export class AdminOrdersService {
     try {
       const {
         customer_id,
+        firstname,
+        lastname,
+        email,
+        telephone,
         location_id,
         delivery_date, // New: separate date field
         delivery_date_time, // Optional - for backward compatibility
@@ -629,11 +636,12 @@ export class AdminOrdersService {
         `INSERT INTO orders (
           customer_id, location_id, branch_id, shipping_method, delivery_date_time, delivery_fee, order_total,
           order_status, order_comments, coupon_id, coupon_discount, delivery_address, delivery_method,
-          account_email, cost_center, delivery_contact, delivery_details, standing_order, user_id, payment_status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          account_email, cost_center, delivery_contact, delivery_details, standing_order, user_id, payment_status,
+          firstname, lastname, email, telephone
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
         RETURNING *`,
         [
-          customer_id,
+          customer_id || null,
           location_id,
           branch_id,
           shipping_method,
@@ -653,6 +661,10 @@ export class AdminOrdersService {
           standing_order,
           user_id,
           'order', // Mark as 'order' to distinguish from quotes (quotes will have NULL or 'pending')
+          firstname || null,
+          lastname || null,
+          email || null,
+          telephone || null,
         ],
       );
 
@@ -725,8 +737,8 @@ export class AdminOrdersService {
 
   async update(id: number, updateOrderDto: any, userId?: number): Promise<any> {
     // Validate required fields
-    if (!updateOrderDto || !updateOrderDto.customer_id) {
-      throw new BadRequestException('Customer ID is required');
+    if (!updateOrderDto) {
+      throw new BadRequestException('Order data is required');
     }
 
     if (!updateOrderDto.location_id) {
@@ -762,6 +774,10 @@ export class AdminOrdersService {
         : 'order';
       const {
         customer_id,
+        firstname,
+        lastname,
+        email,
+        telephone,
         location_id,
         delivery_date,
         delivery_date_time,
@@ -891,11 +907,15 @@ export class AdminOrdersService {
              order_status = $18,
              payment_status = $19,
              standing_order = $20,
+             firstname = $21,
+             lastname = $22,
+             email = $23,
+             telephone = $24,
              date_modified = CURRENT_TIMESTAMP
-         WHERE order_id = $21
+         WHERE order_id = $25
          RETURNING *`,
         [
-          customer_id,
+          customer_id || null,
           location_id,
           branch_id,
           shipping_method,
@@ -915,6 +935,10 @@ export class AdminOrdersService {
           currentOrderStatus, // Preserve existing order_status
           preservedPaymentStatus, // Ensure payment_status is 'order' (not 'quote' or NULL)
           finalStandingOrder, // Update or preserve standing_order
+          firstname || null,
+          lastname || null,
+          email || null,
+          telephone || null,
           id,
         ],
       );

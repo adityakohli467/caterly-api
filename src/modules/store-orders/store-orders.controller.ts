@@ -13,6 +13,7 @@ import {
   UseInterceptors,
   UploadedFiles,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
@@ -22,45 +23,45 @@ import { AdminUploadService } from '../admin-upload/admin-upload.service';
 
 @ApiTags('Store Orders')
 @Controller('store/orders')
-@UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
 export class StoreOrdersController {
+  private readonly logger = new Logger(StoreOrdersController.name);
+
   constructor(
     private readonly storeOrdersService: StoreOrdersService,
     private readonly adminUploadService: AdminUploadService,
-  ) {}
+  ) { }
 
   @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create order (checkout)' })
   async createOrder(
     @Request() req: any,
-    @Body() orderData: {
-      items: any[];
-      delivery_address: string;
-      delivery_date?: string;
-      delivery_start_date?: string;
-      delivery_time?: string;
-      delivery_frequency?: string;
-      standing_order?: number;
-      frequency_unit?: 'days' | 'weeks' | 'months';
-      frequency_value?: number;
-      delivery_fee?: number;
-      payment_method?: string;
-      notes?: string;
-      coupon_code?: string;
-      postcode?: string;
-      gst_status?: number;
-    },
+    @Body() orderData: any,
   ) {
-    const userId = req.user?.user_id;
-    if (!userId) {
-      throw new Error('Unauthorized');
+    try {
+      this.logger.debug(`Creating order for user: ${req.user?.user_id || 'Guest'}`);
+      const userId = req.user?.user_id || null;
+      return await this.storeOrdersService.createOrder(userId, orderData);
+    } catch (error) {
+      this.logger.error('Order creation error in controller:', error);
+      throw error;
     }
-    return this.storeOrdersService.createOrder(userId, orderData);
+  }
+
+  @Post('guest')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create guest order' })
+  async createGuestOrder(
+    @Body() orderData: any,
+  ) {
+    return this.storeOrdersService.createOrder(null, orderData);
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get customer orders' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -71,7 +72,7 @@ export class StoreOrdersController {
   ) {
     const userId = req.user?.user_id;
     if (!userId) {
-      throw new Error('Unauthorized');
+      throw new BadRequestException('Unauthorized');
     }
     return this.storeOrdersService.listOrders(
       userId,
@@ -80,7 +81,19 @@ export class StoreOrdersController {
     );
   }
 
+  @Get('guest/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get single guest order details (public)' })
+  @ApiParam({ name: 'id', type: Number })
+  async getGuestOrder(
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.storeOrdersService.getGuestOrder(id);
+  }
+
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get single order details' })
   @ApiParam({ name: 'id', type: Number })
   async getOrder(
@@ -89,7 +102,7 @@ export class StoreOrdersController {
   ) {
     const userId = req.user?.user_id;
     if (!userId) {
-      throw new Error('Unauthorized');
+      throw new BadRequestException('Unauthorized');
     }
     return this.storeOrdersService.getOrder(userId, id);
   }
@@ -104,19 +117,18 @@ export class StoreOrdersController {
     @Param('id', ParseIntPipe) orderId: number,
     @UploadedFiles() files: Array<Express.Multer.File>,
   ) {
-    const userId = req.user?.user_id;
-    if (!userId) {
-      throw new Error('Unauthorized');
-    }
+    const userId = req.user?.user_id || null;
 
     if (!files || files.length === 0) {
       throw new BadRequestException('No file uploaded');
     }
 
-    // Verify that the order belongs to the user
-    const order = await this.storeOrdersService.getOrder(userId, orderId);
-    if (!order) {
-      throw new BadRequestException('Order not found or access denied');
+    // Verify that the order belongs to the user (if user is logged in)
+    if (userId) {
+      const order = await this.storeOrdersService.getOrder(userId, orderId);
+      if (!order) {
+        throw new BadRequestException('Order not found or access denied');
+      }
     }
 
     return this.adminUploadService.uploadOrderImage(files, orderId);
