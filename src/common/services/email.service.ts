@@ -35,9 +35,9 @@ export class EmailService {
     }
 
     // Use SMTP settings for Caterly
-    const smtpHost = this.configService.get<string>('SMTP_HOST') || 'mail.zenncafe.com.au';
+    const smtpHost = this.configService.get<string>('SMTP_HOST') || 'mail.caterly.com.au';
     const smtpPort = this.configService.get<number>('SMTP_PORT') || 587;
-    const smtpUser = this.configService.get<string>('SMTP_USER') || 'catering@zenncafe.com.au';
+    const smtpUser = this.configService.get<string>('SMTP_USER') || 'catering@caterly.com.au';
     // Handle password with special characters - remove quotes if present
     let smtpPassword = this.configService.get<string>('SMTP_PASSWORD') || this.configService.get<string>('SMTP_PASS') || 'TWT#4Tgu^@ox';
     // Remove surrounding quotes if present (handles .env files that quote values)
@@ -48,7 +48,7 @@ export class EmailService {
       smtpPassword = smtpPassword.slice(1, -1);
     }
     const smtpSecure = this.configService.get<string>('SMTP_SECURE') === 'true';
-    const fromEmail = this.configService.get<string>('FROM_EMAIL') || 'catering@zenncafe.com.au';
+    const fromEmail = this.configService.get<string>('FROM_EMAIL') || 'catering@caterly.com.au';
     const fromName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
     // Note: We allow SMTP to work without explicit config for backward compatibility
@@ -185,7 +185,7 @@ export class EmailService {
       // Get configuration - use Caterly defaults
       const fromEmail = this.configService.get<string>('FROM_EMAIL') ||
         this.configService.get<string>('SMTP_USER') ||
-        'catering@zenncafe.com.au';
+        'catering@caterly.com.au';
       const fromName = this.configService.get<string>('COMPANY_NAME') ||
         'Caterly';
 
@@ -262,7 +262,7 @@ export class EmailService {
 - Try port 465 with SMTP_SECURE=true if port 587 doesn't work`;
       } else if (errorMessage.includes('timeout') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('ENOTFOUND')) {
         helpfulError = `Connection failed to ${smtpHost}:${smtpPort}. DNS lookup failed - the SMTP host may not exist. Please try:
-- mail.zenncafe.com.au (most common for cPanel/hosting)
+- mail.caterly.com.au (most common for cPanel/hosting)
 - Check your email hosting provider's documentation for the correct SMTP host
 - Common alternatives: mail.yourdomain.com, smtp.yourdomain.com, or your hosting provider's mail server
 - If using cPanel, check Email Accounts > Connect Devices for SMTP settings
@@ -295,7 +295,7 @@ export class EmailService {
       // Get configuration - use Caterly defaults
       const fromEmail = this.configService.get<string>('MAILERSEND_FROM_EMAIL') ||
         this.configService.get<string>('FROM_EMAIL') ||
-        'catering@zenncafe.com.au';
+        'catering@caterly.com.au';
       const fromName = this.configService.get<string>('MAILERSEND_FROM_NAME') ||
         this.configService.get<string>('COMPANY_NAME') ||
         'Caterly';

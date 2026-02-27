@@ -16,7 +16,7 @@ export class ProductsService {
     private categoryRepository: Repository<Category>,
     private dataSource: DataSource,
     private s3Service: S3Service,
-  ) {}
+  ) { }
 
   async findAll(query: any): Promise<any> {
     const { limit = 20, offset = 0, search, status } = query;
@@ -25,7 +25,7 @@ export class ProductsService {
       SELECT 
         p.*,
         (
-          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name))
+          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
           FROM product_category pc
           JOIN category c ON pc.category_id = c.category_id
           WHERE pc.product_id = p.product_id
@@ -114,7 +114,7 @@ export class ProductsService {
       `SELECT 
         p.*,
         (
-          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name))
+          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
           FROM product_category pc
           JOIN category c ON pc.category_id = c.category_id
           WHERE pc.product_id = p.product_id
@@ -232,6 +232,7 @@ export class ProductsService {
         categories,
         options,
         product_image_url,
+        info_description,
       } = parsedData;
 
       // Validation
@@ -289,9 +290,10 @@ export class ProductsService {
           product_status,
           user_id,
           product_image,
+          info_description,
           product_date_added,
           product_date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
         RETURNING *`,
         [
           product_name,
@@ -303,6 +305,7 @@ export class ProductsService {
           product_status || 1,
           user_id || userId,
           product_image_url || null,
+          info_description || null,
         ],
       );
 
@@ -356,12 +359,12 @@ export class ProductsService {
         }
       }
 
-              await queryRunner.commitTransaction();
+      await queryRunner.commitTransaction();
 
       // Fetch complete product
       return this.findOne(newProduct.product_id);
     } catch (error) {
-              await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction();
       this.logger.error('Create product error:', error);
       throw error;
     } finally {
@@ -434,6 +437,7 @@ export class ProductsService {
         categories,
         options,
         product_image_url,
+        info_description,
       } = parsedData;
 
       // Validation
@@ -479,8 +483,9 @@ export class ProductsService {
            customer_type_visibility = COALESCE($6, customer_type_visibility),
            product_status = COALESCE($7, product_status),
            product_image = COALESCE($8, product_image),
+           info_description = COALESCE($9, info_description),
            product_date_modified = CURRENT_TIMESTAMP
-         WHERE product_id = $9
+         WHERE product_id = $10
          RETURNING *`;
 
       const updateParams = [
@@ -492,6 +497,7 @@ export class ProductsService {
         customer_type_visibility || 'all',
         product_status,
         product_image_url,
+        info_description,
         id,
       ];
 
@@ -503,7 +509,7 @@ export class ProductsService {
 
       // Update categories
       if (categories !== undefined && Array.isArray(categories)) {
-              await queryRunner.query('DELETE FROM product_category WHERE product_id = $1', [id]);
+        await queryRunner.query('DELETE FROM product_category WHERE product_id = $1', [id]);
         for (const categoryId of categories) {
           await queryRunner.query('INSERT INTO product_category (product_id, category_id) VALUES ($1, $2)', [id, categoryId]);
         }
@@ -511,7 +517,7 @@ export class ProductsService {
 
       // Update options
       if (options !== undefined && Array.isArray(options)) {
-              await queryRunner.query('DELETE FROM product_option WHERE product_id = $1', [id]);
+        await queryRunner.query('DELETE FROM product_option WHERE product_id = $1', [id]);
         for (const option of options) {
           if (!option.option_value_id) {
             throw new Error(`Missing option_value_id in option: ${JSON.stringify(option)}`);
@@ -526,7 +532,7 @@ export class ProductsService {
 
       // Update product images
       if (allImageUrls !== undefined && allImageUrls !== null) {
-              await queryRunner.query('DELETE FROM product_images WHERE product_id = $1', [id]);
+        await queryRunner.query('DELETE FROM product_images WHERE product_id = $1', [id]);
         if (Array.isArray(allImageUrls) && allImageUrls.length > 0) {
           for (let i = 0; i < allImageUrls.length; i++) {
             const imageUrl = allImageUrls[i];
@@ -545,11 +551,11 @@ export class ProductsService {
         }
       }
 
-              await queryRunner.commitTransaction();
+      await queryRunner.commitTransaction();
 
       return this.findOne(id);
     } catch (error) {
-              await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction();
       this.logger.error('Update product error:', error);
       throw error;
     } finally {
@@ -564,13 +570,13 @@ export class ProductsService {
 
     try {
       // Delete product options
-              await queryRunner.query('DELETE FROM product_option WHERE product_id = $1', [id]);
+      await queryRunner.query('DELETE FROM product_option WHERE product_id = $1', [id]);
 
       // Delete product categories
-              await queryRunner.query('DELETE FROM product_category WHERE product_id = $1', [id]);
+      await queryRunner.query('DELETE FROM product_category WHERE product_id = $1', [id]);
 
       // Delete product images
-              await queryRunner.query('DELETE FROM product_images WHERE product_id = $1', [id]);
+      await queryRunner.query('DELETE FROM product_images WHERE product_id = $1', [id]);
 
       // Delete product
       const result = await queryRunner.query('DELETE FROM product WHERE product_id = $1 RETURNING *', [id]);
@@ -579,9 +585,9 @@ export class ProductsService {
         throw new NotFoundException('Product not found');
       }
 
-              await queryRunner.commitTransaction();
+      await queryRunner.commitTransaction();
     } catch (error) {
-              await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction();
       this.logger.error('Delete product error:', error);
       throw error;
     } finally {
@@ -595,7 +601,7 @@ export class ProductsService {
       SELECT c.*, pc.category_name as parent_category_name
       FROM category c
       LEFT JOIN category pc ON c.parent_category_id = pc.category_id
-      ORDER BY c.category_name
+      ORDER BY c.sort_order ASC, c.category_name ASC
     `);
     return { categories };
   }

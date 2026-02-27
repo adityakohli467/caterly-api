@@ -15,7 +15,7 @@ export class AdminCustomersService {
     private dataSource: DataSource,
     private configService: ConfigService,
     private emailService: EmailService,
-  ) {}
+  ) { }
 
   async findAll(query: any): Promise<any> {
     const { limit = 20, offset = 0, search, company_id, customer_type, archived = 'false', department_id, exclude_pending_approval } = query;
@@ -544,7 +544,7 @@ export class AdminCustomersService {
       this.dataSource.query(productsWithOptionsQuery, [customerId, isWholesale]),
       this.dataSource.query(productsWithoutOptionsQuery, [customerId])
     ]);
-    
+
     // Format products with options
     // Include ALL products with options, even if options array is empty/null
     const productsWithOptions = productsWithOptionsResult.map((p: any) => ({
@@ -564,7 +564,7 @@ export class AdminCustomersService {
       has_options: false
     }));
 
-    return { 
+    return {
       products: [...productsWithOptions, ...productsWithoutOptions],
       productsWithOptions,
       productsWithoutOptions
@@ -793,14 +793,14 @@ export class AdminCustomersService {
       return;
     }
 
-    const customerName = customer.firstname && customer.lastname 
+    const customerName = customer.firstname && customer.lastname
       ? `${customer.firstname} ${customer.lastname}`
       : customer.firstname || customer.user_username || 'Customer';
 
-    const companyName = this.configService.get<string>('COMPANY_NAME') || 'St. Dreux Coffee';
-    const storefrontUrl = this.configService.get<string>('STOREFRONT_URL') || 
-                         this.configService.get<string>('FRONTEND_URL') || 
-                         'https://storefront.example.com';
+    const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
+    const storefrontUrl = this.configService.get<string>('STOREFRONT_URL') ||
+      this.configService.get<string>('FRONTEND_URL') ||
+      'https://storefront.example.com';
 
     const emailSubject = `Your Wholesale Account Has Been Approved - ${companyName}`;
 

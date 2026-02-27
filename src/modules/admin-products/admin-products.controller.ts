@@ -24,7 +24,7 @@ import { AdminGuard } from '../../auth/guards/admin.guard';
 @UseGuards(JwtAuthGuard, AdminGuard)
 @ApiBearerAuth()
 export class AdminProductsController {
-  constructor(private readonly adminProductsService: AdminProductsService) {}
+  constructor(private readonly adminProductsService: AdminProductsService) { }
 
   @Get()
   @ApiOperation({ summary: 'List products with search and pagination' })
@@ -97,6 +97,7 @@ export class AdminProductsController {
         options: { type: 'string', description: 'JSON array string' },
         product_image_url: { type: 'string' },
         product_images: { type: 'string', description: 'JSON array string' },
+        info_description: { type: 'string' },
         images: { type: 'array', items: { type: 'string', format: 'binary' } },
       },
     },
@@ -150,6 +151,7 @@ export class AdminProductsController {
         options: { type: 'string', description: 'JSON array string' },
         product_image_url: { type: 'string' },
         product_images: { type: 'string', description: 'JSON array string' },
+        info_description: { type: 'string' },
         images: { type: 'array', items: { type: 'string', format: 'binary' } },
       },
     },

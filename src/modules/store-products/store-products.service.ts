@@ -11,7 +11,7 @@ export class StoreProductsService {
     private dataSource: DataSource,
     private jwtService: JwtService,
     private pricingService: PricingService,
-  ) {}
+  ) { }
 
   /**
    * Get customer discount percentage
@@ -151,6 +151,7 @@ export class StoreProductsService {
         p.product_image,
         p.product_status,
         p.product_date_added,
+        p.info_description,
         ph.heading as header_name,
         array_agg(DISTINCT pc.category_id) FILTER (WHERE pc.category_id IS NOT NULL) as categories,
         (
@@ -228,7 +229,7 @@ export class StoreProductsService {
 
     query += `
       GROUP BY p.product_id, p.product_name, p.product_description, p.product_price, 
-               p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, p.product_date_added, ph.heading
+               p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, p.product_date_added, p.info_description, ph.heading
       ${orderByClause}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -298,7 +299,7 @@ export class StoreProductsService {
     // Get customer ID and discounts
     let customerId: number | null = null;
     let productDiscountsMap = new Map<number, number>();
-    
+
     if (userId) {
       try {
         // Get customer_id from user_id
@@ -308,7 +309,7 @@ export class StoreProductsService {
         );
         if (customerQuery.length > 0) {
           customerId = customerQuery[0].customer_id;
-          
+
           // Get product-level discounts from customer_product_discount table
           const productDiscountQuery = `
             SELECT product_id, discount_percentage
@@ -332,10 +333,10 @@ export class StoreProductsService {
       const retailPrice = parseFloat(product.product_price || 0);
       const wholesalePrice = product.retail_price ? parseFloat(product.retail_price || 0) : null;
       const retailDiscountPercentage = product.retail_discount_percentage ? parseFloat(product.retail_discount_percentage) : null;
-      
+
       // Get product-level discount (prioritize customer_product_discount over general discount)
       const productDiscount = productDiscountsMap.get(product.product_id) || 0;
-      
+
       // Use pricing service for consistent calculations
       const pricing = this.pricingService.calculateProductPrice(
         retailPrice,
@@ -450,6 +451,7 @@ export class StoreProductsService {
       FROM category c
       JOIN product_category pc ON c.category_id = pc.category_id
       WHERE pc.product_id = $1
+      ORDER BY c.sort_order ASC, c.category_name ASC
     `;
     const categoriesResult = await this.dataSource.query(categoriesQuery, [id]);
 
@@ -520,7 +522,7 @@ export class StoreProductsService {
     let customerId: number | null = null;
     let productDiscount = 0;
     const optionDiscountsMap = new Map<number, number>();
-    
+
     if (userId) {
       try {
         // Get customer_id from user_id
@@ -530,7 +532,7 @@ export class StoreProductsService {
         );
         if (customerQuery.length > 0) {
           customerId = customerQuery[0].customer_id;
-          
+
           // Get product-level discount from customer_product_discount table
           const productDiscountQuery = `
             SELECT discount_percentage
@@ -629,7 +631,7 @@ export class StoreProductsService {
         parent_category_id,
         category_name
       FROM category
-      ORDER BY parent_category_id NULLS FIRST, category_name
+      ORDER BY sort_order ASC, category_name ASC
     `;
 
     const result = await this.dataSource.query(query);
@@ -715,6 +717,7 @@ export class StoreProductsService {
         p.customer_type_visibility,
         p.product_image,
         p.product_status,
+        p.info_description,
         ph.heading as header_name,
         (
           SELECT json_agg(
@@ -758,7 +761,7 @@ export class StoreProductsService {
 
     query += `
       GROUP BY p.product_id, p.product_name, p.product_description, p.product_price, 
-               p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, ph.heading
+               p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, p.info_description, ph.heading
       ORDER BY p.product_id DESC
       LIMIT $1
     `;
@@ -906,7 +909,7 @@ export class StoreProductsService {
 
     // Build query with proper column name - use string concatenation for column name
     const featuredColumn = featuredFlag === 'featured_1' ? 'featured_1' : 'featured_2';
-    
+
     // Use proper SQL identifier quoting for column name
     let query = `
       SELECT 

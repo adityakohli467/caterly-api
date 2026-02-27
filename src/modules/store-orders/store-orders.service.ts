@@ -521,7 +521,7 @@ export class StoreOrdersService implements OnModuleInit {
             .digest('hex');
           const invoiceUrl = `${backendUrl}/admin/orders/${orderId}/invoice/view?auth=${authToken}&ofrom=frontend`;
 
-          const companyName = this.configService.get<string>('COMPANY_NAME') || 'Sendrix';
+          const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
           const emailHtml = `
 <!DOCTYPE html>

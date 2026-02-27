@@ -20,7 +20,7 @@ import { AdminGuard } from '../../auth/guards/admin.guard';
 @UseGuards(JwtAuthGuard, AdminGuard)
 @ApiBearerAuth()
 export class AdminCategoriesController {
-  constructor(private adminCategoriesService: AdminCategoriesService) {}
+  constructor(private adminCategoriesService: AdminCategoriesService) { }
 
   @Get()
   @ApiOperation({ summary: 'List all categories' })
@@ -51,5 +51,12 @@ export class AdminCategoriesController {
   async delete(@Param('id', ParseIntPipe) id: number) {
     await this.adminCategoriesService.delete(id);
     return { message: 'Category deleted successfully' };
+  }
+
+  @Post('reorder')
+  @ApiOperation({ summary: 'Reorder categories' })
+  async reorder(@Body() reorderDto: { category_id: number; sort_order: number }[]) {
+    await this.adminCategoriesService.reorder(reorderDto);
+    return { message: 'Categories reordered successfully' };
   }
 }
