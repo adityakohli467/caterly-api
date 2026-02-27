@@ -11,7 +11,7 @@ export class AdminProductsService {
     private dataSource: DataSource,
     private s3Service: S3Service,
     private pricingService: PricingService,
-  ) {}
+  ) { }
 
   /**
    * List products with search and pagination
@@ -30,7 +30,7 @@ export class AdminProductsService {
       SELECT 
         p.*,
         (
-          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name))
+          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
           FROM product_category pc
           JOIN category c ON pc.category_id = c.category_id
           WHERE pc.product_id = p.product_id
@@ -237,7 +237,7 @@ export class AdminProductsService {
       SELECT 
         p.*,
         (
-          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name))
+          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
           FROM product_category pc
           JOIN category c ON pc.category_id = c.category_id
           WHERE pc.product_id = p.product_id
@@ -423,6 +423,7 @@ export class AdminProductsService {
       featured_1?: boolean;
       featured_2?: boolean;
       show_in_storefront?: boolean;
+      info_description?: string;
     },
     files?: Express.Multer.File[],
   ) {
@@ -479,6 +480,7 @@ export class AdminProductsService {
         featured_1,
         featured_2,
         show_in_storefront,
+        info_description,
       } = productData;
 
       // Validation
@@ -548,9 +550,10 @@ export class AdminProductsService {
           featured_1,
           featured_2,
           show_in_storefront,
+          info_description,
           product_date_added,
           product_date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
         RETURNING *`,
         [
           product_name,
@@ -573,6 +576,7 @@ export class AdminProductsService {
           featured_1 || false,
           featured_2 || false,
           show_in_storefront || false,
+          info_description || null,
         ],
       );
 
@@ -674,6 +678,7 @@ export class AdminProductsService {
       featured_1?: boolean;
       featured_2?: boolean;
       show_in_storefront?: boolean;
+      info_description?: string;
     },
     files?: Express.Multer.File[],
   ) {
@@ -728,6 +733,7 @@ export class AdminProductsService {
         featured_1,
         featured_2,
         show_in_storefront,
+        info_description,
       } = productData;
 
       // Validate update fields
@@ -842,6 +848,10 @@ export class AdminProductsService {
       if (show_in_storefront !== undefined) {
         updateFields.push(`show_in_storefront = $${paramIndex++}`);
         updateParams.push(show_in_storefront);
+      }
+      if (info_description !== undefined) {
+        updateFields.push(`info_description = $${paramIndex++}`);
+        updateParams.push(info_description || null);
       }
 
       updateFields.push('product_date_modified = CURRENT_TIMESTAMP');
@@ -1120,7 +1130,7 @@ export class AdminProductsService {
       const result = await queryRunner.query(updateQuery, [status, id]);
 
       await queryRunner.commitTransaction();
-      
+
       return {
         message: `Product ${status === 1 ? 'activated' : 'deactivated'} successfully`,
         product: result[0],

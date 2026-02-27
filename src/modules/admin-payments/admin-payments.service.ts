@@ -15,7 +15,7 @@ export class AdminPaymentsService {
     private stripeService: StripeService,
     private emailService: EmailService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
 
   /**
@@ -25,7 +25,7 @@ export class AdminPaymentsService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
-    
+
     try {
       const result = await queryRunner.query(
         `INSERT INTO payment_history (
@@ -123,7 +123,7 @@ export class AdminPaymentsService {
     if (order.order_status === 2 || order.payment_status === 'paid' || order.payment_status === 'succeeded') {
       const existingPayments = await this.getOrderPaymentHistory(orderId);
       const successfulPayments = existingPayments.filter((p: any) => p.payment_status === 'succeeded' && p.payment_type === 'charge');
-      
+
       if (successfulPayments.length > 0) {
         throw new BadRequestException({
           message: 'Order already paid',
@@ -211,7 +211,7 @@ export class AdminPaymentsService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
-    
+
     try {
       // Get order details
       const orderQuery = `
@@ -242,7 +242,7 @@ export class AdminPaymentsService {
 
       // Use Stripe refund method
       const refundAmount = amount || parseFloat(order.order_total);
-      
+
       // Call the Stripe refund method
       const refundResult = await this.processStripeRefund(
         order.payment_transaction_id,
@@ -394,7 +394,7 @@ export class AdminPaymentsService {
           const customerEmail = order.customer_order_email || order.email;
           const refundAmount = refund.amount / 100; // Convert from cents
           const isFullRefund = !amount || refund.amount >= parseFloat(paymentHistory.amount || 0);
-          const companyName = this.configService.get<string>('COMPANY_NAME') || 'Sendrix';
+          const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
           if (customerEmail) {
             const emailHtml = `
@@ -517,7 +517,7 @@ export class AdminPaymentsService {
       try {
         await this.stripeService.initialize();
         const paymentIntent = await this.stripeService.getPaymentIntentStatus(order.payment_transaction_id);
-        
+
         // Update status if changed
         const stripeStatus = paymentIntent.status === 'succeeded' ? 'succeeded' : paymentIntent.status;
         if (stripeStatus !== order.payment_status) {
@@ -717,7 +717,7 @@ export class AdminPaymentsService {
    */
   async getOrderPaymentHistoryPublic(orderId: number) {
     const payments = await this.getOrderPaymentHistory(orderId);
-    
+
     // Sanitize sensitive data
     const sanitizedPayments = payments.map((payment: any) => ({
       ...payment,
@@ -806,12 +806,12 @@ export class AdminPaymentsService {
     // Record webhook event in payment history
     if (chargeData?.token) {
       const existingPayment = await this.getPaymentByTransactionId(chargeData.token);
-      
+
       if (existingPayment) {
-        const newStatus = eventType.includes('succeeded') ? 'succeeded' : 
-                         eventType.includes('failed') ? 'failed' : 
-                         eventType.includes('refund') ? 'refunded' : 'pending';
-        
+        const newStatus = eventType.includes('succeeded') ? 'succeeded' :
+          eventType.includes('failed') ? 'failed' :
+            eventType.includes('refund') ? 'refunded' : 'pending';
+
         await this.updatePaymentStatus(
           chargeData.token,
           newStatus,
@@ -829,7 +829,7 @@ export class AdminPaymentsService {
 
     if (orderResult.length > 0) {
       const orderByTransaction = orderResult[0];
-      
+
       if (eventType === 'charge.succeeded') {
         await this.dataSource.query(
           `UPDATE orders 

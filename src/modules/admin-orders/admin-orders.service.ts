@@ -1032,7 +1032,7 @@ export class AdminOrdersService {
           2: 'paid',
           3: 'processing',
           4: 'awaiting approval',
-          5: 'completed',
+          5: 'delivered',
           7: 'approved',
           8: 'rejected',
         };
@@ -1041,7 +1041,7 @@ export class AdminOrdersService {
         const customerName = orderDetails.customer_order_name ||
           `${orderDetails.firstname || ''} ${orderDetails.lastname || ''}`.trim() ||
           'Customer';
-        const companyName = this.configService.get<string>('COMPANY_NAME') || 'Sendrix';
+        const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
         // Only send email for important status changes
         if ([0, 2, 3, 5, 7, 8].includes(orderStatus)) {
@@ -1152,6 +1152,7 @@ export class AdminOrdersService {
         COUNT(CASE WHEN order_status = 1 THEN 1 END) as new_orders,
         COUNT(CASE WHEN order_status = 4 THEN 1 END) as pending_approval,
         COUNT(CASE WHEN order_status = 7 THEN 1 END) as approved,
+        COUNT(CASE WHEN order_status = 5 THEN 1 END) as completed_orders,
         COUNT(CASE WHEN order_status = 2 THEN 1 END) as paid_orders
       FROM orders
       WHERE order_status NOT IN (0, 8)
@@ -1183,7 +1184,7 @@ export class AdminOrdersService {
     const revenueResult = await this.dataSource.query(`
       SELECT COALESCE(SUM(order_total), 0) as total_revenue
       FROM orders
-      WHERE order_status IN (2, 7)
+      WHERE order_status IN (2, 7, 5)
     `);
 
     const todayResult = await this.dataSource.query(`
@@ -1382,7 +1383,8 @@ export class AdminOrdersService {
         newOrders: parseInt(stats.new_orders) || 0,
         pendingApproval: parseInt(stats.pending_approval) || 0,
         approved: parseInt(stats.approved) || 0,
-        completed: parseInt(stats.paid_orders) || 0,
+        completed: parseInt(stats.completed_orders) || 0,
+        paidOrders: parseInt(stats.paid_orders) || 0,
         todayOrders: parseInt(todayResult[0]?.today_orders) || 0,
         totalRevenue: parseFloat(revenueResult[0]?.total_revenue) || 0,
         deliveriesToday: parseInt(deliveriesTodayResult[0]?.deliveries_today) || 0,
@@ -2036,6 +2038,44 @@ export class AdminOrdersService {
 
     return {
       message: 'Order marked as complete',
+      status: 'complete',
+      order: updatedOrder.order,
+    };
+  }
+
+  /**
+   * Mark order as delivered
+   * Sets order_status = 5 and is_completed = 1
+   */
+  async deliver(id: number): Promise<any> {
+    // Check if order exists
+    const orderCheck = await this.dataSource.query(
+      `SELECT order_id FROM orders WHERE order_id = $1`,
+      [id]
+    );
+
+    if (orderCheck.length === 0) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Update order_status to 5 (Delivered) and is_completed = 1
+    const updateQuery = `
+      UPDATE orders 
+      SET order_status = 5,
+          is_completed = 1,
+          date_modified = CURRENT_TIMESTAMP
+      WHERE order_id = $1
+      RETURNING *
+    `;
+
+    await this.dataSource.query(updateQuery, [id]);
+
+    // Get updated order with all details
+    const updatedOrder = await this.findOne(id);
+
+    return {
+      message: 'Order marked as delivered',
+      status: 'delivered',
       order: updatedOrder.order,
     };
   }

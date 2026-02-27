@@ -37,6 +37,9 @@ export class Category {
   @UpdateDateColumn({ name: "category_date_modified" })
   category_date_modified!: Date
 
+  @Column({ type: "int", default: 0 })
+  sort_order!: number
+
   // Relations
   @ManyToMany(() => Product, (product) => product.categories)
   products!: Product[]

@@ -1491,7 +1491,7 @@ export class AdminQuotesService {
 
       const customerName = quote.firstname && quote.lastname ? `${quote.firstname} ${quote.lastname}` : 'Customer';
       // Normalize company name - remove "Email" suffix if present and ensure proper formatting
-      const companyName = (process.env.COMPANY_NAME || 'Caterly').replace(/\s*–\s*Email\s*$/i, '');
+      const companyName = 'Caterly';
       const emailSubject = `Quote #${quote.order_id} - ${companyName}`;
 
       const emailBody = `

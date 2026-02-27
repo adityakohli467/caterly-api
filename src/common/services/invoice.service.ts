@@ -356,7 +356,7 @@ export class InvoiceService {
       });
 
       return {
-        companyName: settings.company_name || this.configService.get<string>('COMPANY_NAME') || 'Caterly',
+        companyName: 'Caterly', // Force Caterly branding
         companyEmail: settings.company_email || this.configService.get<string>('COMPANY_EMAIL') || 'info@caterly.com.au',
         companyPhone: settings.company_phone || this.configService.get<string>('COMPANY_PHONE') || '+61 3 1234 5678',
         companyAbn: settings.company_abn || this.configService.get<string>('COMPANY_ABN') || 'ABN: 12 345 678 901',
@@ -365,7 +365,7 @@ export class InvoiceService {
     } catch (error) {
       this.logger.warn('Could not fetch company settings from database, using defaults:', error);
       return {
-        companyName: this.configService.get<string>('COMPANY_NAME') || 'Caterly',
+        companyName: 'Caterly',
         companyEmail: this.configService.get<string>('COMPANY_EMAIL') || 'info@caterly.com.au',
         companyPhone: this.configService.get<string>('COMPANY_PHONE') || '+61 3 1234 5678',
         companyAbn: this.configService.get<string>('COMPANY_ABN') || 'ABN: 12 345 678 901',

@@ -21,7 +21,7 @@ import { AdminGuard } from '../../auth/guards/admin.guard';
 @UseGuards(JwtAuthGuard, AdminGuard)
 @ApiBearerAuth()
 export class AdminOrdersController {
-  constructor(private adminOrdersService: AdminOrdersService) {}
+  constructor(private adminOrdersService: AdminOrdersService) { }
 
   @Get('stats')
   @ApiOperation({ summary: 'Get order statistics' })
@@ -89,6 +89,12 @@ export class AdminOrdersController {
   @ApiOperation({ summary: 'Mark order as complete (finished preparing)' })
   async complete(@Param('id', ParseIntPipe) id: number) {
     return this.adminOrdersService.complete(id);
+  }
+
+  @Put(':id/deliver')
+  @ApiOperation({ summary: 'Mark order as delivered' })
+  async deliver(@Param('id', ParseIntPipe) id: number) {
+    return this.adminOrdersService.deliver(id);
   }
 
   @Put(':id/products/:productId/prepared')

@@ -11,7 +11,7 @@ export class AdminFeedbackService {
     private dataSource: DataSource,
     private emailService: EmailService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   /**
    * List customer feedbacks
@@ -138,22 +138,22 @@ export class AdminFeedbackService {
     }
 
     // Determine recipient email (try multiple sources)
-    const recipientEmailFinal = recipientEmail || 
-                                feedback.customer_order_email || 
-                                feedback.delivery_email ||
-                                feedback.email ||
-                                feedback.customer_email;
+    const recipientEmailFinal = recipientEmail ||
+      feedback.customer_order_email ||
+      feedback.delivery_email ||
+      feedback.email ||
+      feedback.customer_email;
 
     if (!recipientEmailFinal) {
       throw new BadRequestException('Customer email not found. Please provide recipient email.');
     }
 
-    const customerName = feedback.customer_order_name || 
-                        (feedback.firstname && feedback.lastname ? `${feedback.firstname} ${feedback.lastname}` : null) ||
-                        feedback.cname || 
-                        'Customer';
+    const customerName = feedback.customer_order_name ||
+      (feedback.firstname && feedback.lastname ? `${feedback.firstname} ${feedback.lastname}` : null) ||
+      feedback.cname ||
+      'Customer';
 
-    const companyName = this.configService.get<string>('COMPANY_NAME') || 'St. Dreux Coffee';
+    const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
     // Build ratings display
     const ratings: string[] = [];
