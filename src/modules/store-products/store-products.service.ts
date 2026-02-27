@@ -921,6 +921,7 @@ export class StoreProductsService {
         p.customer_type_visibility,
         p.product_image,
         p.product_status,
+        p.info_description,
         ph.heading as header_name,
         (
           SELECT json_agg(
