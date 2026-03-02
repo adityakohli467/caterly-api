@@ -1,54 +1,76 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { EmailService } from '../../common/services/email.service';
 import { ConfigService } from '@nestjs/config';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 
 @Injectable()
-export class StoreQuotationService {
-    private readonly logger = new Logger(StoreQuotationService.name);
+export class StoreQuotationService implements OnModuleInit {
+  private readonly logger = new Logger(StoreQuotationService.name);
 
-    constructor(
-        private dataSource: DataSource,
-        private emailService: EmailService,
-        private configService: ConfigService,
-        private notificationsService: AdminNotificationsService,
-    ) { }
+  constructor(
+    private dataSource: DataSource,
+    private emailService: EmailService,
+    private configService: ConfigService,
+    private notificationsService: AdminNotificationsService,
+  ) { }
 
-    /**
-     * Submit a new quotation inquiry from the store side
-     */
-    async submitQuotationInquiry(data: {
-        name: string;
-        contact: string;
-        email: string;
-        delivery_date_time?: string;
-        occasion?: string;
-        message?: string;
-        captcha?: string;
-    }) {
-        const { name, contact, email, delivery_date_time, occasion, message, captcha } = data;
+  async onModuleInit() {
+    try {
+      await this.dataSource.query(`
+                CREATE TABLE IF NOT EXISTS quotation_inquiry (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    contact VARCHAR(100) NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    delivery_date_time VARCHAR(255),
+                    occasion VARCHAR(255),
+                    message TEXT,
+                    status VARCHAR(50) DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+      this.logger.log('Table quotation_inquiry ensured.');
+    } catch (error) {
+      this.logger.error('Failed to ensure quotation_inquiry table:', error);
+    }
+  }
 
-        // Basic validation
-        if (!name || !contact || !email) {
-            throw new BadRequestException('Name, contact numbers, and email are required');
-        }
+  /**
+   * Submit a new quotation inquiry from the store side
+   */
+  async submitQuotationInquiry(data: {
+    name: string;
+    contact: string;
+    email: string;
+    delivery_date_time?: string;
+    occasion?: string;
+    message?: string;
+    captcha?: string;
+  }) {
+    const { name, contact, email, delivery_date_time, occasion, message, captcha } = data;
 
-        // Validate email
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            throw new BadRequestException('Invalid email format');
-        }
+    // Basic validation
+    if (!name || !contact || !email) {
+      throw new BadRequestException('Name, contact numbers, and email are required');
+    }
 
-        // In a real scenario, you'd validate the captcha here.
-        // For now, we accept it as part of the request.
-        if (!captcha && this.configService.get('REQUIRE_CAPTCHA') === 'true') {
-            throw new BadRequestException('Captcha is required');
-        }
+    // Validate email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new BadRequestException('Invalid email format');
+    }
 
-        try {
-            // Insert inquiry into database
-            const insertQuery = `
+    // In a real scenario, you'd validate the captcha here.
+    // For now, we accept it as part of the request.
+    if (!captcha && this.configService.get('REQUIRE_CAPTCHA') === 'true') {
+      throw new BadRequestException('Captcha is required');
+    }
+
+    try {
+      // Insert inquiry into database
+      const insertQuery = `
         INSERT INTO quotation_inquiry (
           name, 
           contact, 
@@ -63,55 +85,55 @@ export class StoreQuotationService {
         RETURNING *
       `;
 
-            const result = await this.dataSource.query(insertQuery, [
-                name,
-                contact,
-                email,
-                delivery_date_time || null,
-                occasion || null,
-                message || null,
-            ]);
+      const result = await this.dataSource.query(insertQuery, [
+        name,
+        contact,
+        email,
+        delivery_date_time || null,
+        occasion || null,
+        message || null,
+      ]);
 
-            const inquiry = result[0];
+      const inquiry = result[0];
 
-            // Send Notification to Admin
-            await this.sendAdminNotification(inquiry);
+      // Send Notification to Admin
+      await this.sendAdminNotification(inquiry);
 
-            // Send Confirmation to User
-            await this.sendUserConfirmation(inquiry);
+      // Send Confirmation to User
+      await this.sendUserConfirmation(inquiry);
 
-            // Create internal notification
-            try {
-                await this.notificationsService.createNotification({
-                    type: 'quotation_inquiry',
-                    message: `New Quotation Request from ${name} (${occasion || 'Post-event'})`,
-                    metadata: {
-                        inquiry_id: inquiry.id,
-                        name: name,
-                        email: email,
-                        occasion: occasion
-                    },
-                });
-            } catch (error) {
-                this.logger.error('Failed to create in-app notification:', error);
-            }
+      // Create internal notification
+      try {
+        await this.notificationsService.createNotification({
+          type: 'quotation_inquiry',
+          message: `New Quotation Request from ${name} (${occasion || 'Post-event'})`,
+          metadata: {
+            inquiry_id: inquiry.id,
+            name: name,
+            email: email,
+            occasion: occasion
+          },
+        });
+      } catch (error) {
+        this.logger.error('Failed to create in-app notification:', error);
+      }
 
-            return {
-                success: true,
-                message: 'Quotation inquiry submitted successfully',
-                id: inquiry.id,
-            };
-        } catch (error) {
-            this.logger.error('Error submitting quotation inquiry:', error);
-            throw error;
-        }
+      return {
+        success: true,
+        message: 'Quotation inquiry submitted successfully',
+        id: inquiry.id,
+      };
+    } catch (error) {
+      this.logger.error('Error submitting quotation inquiry:', error);
+      throw error;
     }
+  }
 
-    private async sendAdminNotification(inquiry: any) {
-        const adminEmail = this.configService.get('ADMIN_EMAIL') || 'catering@caterly.com.au';
-        const companyName = this.configService.get('COMPANY_NAME') || 'Caterly';
+  private async sendAdminNotification(inquiry: any) {
+    const adminEmail = this.configService.get('ADMIN_EMAIL') || 'catering@caterly.com.au';
+    const companyName = this.configService.get('COMPANY_NAME') || 'Caterly';
 
-        const html = `
+    const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
         <div style="background-color: #E03A3E; color: white; padding: 20px; text-align: center;">
           <h1 style="margin: 0; font-size: 24px;">New Quotation Request</h1>
@@ -145,21 +167,21 @@ export class StoreQuotationService {
       </div>
     `;
 
-        try {
-            await this.emailService.sendEmail({
-                to: adminEmail,
-                subject: `New Quotation Request: ${inquiry.name} - ${inquiry.occasion || 'Inquiry'}`,
-                html: html,
-            });
-        } catch (error) {
-            this.logger.error('Failed to send admin quotation notification:', error);
-        }
+    try {
+      await this.emailService.sendEmail({
+        to: adminEmail,
+        subject: `New Quotation Request: ${inquiry.name} - ${inquiry.occasion || 'Inquiry'}`,
+        html: html,
+      });
+    } catch (error) {
+      this.logger.error('Failed to send admin quotation notification:', error);
     }
+  }
 
-    private async sendUserConfirmation(inquiry: any) {
-        const companyName = this.configService.get('COMPANY_NAME') || 'Caterly';
+  private async sendUserConfirmation(inquiry: any) {
+    const companyName = this.configService.get('COMPANY_NAME') || 'Caterly';
 
-        const html = `
+    const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
         <div style="background-color: #E03A3E; color: white; padding: 20px; text-align: center;">
           <h1 style="margin: 0; font-size: 24px;">Thank You for Your Inquiry</h1>
@@ -182,14 +204,14 @@ export class StoreQuotationService {
       </div>
     `;
 
-        try {
-            await this.emailService.sendEmail({
-                to: inquiry.email,
-                subject: `We've received your quotation request - ${companyName}`,
-                html: html,
-            });
-        } catch (error) {
-            this.logger.error('Failed to send user quotation confirmation:', error);
-        }
+    try {
+      await this.emailService.sendEmail({
+        to: inquiry.email,
+        subject: `We've received your quotation request - ${companyName}`,
+        html: html,
+      });
+    } catch (error) {
+      this.logger.error('Failed to send user quotation confirmation:', error);
     }
+  }
 }

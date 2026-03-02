@@ -50,6 +50,24 @@ export class Order {
   @Column({ type: "text", nullable: true })
   shipping_address_1!: string
 
+  @Column({ type: "text", nullable: true })
+  delivery_address!: string
+
+  @Column({ type: "varchar", length: 100, nullable: true })
+  delivery_method!: string
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  account_email!: string
+
+  @Column({ type: "varchar", length: 100, nullable: true })
+  cost_center!: string
+
+  @Column({ type: "text", nullable: true })
+  delivery_contact!: string
+
+  @Column({ type: "text", nullable: true })
+  delivery_details!: string
+
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   order_total!: number
 
@@ -59,8 +77,14 @@ export class Order {
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
   coupon_discount!: number
 
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0, nullable: true })
+  gst!: number
+
   @Column({ type: "int", default: 1 })
   order_status!: number
+
+  @Column({ type: "int", default: 0 })
+  is_completed!: number
 
   @Column({ type: "timestamp", nullable: true })
   delivery_date_time!: Date
@@ -91,6 +115,12 @@ export class Order {
 
   @Column({ type: "int", default: 0 })
   standing_order!: number
+
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  late_fee!: number
+
+  @Column({ type: "int", nullable: true })
+  postcode!: number
 
   @Column({ type: "text", nullable: true })
   order_comments!: string

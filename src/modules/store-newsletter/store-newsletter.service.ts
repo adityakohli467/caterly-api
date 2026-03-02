@@ -1,10 +1,10 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { EmailService } from '../../common/services/email.service';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
-export class StoreNewsletterService {
+export class StoreNewsletterService implements OnModuleInit {
   private readonly logger = new Logger(StoreNewsletterService.name);
 
   constructor(
@@ -12,6 +12,27 @@ export class StoreNewsletterService {
     private emailService: EmailService,
     private configService: ConfigService,
   ) { }
+
+  async onModuleInit() {
+    try {
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS newsletter_subscriptions (
+          subscription_id SERIAL PRIMARY KEY,
+          email VARCHAR(255) NOT NULL UNIQUE,
+          status VARCHAR(50) DEFAULT 'active',
+          source VARCHAR(100),
+          ip_address VARCHAR(100),
+          user_agent TEXT,
+          subscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          unsubscribed_at TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      this.logger.log('Table newsletter_subscriptions ensured.');
+    } catch (error) {
+      this.logger.error('Failed to ensure newsletter_subscriptions table:', error);
+    }
+  }
 
   /**
    * Subscribe to newsletter

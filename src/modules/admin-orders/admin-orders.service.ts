@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -8,7 +8,7 @@ import { InvoiceService } from '../../common/services/invoice.service';
 import * as crypto from 'crypto';
 
 @Injectable()
-export class AdminOrdersService {
+export class AdminOrdersService implements OnModuleInit {
   private readonly logger = new Logger(AdminOrdersService.name);
 
   constructor(
@@ -19,6 +19,89 @@ export class AdminOrdersService {
     private invoiceService: InvoiceService,
     private configService: ConfigService,
   ) { }
+
+  async onModuleInit() {
+    try {
+      this.logger.log('Ensuring orders table schema is up to date...');
+      // Ensure all supplemental columns exist
+      await this.dataSource.query(`
+        DO $$ 
+        BEGIN 
+          -- gst
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='gst') THEN
+            ALTER TABLE orders ADD COLUMN gst DECIMAL(10, 2) DEFAULT 0;
+          END IF;
+          -- is_completed
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='is_completed') THEN
+            ALTER TABLE orders ADD COLUMN is_completed INT DEFAULT 0;
+          END IF;
+          -- late_fee
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='late_fee') THEN
+            ALTER TABLE orders ADD COLUMN late_fee DECIMAL(10, 2) DEFAULT 0;
+          END IF;
+          -- delivery_address
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_address') THEN
+            ALTER TABLE orders ADD COLUMN delivery_address TEXT;
+          END IF;
+          -- delivery_method
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_method') THEN
+            ALTER TABLE orders ADD COLUMN delivery_method VARCHAR(100);
+          END IF;
+          -- account_email
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='account_email') THEN
+            ALTER TABLE orders ADD COLUMN account_email VARCHAR(255);
+          END IF;
+          -- cost_center
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='cost_center') THEN
+            ALTER TABLE orders ADD COLUMN cost_center VARCHAR(100);
+          END IF;
+          -- delivery_contact
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_contact') THEN
+            ALTER TABLE orders ADD COLUMN delivery_contact TEXT;
+          END IF;
+          -- delivery_details
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_details') THEN
+            ALTER TABLE orders ADD COLUMN delivery_details TEXT;
+          END IF;
+          -- postcode
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='postcode') THEN
+            ALTER TABLE orders ADD COLUMN postcode INT;
+          END IF;
+
+          -- order_product columns
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='order_product_comment') THEN
+            ALTER TABLE order_product ADD COLUMN order_product_comment TEXT;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='sort_order') THEN
+            ALTER TABLE order_product ADD COLUMN sort_order INT DEFAULT 1;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='exclude_gst') THEN
+            ALTER TABLE order_product ADD COLUMN exclude_gst INT DEFAULT 0;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='is_prepared') THEN
+            ALTER TABLE order_product ADD COLUMN is_prepared BOOLEAN DEFAULT FALSE;
+          END IF;
+
+          -- order_product_option columns
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product_option' AND column_name='option_price') THEN
+            ALTER TABLE order_product_option ADD COLUMN option_price DECIMAL(10, 2) DEFAULT 0;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product_option' AND column_name='option_total') THEN
+            ALTER TABLE order_product_option ADD COLUMN option_total DECIMAL(10, 2) DEFAULT 0;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product_option' AND column_name='order_id') THEN
+            ALTER TABLE order_product_option ADD COLUMN order_id INT;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product_option' AND column_name='product_option_id') THEN
+            ALTER TABLE order_product_option ADD COLUMN product_option_id INT DEFAULT 0;
+          END IF;
+        END $$;
+      `);
+      this.logger.log('Orders database schema verified successfully.');
+    } catch (error) {
+      this.logger.warn('Failed to verify orders database schema: ' + error.message);
+    }
+  }
 
   async findAll(query: any): Promise<any> {
     const {
@@ -52,6 +135,8 @@ export class AdminOrdersService {
         o.delivery_fee,
         o.coupon_id,
         o.coupon_discount as stored_coupon_discount,
+        o.gst,
+        o.is_completed,
         o.user_id,
         COALESCE(o.firstname, c.firstname) as firstname,
         COALESCE(o.lastname, c.lastname) as lastname,
@@ -281,6 +366,8 @@ export class AdminOrdersService {
         date_modified: row.date_modified,
         coupon_code: couponCode,
         coupon_discount: couponDiscount,
+        gst: parseFloat(row.gst || 0),
+        is_completed: row.is_completed || 0,
       };
     });
 
@@ -639,8 +726,8 @@ export class AdminOrdersService {
           customer_id, location_id, branch_id, shipping_method, delivery_date_time, delivery_fee, order_total,
           order_status, order_comments, coupon_id, coupon_discount, delivery_address, delivery_method,
           account_email, cost_center, delivery_contact, delivery_details, standing_order, user_id, payment_status,
-          firstname, lastname, email, telephone
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+          firstname, lastname, email, telephone, gst
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
         RETURNING *`,
         [
           customer_id || null,
@@ -667,6 +754,7 @@ export class AdminOrdersService {
           lastname || null,
           email || null,
           telephone || null,
+          gst,
         ],
       );
 

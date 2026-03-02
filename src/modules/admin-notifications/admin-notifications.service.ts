@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 export type NotificationType = 'order' | 'contact_inquiry' | 'wholesale_enquiry' | 'newsletter_subscription' | 'quotation_inquiry';
@@ -15,10 +15,30 @@ export interface CreateNotificationData {
 }
 
 @Injectable()
-export class AdminNotificationsService {
+export class AdminNotificationsService implements OnModuleInit {
   private readonly logger = new Logger(AdminNotificationsService.name);
 
   constructor(private dataSource: DataSource) { }
+
+  async onModuleInit() {
+    try {
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS notification (
+          id SERIAL PRIMARY KEY,
+          userid INT NOT NULL,
+          description TEXT,
+          orderid INT DEFAULT 0,
+          date_added DATE DEFAULT CURRENT_DATE,
+          time_added TIME DEFAULT CURRENT_TIME,
+          read_status BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      this.logger.log('Table notification ensured.');
+    } catch (error) {
+      this.logger.error('Failed to ensure notification table:', error);
+    }
+  }
 
   /**
    * Create notification for all admin users
