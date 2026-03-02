@@ -101,6 +101,12 @@ export class Order {
   @CreateDateColumn({ name: "date_added" })
   date_added!: Date
 
+  @Column({ type: "varchar", length: 100, nullable: true })
+  quote_token!: string
+
+  @Column({ type: "text", nullable: true })
+  approval_comments!: string
+
   @UpdateDateColumn({ name: "date_modified" })
   date_modified!: Date
 

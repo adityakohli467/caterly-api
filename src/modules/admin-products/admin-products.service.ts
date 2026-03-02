@@ -424,6 +424,13 @@ export class AdminProductsService {
       featured_2?: boolean;
       show_in_storefront?: boolean;
       info_description?: string;
+      product_tag?: string;
+      product_meta_keyword?: string;
+      product_desc_1?: string;
+      product_desc_2?: string;
+      product_desc_3?: string;
+      product_desc_4?: string;
+      product_desc_5?: string;
     },
     files?: Express.Multer.File[],
   ) {
@@ -481,6 +488,13 @@ export class AdminProductsService {
         featured_2,
         show_in_storefront,
         info_description,
+        product_tag,
+        product_meta_keyword,
+        product_desc_1,
+        product_desc_2,
+        product_desc_3,
+        product_desc_4,
+        product_desc_5,
       } = productData;
 
       // Validation
@@ -551,9 +565,16 @@ export class AdminProductsService {
           featured_2,
           show_in_storefront,
           info_description,
+          product_tag,
+          product_meta_keyword,
+          product_desc_1,
+          product_desc_2,
+          product_desc_3,
+          product_desc_4,
+          product_desc_5,
           product_date_added,
           product_date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
         RETURNING *`,
         [
           product_name,
@@ -577,6 +598,13 @@ export class AdminProductsService {
           featured_2 || false,
           show_in_storefront || false,
           info_description || null,
+          product_tag || null,
+          product_meta_keyword || null,
+          product_desc_1 || null,
+          product_desc_2 || null,
+          product_desc_3 || null,
+          product_desc_4 || null,
+          product_desc_5 || null,
         ],
       );
 
@@ -679,6 +707,13 @@ export class AdminProductsService {
       featured_2?: boolean;
       show_in_storefront?: boolean;
       info_description?: string;
+      product_tag?: string;
+      product_meta_keyword?: string;
+      product_desc_1?: string;
+      product_desc_2?: string;
+      product_desc_3?: string;
+      product_desc_4?: string;
+      product_desc_5?: string;
     },
     files?: Express.Multer.File[],
   ) {
@@ -734,6 +769,13 @@ export class AdminProductsService {
         featured_2,
         show_in_storefront,
         info_description,
+        product_tag,
+        product_meta_keyword,
+        product_desc_1,
+        product_desc_2,
+        product_desc_3,
+        product_desc_4,
+        product_desc_5,
       } = productData;
 
       // Validate update fields
@@ -852,6 +894,34 @@ export class AdminProductsService {
       if (info_description !== undefined) {
         updateFields.push(`info_description = $${paramIndex++}`);
         updateParams.push(info_description || null);
+      }
+      if (product_tag !== undefined) {
+        updateFields.push(`product_tag = $${paramIndex++}`);
+        updateParams.push(product_tag || null);
+      }
+      if (product_meta_keyword !== undefined) {
+        updateFields.push(`product_meta_keyword = $${paramIndex++}`);
+        updateParams.push(product_meta_keyword || null);
+      }
+      if (product_desc_1 !== undefined) {
+        updateFields.push(`product_desc_1 = $${paramIndex++}`);
+        updateParams.push(product_desc_1 || null);
+      }
+      if (product_desc_2 !== undefined) {
+        updateFields.push(`product_desc_2 = $${paramIndex++}`);
+        updateParams.push(product_desc_2 || null);
+      }
+      if (product_desc_3 !== undefined) {
+        updateFields.push(`product_desc_3 = $${paramIndex++}`);
+        updateParams.push(product_desc_3 || null);
+      }
+      if (product_desc_4 !== undefined) {
+        updateFields.push(`product_desc_4 = $${paramIndex++}`);
+        updateParams.push(product_desc_4 || null);
+      }
+      if (product_desc_5 !== undefined) {
+        updateFields.push(`product_desc_5 = $${paramIndex++}`);
+        updateParams.push(product_desc_5 || null);
       }
 
       updateFields.push('product_date_modified = CURRENT_TIMESTAMP');

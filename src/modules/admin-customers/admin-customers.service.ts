@@ -467,7 +467,32 @@ export class AdminCustomersService {
   }
 
   async delete(id: number): Promise<void> {
-    await this.dataSource.query('DELETE FROM customer WHERE customer_id = $1', [id]);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Nullify references in tables where we want to preserve data
+      await queryRunner.query('UPDATE orders SET customer_id = NULL WHERE customer_id = $1', [id]);
+      await queryRunner.query('UPDATE quote SET customer_id = NULL WHERE customer_id = $1', [id]);
+      await queryRunner.query('UPDATE product_review SET customer_id = NULL WHERE customer_id = $1', [id]);
+      await queryRunner.query('UPDATE api_history SET customer_id = NULL WHERE customer_id = $1', [id]);
+
+      // 2. Delete customer-specific data that shouldn't persist without a customer
+      await queryRunner.query('DELETE FROM customer_product_discount WHERE customer_id = $1', [id]);
+      await queryRunner.query('DELETE FROM customer_product_option_discount WHERE customer_id = $1', [id]);
+
+      // 3. Finally delete the customer
+      await queryRunner.query('DELETE FROM customer WHERE customer_id = $1', [id]);
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Failed to delete customer ${id}:`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async getWholesaleCustomers(query: any): Promise<any> {

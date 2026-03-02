@@ -324,6 +324,8 @@ export class AdminOrdersService {
               'total', op.total,
               'product_comment', op.order_product_comment,
               'is_prepared', COALESCE(op.is_prepared, false),
+              'product_desc_1', p.product_desc_1,
+              'product_desc_2', p.product_desc_2,
               'options', COALESCE((
                 SELECT json_agg(json_build_object(
                   'option_name', opo.option_name,
@@ -736,27 +738,14 @@ export class AdminOrdersService {
   }
 
   async update(id: number, updateOrderDto: any, userId?: number): Promise<any> {
-    // Validate required fields
-    if (!updateOrderDto) {
-      throw new BadRequestException('Order data is required');
-    }
-
-    if (!updateOrderDto.location_id) {
-      throw new BadRequestException('Location ID is required');
-    }
-
-    if (!updateOrderDto.products || !Array.isArray(updateOrderDto.products) || updateOrderDto.products.length === 0) {
-      throw new BadRequestException('At least one product is required');
-    }
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // Get current order status and payment_status to preserve them
+      // Get current order data to preserve fields if not provided in partial update
       const currentOrderCheck = await queryRunner.query(
-        `SELECT order_status, payment_status FROM orders WHERE order_id = $1`,
+        `SELECT * FROM orders WHERE order_id = $1`,
         [id],
       );
 
@@ -764,25 +753,25 @@ export class AdminOrdersService {
         throw new NotFoundException('Order not found');
       }
 
-      const currentOrderStatus = currentOrderCheck[0].order_status;
-      const currentPaymentStatus = currentOrderCheck[0].payment_status;
+      const currentOrder = currentOrderCheck[0];
+      const currentPaymentStatus = currentOrder.payment_status;
 
-      // Ensure payment_status is set to 'order' if it's NULL or 'quote' (to prevent disappearing from orders list)
-      // Only update if it's NULL or 'quote', otherwise preserve existing value
+      // Ensure payment_status is set to 'order' if it's NULL or 'quote'
       const preservedPaymentStatus = currentPaymentStatus && currentPaymentStatus !== 'quote'
         ? currentPaymentStatus
         : 'order';
+
       const {
-        customer_id,
-        firstname,
-        lastname,
-        email,
-        telephone,
+        customer_id = currentOrder.customer_id,
+        firstname = currentOrder.firstname,
+        lastname = currentOrder.lastname,
+        email = currentOrder.email,
+        telephone = currentOrder.telephone,
         location_id,
         delivery_date,
         delivery_date_time,
         delivery_time,
-        delivery_fee = 0,
+        delivery_fee,
         order_comments,
         coupon_code,
         delivery_address,
@@ -791,99 +780,95 @@ export class AdminOrdersService {
         cost_center,
         delivery_contact,
         delivery_details,
-        standing_order, // Include standing_order to allow updating subscription orders
-        products = [],
+        standing_order,
+        order_status,
+        products,
       } = updateOrderDto;
 
-      // Get customer details
-      // Calculate totals
-      let subtotal = 0;
-      for (const product of products) {
-        const productTotal = (product.price || 0) * (product.quantity || 0);
-        subtotal += productTotal;
-      }
+      // Robust fallback logic using nullish coalescing to support partial updates
+      const finalLocationId = location_id ?? currentOrder.location_id;
+      const finalOrderStatus = order_status ?? currentOrder.order_status;
+      const finalCustomerId = customer_id ?? currentOrder.customer_id;
+      const finalFirstname = firstname ?? currentOrder.firstname;
+      const finalLastname = lastname ?? currentOrder.lastname;
+      const finalEmail = email ?? currentOrder.email;
+      const finalTelephone = telephone ?? currentOrder.telephone;
+      const finalDeliveryFee = delivery_fee ?? currentOrder.delivery_fee;
+      const finalOrderComments = order_comments ?? currentOrder.order_comments;
+      const finalDeliveryAddress = delivery_address ?? currentOrder.delivery_address;
+      const finalDeliveryMethod = delivery_method ?? currentOrder.delivery_method;
+      const finalAccountEmail = account_email ?? currentOrder.account_email;
+      const finalCostCenter = cost_center ?? currentOrder.cost_center;
+      const finalDeliveryContact = delivery_contact ?? currentOrder.delivery_contact;
+      const finalDeliveryDetails = delivery_details ?? currentOrder.delivery_details;
+      const finalStandingOrder = standing_order ?? currentOrder.standing_order;
+      const finalDeliveryDateTimeProvided = delivery_date_time ?? currentOrder.delivery_date_time;
 
-      let couponDiscount = 0;
-      let couponId = null;
-      if (coupon_code) {
-        // Trim whitespace and make case-insensitive lookup
-        const normalizedCouponCode = (coupon_code || '').trim().toUpperCase();
-        const couponResult = await queryRunner.query(
-          `SELECT coupon_id, coupon_code, type, coupon_discount, status
-           FROM coupon 
-           WHERE UPPER(TRIM(coupon_code)) = $1 AND status = 1`,
-          [normalizedCouponCode],
-        );
-
-        if (couponResult.length > 0) {
-          const coupon = couponResult[0];
-          couponId = coupon.coupon_id;
-
-          if (coupon.type === 'P') {
-            couponDiscount = subtotal * (parseFloat(coupon.coupon_discount) / 100);
-          } else if (coupon.type === 'F') {
-            couponDiscount = parseFloat(coupon.coupon_discount);
-          }
-
-          couponDiscount = Math.min(couponDiscount, subtotal);
-        } else {
-          // Log warning if coupon not found (for debugging)
-          this.logger.warn(`Coupon not found or inactive: ${coupon_code} (normalized: ${normalizedCouponCode})`);
-        }
-      }
-
-      const totalDiscount = couponDiscount;
-      const afterDiscount = subtotal - couponDiscount;
-      // GST is inclusive: calculate as 11% but display as 10%
-      const deliveryFeeAmount = parseFloat(delivery_fee || 0);
-      const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100; // Total is inclusive of GST
-      const gst = Math.round((orderTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
-
-      // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
-      // Allow setting just date (with default time 00:00:00) or both date and time
-      let finalDeliveryDateTime: string | null = null;
-
-      if (delivery_date_time && typeof delivery_date_time === 'string' && delivery_date_time.trim()) {
-        // Use provided delivery_date_time if available
-        finalDeliveryDateTime = delivery_date_time.trim();
-      } else if (delivery_date && typeof delivery_date === 'string' && delivery_date.trim()) {
-        // Build from delivery_date and delivery_time
+      // Build delivery_date_time from provided date/time or preserve existing
+      let finalDeliveryDateTime: string | null = finalDeliveryDateTimeProvided;
+      if (delivery_date && typeof delivery_date === 'string' && delivery_date.trim()) {
         const normalizedDate = delivery_date.trim();
         if (delivery_time && typeof delivery_time === 'string' && delivery_time.trim()) {
-          // Both date and time provided
           const timeParts = delivery_time.trim().replace(/:/g, '').match(/.{1,2}/g) || [];
           if (timeParts.length >= 2 && timeParts[0] && timeParts[1]) {
             const formattedTime = `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}:00`;
             finalDeliveryDateTime = `${normalizedDate} ${formattedTime}`;
           } else {
-            // Invalid time format, use default time
             finalDeliveryDateTime = `${normalizedDate} 00:00:00`;
           }
         } else {
-          // Only date provided, use default time (start of day)
           finalDeliveryDateTime = `${normalizedDate} 00:00:00`;
         }
       }
-      // If no date provided, keep as null for future orders
 
-      // Update order
-      const branch_id = location_id || 1;
-      const shipping_method = delivery_method === 'pickup' ? 2 : 1;
+      // Calculate totals - only if products are provided, otherwise preserve current totals
+      let resolvedOrderTotal = currentOrder.order_total;
+      let resolvedGst = currentOrder.gst;
+      let resolvedCouponDiscount = currentOrder.coupon_discount;
+      let resolvedCouponId = currentOrder.coupon_id;
+
+      if (products && Array.isArray(products) && products.length > 0) {
+        let subtotal = 0;
+        for (const product of products) {
+          const productTotal = (product.price || 0) * (product.quantity || 0);
+          subtotal += productTotal;
+        }
+
+        let couponDiscount = 0;
+        let couponIdValue = null;
+        if (coupon_code) {
+          const normalizedCouponCode = (coupon_code || '').trim().toUpperCase();
+          const couponResult = await queryRunner.query(
+            `SELECT coupon_id, coupon_code, type, coupon_discount, status
+             FROM coupon 
+             WHERE UPPER(TRIM(coupon_code)) = $1 AND status = 1`,
+            [normalizedCouponCode],
+          );
+
+          if (couponResult.length > 0) {
+            const coupon = couponResult[0];
+            couponIdValue = coupon.coupon_id;
+
+            if (coupon.type === 'P') {
+              couponDiscount = subtotal * (parseFloat(coupon.coupon_discount) / 100);
+            } else if (coupon.type === 'F') {
+              couponDiscount = parseFloat(coupon.coupon_discount);
+            }
+            couponDiscount = Math.min(couponDiscount, subtotal);
+          }
+        }
+
+        const afterDiscount = subtotal - couponDiscount;
+        const deliveryFeeAmountCalc = parseFloat(finalDeliveryFee || 0);
+        resolvedOrderTotal = Math.round((afterDiscount + deliveryFeeAmountCalc) * 100) / 100;
+        resolvedGst = Math.round((resolvedOrderTotal * (11 / 111)) * 100) / 100;
+        resolvedCouponDiscount = couponDiscount;
+        resolvedCouponId = couponIdValue;
+      }
+
+      const branch_id = finalLocationId || 1;
+      const shipping_method = finalDeliveryMethod === 'pickup' ? 2 : 1;
       const user_id = userId || 1;
-
-      // Get current standing_order to preserve it if not provided
-      const currentStandingOrderCheck = await queryRunner.query(
-        `SELECT standing_order FROM orders WHERE order_id = $1`,
-        [id],
-      );
-      const currentStandingOrder = currentStandingOrderCheck.length > 0
-        ? currentStandingOrderCheck[0].standing_order
-        : 0;
-
-      // Use provided standing_order or preserve existing value
-      const finalStandingOrder = standing_order !== undefined && standing_order !== null
-        ? standing_order
-        : currentStandingOrder;
 
       const orderResult = await queryRunner.query(
         `UPDATE orders 
@@ -911,34 +896,36 @@ export class AdminOrdersService {
              lastname = $22,
              email = $23,
              telephone = $24,
+             gst = $25,
              date_modified = CURRENT_TIMESTAMP
-         WHERE order_id = $25
+         WHERE order_id = $26
          RETURNING *`,
         [
-          customer_id || null,
-          location_id,
+          finalCustomerId,
+          finalLocationId,
           branch_id,
           shipping_method,
           finalDeliveryDateTime,
-          deliveryFeeAmount,
-          orderTotal,
-          order_comments || null,
-          couponId,
-          couponDiscount, // Store coupon discount amount for historical accuracy
-          (delivery_address && typeof delivery_address === 'string' && delivery_address.trim()) ? delivery_address.trim() : null,
-          delivery_method || null,
-          account_email?.trim() || null,
-          cost_center?.trim() || null,
-          delivery_contact?.trim() || null,
-          delivery_details?.trim() || null,
+          parseFloat(finalDeliveryFee || 0),
+          resolvedOrderTotal,
+          finalOrderComments,
+          resolvedCouponId,
+          resolvedCouponDiscount,
+          finalDeliveryAddress,
+          finalDeliveryMethod,
+          finalAccountEmail,
+          finalCostCenter,
+          finalDeliveryContact,
+          finalDeliveryDetails,
           user_id,
-          currentOrderStatus, // Preserve existing order_status
-          preservedPaymentStatus, // Ensure payment_status is 'order' (not 'quote' or NULL)
-          finalStandingOrder, // Update or preserve standing_order
-          firstname || null,
-          lastname || null,
-          email || null,
-          telephone || null,
+          finalOrderStatus,
+          preservedPaymentStatus,
+          finalStandingOrder,
+          finalFirstname,
+          finalLastname,
+          finalEmail,
+          finalTelephone,
+          resolvedGst,
           id,
         ],
       );
@@ -949,36 +936,30 @@ export class AdminOrdersService {
 
       const order = orderResult[0];
 
-      // Delete existing order products
-      await queryRunner.query(`DELETE FROM order_product WHERE order_id = $1`, [id]);
+      // Create updated order products - ONLY if products were provided
+      if (products && Array.isArray(products) && products.length > 0) {
+        await queryRunner.query(`DELETE FROM order_product WHERE order_id = $1`, [id]);
 
-      // Create updated order products
-      for (let index = 0; index < products.length; index++) {
-        const product = products[index];
-        const productTotal = (product.price || 0) * (product.quantity || 0);
-        const sortOrder = product.sort_order !== undefined ? product.sort_order : index + 1;
-        const excludeGst = product.exclude_gst !== undefined ? product.exclude_gst : 0;
+        for (let index = 0; index < products.length; index++) {
+          const product = products[index];
+          const productTotal = (product.price || 0) * (product.quantity || 0);
+          const sortOrder = product.sort_order !== undefined ? product.sort_order : index + 1;
+          const excludeGst = product.exclude_gst !== undefined ? product.exclude_gst : 0;
 
-        await queryRunner.query(
-          `INSERT INTO order_product (order_id, product_id, quantity, price, total, order_product_comment, sort_order, exclude_gst)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [
-            id,
-            product.product_id,
-            product.quantity,
-            product.price,
-            productTotal,
-            product.comment || null,
-            sortOrder,
-            excludeGst,
-          ],
-        );
-
-        // Handle product options/add-ons if any
-        if (product.add_ons && Array.isArray(product.add_ons)) {
-          for (const addon of product.add_ons) {
-            // Add-on logic here if needed
-          }
+          await queryRunner.query(
+            `INSERT INTO order_product (order_id, product_id, quantity, price, total, order_product_comment, sort_order, exclude_gst)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              id,
+              product.product_id,
+              product.quantity,
+              product.price,
+              productTotal,
+              product.comment || null,
+              sortOrder,
+              excludeGst,
+            ],
+          );
         }
       }
 
@@ -1606,28 +1587,78 @@ export class AdminOrdersService {
       throw new BadRequestException('Customer email not found');
     }
 
-    let invoiceUrl: string | null = null;
+    // Determine if this is a quote based on payment_status or explicitly requested
+    const isQuote = order.payment_status === 'quote' ||
+      emailType === 'quote' ||
+      (order.order_status === 0 && order.standing_order === 0);
+
+    const documentType = isQuote ? 'Quote' : 'Invoice';
+    const emailSubject = isQuote ? `Quote #${order.order_id} from Caterly` : `Order Confirmation #${order.order_id}`;
+
+    // Generate PDF buffer
+    let pdfBuffer: Buffer | null = null;
     try {
-      invoiceUrl = await this.invoiceService.getInvoiceUrl(id);
+      pdfBuffer = await this.invoiceService.generatePDFBuffer(id);
     } catch (error) {
-      this.logger.warn('Could not get invoice URL:', error);
+      this.logger.error('Failed to generate PDF buffer for email:', error);
     }
 
     const emailHtml = `
-      <h2>Order Confirmation #${order.order_id}</h2>
-      <p>Dear ${order.customer_order_name},</p>
-      <p>Thank you for your order!</p>
-      ${customMessage ? `<p>${customMessage}</p>` : ''}
-      ${invoiceUrl ? `<p><a href="${invoiceUrl}">View Invoice</a></p>` : ''}
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px; }
+          .header { background-color: #E03A3E; color: #fff; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+          .content { padding: 20px; }
+          .footer { margin-top: 20px; font-size: 12px; color: #777; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${isQuote ? 'Quote' : 'Order Confirmation'}</h1>
+          </div>
+          <div class="content">
+            <p>Dear ${order.customer_order_name || 'Customer'},</p>
+            <p>Please find attached the ${documentType.toLowerCase()} for your ${isQuote ? 'requested quote' : 'order'} #${order.order_id}.</p>
+            
+            ${customMessage ? `<p>${customMessage}</p>` : ''}
+            
+            <p>Thank you for choosing Caterly!</p>
+          </div>
+          <div class="footer">
+            <p>If you have any questions, please contact us at catering@caterly.com.au</p>
+            <p>&copy; ${new Date().getFullYear()} Caterly. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
     `;
+
+    const attachments: any[] = [];
+    if (pdfBuffer) {
+      attachments.push({
+        filename: `${documentType.toLowerCase()}-${order.order_id}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+      });
+    }
 
     await this.emailService.sendEmail({
       to: recipientEmail,
-      subject: `Order Confirmation #${order.order_id}`,
+      subject: emailSubject,
       html: emailHtml,
+      attachments: attachments,
     });
 
-    return { message: 'Email sent successfully', sentTo: recipientEmail };
+    return {
+      message: `${documentType} email sent successfully`,
+      sentTo: recipientEmail,
+      type: documentType
+    };
   }
 
   /**
