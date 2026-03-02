@@ -30,6 +30,18 @@ export class Product {
   @Column({ type: "text", nullable: true })
   product_description!: string
 
+  @Column({ type: "text", nullable: true })
+  short_description!: string
+
+  @Column({ type: "varchar", length: 100, nullable: true })
+  roast_level!: string
+
+  @Column({ type: "boolean", default: true })
+  show_specifications!: boolean
+
+  @Column({ type: "boolean", default: true })
+  show_other_info!: boolean
+
   @Column({ type: "decimal", precision: 10, scale: 2 })
   product_price!: number
 
@@ -68,6 +80,27 @@ export class Product {
 
   @Column({ type: "text", nullable: true })
   info_description!: string
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  product_tag!: string
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  product_meta_keyword!: string
+
+  @Column({ type: "text", nullable: true })
+  product_desc_1!: string
+
+  @Column({ type: "text", nullable: true })
+  product_desc_2!: string
+
+  @Column({ type: "text", nullable: true })
+  product_desc_3!: string
+
+  @Column({ type: "text", nullable: true })
+  product_desc_4!: string
+
+  @Column({ type: "text", nullable: true })
+  product_desc_5!: string
 
   @CreateDateColumn({ name: "product_date_added" })
   product_date_added!: Date

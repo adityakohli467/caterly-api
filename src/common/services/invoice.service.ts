@@ -29,6 +29,8 @@ export interface InvoiceData {
     price: number;
     total: number;
     comment?: string;
+    product_desc_1?: string;
+    product_desc_2?: string;
     options?: Array<{
       option_name: string;
       option_value: string;
@@ -111,9 +113,9 @@ export class InvoiceService {
         o.order_comments,
         o.delivery_address,
         o.order_total,
-        c.firstname || ' ' || c.lastname as customer_name,
-        c.email as customer_email,
-        c.telephone as customer_phone,
+        COALESCE(NULLIF(o.firstname || ' ' || o.lastname, ' '), c.firstname || ' ' || c.lastname) as customer_name,
+        COALESCE(o.email, c.email) as customer_email,
+        COALESCE(o.telephone, c.telephone) as customer_phone,
         c.customer_type,
         comp.company_name,
         comp.company_abn,
@@ -160,7 +162,9 @@ export class InvoiceService {
         op.price,
         op.total,
         op.order_product_id,
-        op.order_product_comment
+        op.order_product_comment,
+        p.product_desc_1,
+        p.product_desc_2
       FROM order_product op
       LEFT JOIN product p ON op.product_id = p.product_id
       WHERE op.order_id = $1
@@ -200,6 +204,8 @@ export class InvoiceService {
         price: parseFloat(row.price),
         total: productTotal + optionsTotal,
         comment: row.order_product_comment || undefined,
+        product_desc_1: row.product_desc_1 || undefined,
+        product_desc_2: row.product_desc_2 || undefined,
         options: productOptions.length > 0 ? productOptions.map((opt: any) => ({
           option_name: opt.option_name,
           option_value: opt.option_value,
@@ -633,6 +639,23 @@ export class InvoiceService {
           if (item.comment) {
             doc.fontSize(6).fillColor(lightGray);
             doc.text(`Note: ${item.comment}`, 55, tableY + 8, { width: 295 });
+            doc.fillColor(darkGray);
+            doc.fontSize(7);
+            extraHeight += 7;
+          }
+
+          // Show product descriptions if available
+          if (item.product_desc_1) {
+            doc.fontSize(6).fillColor(lightGray);
+            doc.text(item.product_desc_1, 55, tableY + 8 + extraHeight, { width: 295 });
+            doc.fillColor(darkGray);
+            doc.fontSize(7);
+            extraHeight += 7;
+          }
+
+          if (item.product_desc_2) {
+            doc.fontSize(6).fillColor(lightGray);
+            doc.text(item.product_desc_2, 55, tableY + 8 + extraHeight, { width: 295 });
             doc.fillColor(darkGray);
             doc.fontSize(7);
             extraHeight += 7;

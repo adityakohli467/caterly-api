@@ -213,6 +213,14 @@ export class ProductsService {
               ? JSON.parse(productData.product_images)
               : productData.product_images
             : [],
+          info_description: productData.info_description,
+          product_tag: productData.product_tag,
+          product_meta_keyword: productData.product_meta_keyword,
+          product_desc_1: productData.product_desc_1,
+          product_desc_2: productData.product_desc_2,
+          product_desc_3: productData.product_desc_3,
+          product_desc_4: productData.product_desc_4,
+          product_desc_5: productData.product_desc_5,
         };
       } else {
         parsedData = productData;
@@ -233,6 +241,13 @@ export class ProductsService {
         options,
         product_image_url,
         info_description,
+        product_tag,
+        product_meta_keyword,
+        product_desc_1,
+        product_desc_2,
+        product_desc_3,
+        product_desc_4,
+        product_desc_5,
       } = parsedData;
 
       // Validation
@@ -291,9 +306,16 @@ export class ProductsService {
           user_id,
           product_image,
           info_description,
+          product_tag,
+          product_meta_keyword,
+          product_desc_1,
+          product_desc_2,
+          product_desc_3,
+          product_desc_4,
+          product_desc_5,
           product_date_added,
           product_date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
         RETURNING *`,
         [
           product_name,
@@ -306,6 +328,13 @@ export class ProductsService {
           user_id || userId,
           product_image_url || null,
           info_description || null,
+          product_tag || null,
+          product_meta_keyword || null,
+          product_desc_1 || null,
+          product_desc_2 || null,
+          product_desc_3 || null,
+          product_desc_4 || null,
+          product_desc_5 || null,
         ],
       );
 
@@ -419,6 +448,14 @@ export class ProductsService {
               ? JSON.parse(productData.product_images)
               : productData.product_images
             : undefined,
+          info_description: productData.info_description,
+          product_tag: productData.product_tag,
+          product_meta_keyword: productData.product_meta_keyword,
+          product_desc_1: productData.product_desc_1,
+          product_desc_2: productData.product_desc_2,
+          product_desc_3: productData.product_desc_3,
+          product_desc_4: productData.product_desc_4,
+          product_desc_5: productData.product_desc_5,
         };
       } else {
         parsedData = productData;
@@ -438,6 +475,13 @@ export class ProductsService {
         options,
         product_image_url,
         info_description,
+        product_tag,
+        product_meta_keyword,
+        product_desc_1,
+        product_desc_2,
+        product_desc_3,
+        product_desc_4,
+        product_desc_5,
       } = parsedData;
 
       // Validation
@@ -484,8 +528,15 @@ export class ProductsService {
            product_status = COALESCE($7, product_status),
            product_image = COALESCE($8, product_image),
            info_description = COALESCE($9, info_description),
+           product_tag = COALESCE($10, product_tag),
+           product_meta_keyword = COALESCE($11, product_meta_keyword),
+           product_desc_1 = COALESCE($12, product_desc_1),
+           product_desc_2 = COALESCE($13, product_desc_2),
+           product_desc_3 = COALESCE($14, product_desc_3),
+           product_desc_4 = COALESCE($15, product_desc_4),
+           product_desc_5 = COALESCE($16, product_desc_5),
            product_date_modified = CURRENT_TIMESTAMP
-         WHERE product_id = $10
+         WHERE product_id = $17
          RETURNING *`;
 
       const updateParams = [
@@ -498,6 +549,13 @@ export class ProductsService {
         product_status,
         product_image_url,
         info_description,
+        product_tag,
+        product_meta_keyword,
+        product_desc_1,
+        product_desc_2,
+        product_desc_3,
+        product_desc_4,
+        product_desc_5,
         id,
       ];
 

@@ -98,6 +98,13 @@ export class AdminProductsController {
         product_image_url: { type: 'string' },
         product_images: { type: 'string', description: 'JSON array string' },
         info_description: { type: 'string' },
+        product_tag: { type: 'string' },
+        product_meta_keyword: { type: 'string' },
+        product_desc_1: { type: 'string' },
+        product_desc_2: { type: 'string' },
+        product_desc_3: { type: 'string' },
+        product_desc_4: { type: 'string' },
+        product_desc_5: { type: 'string' },
         images: { type: 'array', items: { type: 'string', format: 'binary' } },
       },
     },
@@ -125,6 +132,13 @@ export class AdminProductsController {
           ? JSON.parse(productData.product_images)
           : productData.product_images
         : [],
+      product_tag: productData.product_tag,
+      product_meta_keyword: productData.product_meta_keyword,
+      product_desc_1: productData.product_desc_1,
+      product_desc_2: productData.product_desc_2,
+      product_desc_3: productData.product_desc_3,
+      product_desc_4: productData.product_desc_4,
+      product_desc_5: productData.product_desc_5,
       user_id: productData.user_id || req?.user?.user_id,
     };
 
@@ -152,6 +166,13 @@ export class AdminProductsController {
         product_image_url: { type: 'string' },
         product_images: { type: 'string', description: 'JSON array string' },
         info_description: { type: 'string' },
+        product_tag: { type: 'string' },
+        product_meta_keyword: { type: 'string' },
+        product_desc_1: { type: 'string' },
+        product_desc_2: { type: 'string' },
+        product_desc_3: { type: 'string' },
+        product_desc_4: { type: 'string' },
+        product_desc_5: { type: 'string' },
         images: { type: 'array', items: { type: 'string', format: 'binary' } },
       },
     },
@@ -179,6 +200,13 @@ export class AdminProductsController {
           ? JSON.parse(productData.product_images)
           : productData.product_images
         : undefined,
+      product_tag: productData.product_tag,
+      product_meta_keyword: productData.product_meta_keyword,
+      product_desc_1: productData.product_desc_1,
+      product_desc_2: productData.product_desc_2,
+      product_desc_3: productData.product_desc_3,
+      product_desc_4: productData.product_desc_4,
+      product_desc_5: productData.product_desc_5,
     };
 
     return this.adminProductsService.updateProduct(id, parsedData, files);

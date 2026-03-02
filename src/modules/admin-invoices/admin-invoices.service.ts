@@ -11,7 +11,7 @@ export class AdminInvoicesService {
     private invoiceService: InvoiceService,
     private emailService: EmailService,
     private dataSource: DataSource,
-  ) {}
+  ) { }
 
   async generateInvoice(orderId: number): Promise<string> {
     if (!orderId) {
@@ -55,14 +55,14 @@ export class AdminInvoicesService {
        WHERE order_id = $1`,
       [orderId]
     );
-    
+
     if (orderResult.length === 0) {
       throw new NotFoundException('Order not found');
     }
 
     const order = orderResult[0];
-    return order.payment_status === 'quote' || 
-           (order.order_status === 0 && order.standing_order === 0);
+    return order.payment_status === 'quote' ||
+      (order.order_status === 0 && order.standing_order === 0);
   }
 
   async sendInvoiceEmail(orderId: number, customMessage?: string): Promise<any> {
@@ -70,10 +70,10 @@ export class AdminInvoicesService {
     const orderQuery = `
       SELECT 
         o.*,
-        c.email as customer_email,
-        c.firstname,
-        c.lastname,
-        c.telephone,
+        COALESCE(o.email, c.email) as customer_email,
+        COALESCE(o.firstname, c.firstname) as firstname,
+        COALESCE(o.lastname, c.lastname) as lastname,
+        COALESCE(o.telephone, c.telephone) as telephone,
         co.company_name,
         d.department_name,
         l.location_name
