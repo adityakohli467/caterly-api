@@ -35,6 +35,7 @@ import { AdminCateringModule } from './modules/admin-catering/admin-catering.mod
 import { AdminContactInquiriesModule } from './modules/admin-contact-inquiries/admin-contact-inquiries.module';
 import { AdminWholesaleEnquiriesModule } from './modules/admin-wholesale-enquiries/admin-wholesale-enquiries.module';
 import { AdminProductsModule } from './modules/admin-products/admin-products.module';
+import { AdminQuotationInquiriesModule } from './modules/admin-quotation-inquiries/admin-quotation-inquiries.module';
 import { AdminBlogsModule } from './modules/admin-blogs/admin-blogs.module';
 import { AdminReviewsModule } from './modules/admin-reviews/admin-reviews.module';
 import { AdminEmailConfigModule } from './modules/admin-email-config/admin-email-config.module';
@@ -51,6 +52,7 @@ import { StoreQuotesModule } from './modules/store-quotes/store-quotes.module';
 import { StoreContactModule } from './modules/store-contact/store-contact.module';
 import { StoreNewsletterModule } from './modules/store-newsletter/store-newsletter.module';
 import { StoreWholesaleEnquiryModule } from './modules/store-wholesale-enquiry/store-wholesale-enquiry.module';
+import { StoreQuotationModule } from './modules/store-quotation/store-quotation.module';
 import { StoreBlogsModule } from './modules/store-blogs/store-blogs.module';
 import { StoreReviewsModule } from './modules/store-reviews/store-reviews.module';
 import { AppController } from './app.controller';
@@ -87,6 +89,7 @@ import { AppService } from './app.service';
     AdminContactInquiriesModule,
     AdminWholesaleEnquiriesModule,
     AdminProductsModule,
+    AdminQuotationInquiriesModule,
     AdminBlogsModule,
     AdminReviewsModule,
     AdminEmailConfigModule,
@@ -104,6 +107,7 @@ import { AppService } from './app.service';
     StoreContactModule,
     StoreNewsletterModule,
     StoreWholesaleEnquiryModule,
+    StoreQuotationModule,
     StoreBlogsModule,
     StoreReviewsModule,
   ],
@@ -116,4 +120,4 @@ import { AppService } from './app.service';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

@@ -152,8 +152,17 @@ export class StoreProductsService {
         p.product_status,
         p.product_date_added,
         p.info_description,
+        p.subcategory_id,
         ph.heading as header_name,
-        array_agg(DISTINCT pc.category_id) FILTER (WHERE pc.category_id IS NOT NULL) as categories,
+        c_sub.category_name as subcategory_name,
+        c_parent.category_name as parent_category_name,
+        c_parent.category_id as parent_category_id,
+        (
+          SELECT json_agg(json_build_object('id', c.category_id, 'name', c.category_name))
+          FROM product_category pcc
+          JOIN category c ON pcc.category_id = c.category_id
+          WHERE pcc.product_id = p.product_id
+        ) as category_list,
         (
           SELECT json_agg(
             json_build_object(
@@ -168,6 +177,8 @@ export class StoreProductsService {
       FROM product p
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
+      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
+      LEFT JOIN category c_parent ON c_sub.parent_category_id = c_parent.category_id
       LEFT JOIN product_category pc ON p.product_id = pc.product_id
       WHERE p.product_status = 1 AND p.show_in_storefront = true
     `;
@@ -193,7 +204,7 @@ export class StoreProductsService {
 
     if (category_id) {
       params.push(Number(category_id));
-      query += ` AND pc.category_id = $${paramIndex}`;
+      query += ` AND (pc.category_id = $${paramIndex} OR p.subcategory_id = $${paramIndex} OR c_sub.parent_category_id = $${paramIndex})`;
       paramIndex++;
     }
 
@@ -229,7 +240,8 @@ export class StoreProductsService {
 
     query += `
       GROUP BY p.product_id, p.product_name, p.product_description, p.product_price, 
-               p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, p.product_date_added, p.info_description, ph.heading
+               p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, p.product_date_added, p.info_description, 
+               p.subcategory_id, ph.heading, c_sub.category_name, c_parent.category_name, c_parent.category_id
       ${orderByClause}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -243,6 +255,7 @@ export class StoreProductsService {
       SELECT COUNT(DISTINCT p.product_id) as total
       FROM product p
       LEFT JOIN product_category pc ON p.product_id = pc.product_id
+      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       WHERE p.product_status = 1 AND p.show_in_storefront = true
     `;
@@ -258,7 +271,7 @@ export class StoreProductsService {
 
     if (category_id) {
       countParams.push(Number(category_id));
-      countQuery += ` AND pc.category_id = $${countParamIndex}`;
+      countQuery += ` AND (pc.category_id = $${countParamIndex} OR p.subcategory_id = $${countParamIndex} OR c_sub.parent_category_id = $${countParamIndex})`;
       countParamIndex++;
     }
 
@@ -405,6 +418,9 @@ export class StoreProductsService {
         p.*,
         ph.heading as header_name,
         ph.image as header_image,
+        c_sub.category_name as subcategory_name,
+        c_parent.category_name as parent_category_name,
+        c_parent.category_id as parent_category_id,
         (
           SELECT json_agg(
             json_build_object(
@@ -419,15 +435,17 @@ export class StoreProductsService {
       FROM product p
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
+      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
+      LEFT JOIN category c_parent ON c_sub.parent_category_id = c_parent.category_id
       WHERE p.product_id = $1 AND p.product_status = 1 AND p.show_in_storefront = true
     `;
 
     // Filter by customer type visibility
     if (userId && customerType) {
       if (isRetailer) {
-        productQuery += ` AND (COALESCE(p.customer_type_visibility, 'all') = 'all' OR COALESCE(p.customer_type_visibility, 'all') = 'retailers')`;
+        productQuery += ` AND(COALESCE(p.customer_type_visibility, 'all') = 'all' OR COALESCE(p.customer_type_visibility, 'all') = 'retailers')`;
       } else if (isWholesaler) {
-        productQuery += ` AND (LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
+        productQuery += ` AND(LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
       } else {
         productQuery += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
       }
@@ -444,40 +462,40 @@ export class StoreProductsService {
 
     // Get product categories
     const categoriesQuery = `
-      SELECT 
-        c.category_id,
-        c.category_name,
-        c.parent_category_id
+    SELECT
+    c.category_id,
+      c.category_name,
+      c.parent_category_id
       FROM category c
       JOIN product_category pc ON c.category_id = pc.category_id
       WHERE pc.product_id = $1
       ORDER BY c.sort_order ASC, c.category_name ASC
-    `;
+      `;
     const categoriesResult = await this.dataSource.query(categoriesQuery, [id]);
 
     // Get product options
     const optionsQuery = `
       SELECT DISTINCT
-        o.option_id,
-        o.name as option_name,
-        o.option_type,
-        ov.option_value_id,
-        ov.name as option_value,
-        ov.sort_order,
-        po.product_option_id,
-        po.option_required as required,
-        po.option_price as product_option_price_base,
-        po.option_price_prefix as product_option_price_prefix,
-        p.retail_discount_percentage,
-        ov.standard_price,
-        ov.wholesale_price
+    o.option_id,
+      o.name as option_name,
+      o.option_type,
+      ov.option_value_id,
+      ov.name as option_value,
+      ov.sort_order,
+      po.product_option_id,
+      po.option_required as required,
+      po.option_price as product_option_price_base,
+      po.option_price_prefix as product_option_price_prefix,
+      p.retail_discount_percentage,
+      ov.standard_price,
+      ov.wholesale_price
       FROM product_option po
       JOIN option_value ov ON po.option_value_id = ov.option_value_id
       JOIN options o ON ov.option_id = o.option_id
       JOIN product p ON po.product_id = p.product_id
       WHERE po.product_id = $1
       ORDER BY o.option_id, ov.sort_order
-    `;
+      `;
     const optionsResult = await this.dataSource.query(optionsQuery, [id]);
 
     // Group options by option_id
@@ -538,7 +556,7 @@ export class StoreProductsService {
             SELECT discount_percentage
             FROM customer_product_discount
             WHERE customer_id = $1 AND product_id = $2
-          `;
+      `;
           const productDiscountResult = await this.dataSource.query(productDiscountQuery, [customerId, id]);
           if (productDiscountResult.length > 0 && productDiscountResult[0].discount_percentage > 0) {
             productDiscount = parseFloat(productDiscountResult[0].discount_percentage);
@@ -549,7 +567,7 @@ export class StoreProductsService {
             SELECT option_value_id, discount_percentage
             FROM customer_product_option_discount
             WHERE customer_id = $1 AND product_id = $2
-          `;
+      `;
           const optionDiscountResult = await this.dataSource.query(optionDiscountQuery, [customerId, id]);
           optionDiscountResult.forEach((row: any) => {
             if (row.discount_percentage > 0) {
@@ -626,13 +644,13 @@ export class StoreProductsService {
    */
   async getCategories() {
     const query = `
-      SELECT 
-        category_id,
-        parent_category_id,
-        category_name
+    SELECT
+    category_id,
+      parent_category_id,
+      category_name
       FROM category
       ORDER BY sort_order ASC, category_name ASC
-    `;
+      `;
 
     const result = await this.dataSource.query(query);
 
@@ -666,10 +684,10 @@ export class StoreProductsService {
    */
   async getHeaders() {
     const query = `
-      SELECT 
-        heading_id,
-        heading,
-        image
+    SELECT
+    heading_id,
+      heading,
+      image
       FROM product_header
       ORDER BY heading_id
     `;
@@ -708,40 +726,46 @@ export class StoreProductsService {
     ) : false;
 
     let query = `
-      SELECT 
-        p.product_id,
-        p.product_name,
-        p.product_description,
-        p.product_price,
-        p.retail_price,
-        p.customer_type_visibility,
-        p.product_image,
-        p.product_status,
-        p.info_description,
-        ph.heading as header_name,
-        (
-          SELECT json_agg(
-            json_build_object(
-              'product_image_id', pi.product_image_id,
-              'image_url', pi.image_url,
-              'image_order', pi.image_order
-            ) ORDER BY pi.image_order
-          )
+    SELECT
+    p.product_id,
+      p.product_name,
+      p.product_description,
+      p.product_price,
+      p.retail_price,
+      p.customer_type_visibility,
+      p.product_image,
+      p.product_status,
+      p.info_description,
+      p.subcategory_id,
+      ph.heading as header_name,
+      c_sub.category_name as subcategory_name,
+      c_parent.category_name as parent_category_name,
+      c_parent.category_id as parent_category_id,
+      (
+        SELECT json_agg(
+          json_build_object(
+            'product_image_id', pi.product_image_id,
+            'image_url', pi.image_url,
+            'image_order', pi.image_order
+          ) ORDER BY pi.image_order
+        )
           FROM product_images pi
           WHERE pi.product_id = p.product_id
         ) as product_images
       FROM product p
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
+      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
+      LEFT JOIN category c_parent ON c_sub.parent_category_id = c_parent.category_id
       WHERE p.product_status = 1 AND p.show_in_storefront = true
-    `;
+      `;
 
     // Filter by customer type visibility
     if (userId && customerType) {
       if (isRetailer) {
-        query += ` AND (COALESCE(p.customer_type_visibility, 'all') = 'all' OR COALESCE(p.customer_type_visibility, 'all') = 'retailers')`;
+        query += ` AND(COALESCE(p.customer_type_visibility, 'all') = 'all' OR COALESCE(p.customer_type_visibility, 'all') = 'retailers')`;
       } else if (isWholesaler) {
-        query += ` AND (LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
+        query += ` AND(LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
       } else {
         query += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
       }
@@ -754,17 +778,18 @@ export class StoreProductsService {
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'product' 
-      AND column_name IN ('featured_1', 'featured_2')
-    `);
+      AND column_name IN('featured_1', 'featured_2')
+      `);
     const hasFeatured1 = featuredCheck.some((row: any) => row.column_name === 'featured_1');
     const hasFeatured2 = featuredCheck.some((row: any) => row.column_name === 'featured_2');
 
     query += `
-      GROUP BY p.product_id, p.product_name, p.product_description, p.product_price, 
-               p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, p.info_description, ph.heading
+      GROUP BY p.product_id, p.product_name, p.product_description, p.product_price,
+      p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, p.info_description, 
+      p.subcategory_id, ph.heading, c_sub.category_name, c_parent.category_name, c_parent.category_id
       ORDER BY p.product_id DESC
       LIMIT $1
-    `;
+      `;
 
     const result = await this.dataSource.query(query, [Number(limit)]);
 
@@ -776,7 +801,7 @@ export class StoreProductsService {
           SELECT DISTINCT product_id, MAX(discount_percentage) as max_discount
           FROM customer_product_option_discount
           WHERE customer_id = (
-            SELECT customer_id FROM customer WHERE user_id = $1
+      SELECT customer_id FROM customer WHERE user_id = $1
           )
           GROUP BY product_id
         `;
@@ -897,8 +922,8 @@ export class StoreProductsService {
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'product' 
-      AND column_name IN ('featured_1', 'featured_2')
-    `);
+      AND column_name IN('featured_1', 'featured_2')
+      `);
     const hasFeatured1 = featuredCheck.some((row: any) => row.column_name === 'featured_1');
     const hasFeatured2 = featuredCheck.some((row: any) => row.column_name === 'featured_2');
 
@@ -922,7 +947,11 @@ export class StoreProductsService {
         p.product_image,
         p.product_status,
         p.info_description,
+        p.subcategory_id,
         ph.heading as header_name,
+        c_sub.category_name as subcategory_name,
+        c_parent.category_name as parent_category_name,
+        c_parent.category_id as parent_category_id,
         (
           SELECT json_agg(
             json_build_object(
@@ -937,16 +966,18 @@ export class StoreProductsService {
       FROM product p
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
+      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
+      LEFT JOIN category c_parent ON c_sub.parent_category_id = c_parent.category_id
       WHERE p.product_status = 1 AND p.show_in_storefront = true
         AND p.` + featuredColumn + ` = true
-    `;
+      `;
 
     // Filter by customer type visibility
     if (userId && customerType) {
       if (isRetailer) {
-        query += ` AND (COALESCE(p.customer_type_visibility, 'all') = 'all' OR COALESCE(p.customer_type_visibility, 'all') = 'retailers')`;
+        query += ` AND(COALESCE(p.customer_type_visibility, 'all') = 'all' OR COALESCE(p.customer_type_visibility, 'all') = 'retailers')`;
       } else if (isWholesaler) {
-        query += ` AND (LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
+        query += ` AND(LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
       } else {
         query += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
       }
@@ -955,11 +986,12 @@ export class StoreProductsService {
     }
 
     query += `
-      GROUP BY p.product_id, p.product_name, p.product_description, p.product_price, 
-               p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, ph.heading
+      GROUP BY p.product_id, p.product_name, p.product_description, p.product_price,
+      p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, ph.heading,
+      p.subcategory_id, c_sub.category_name, c_parent.category_name, c_parent.category_id
       ORDER BY p.product_id DESC
       LIMIT $1
-    `;
+      `;
 
     const result = await this.dataSource.query(query, [Number(limit)]);
 
@@ -971,10 +1003,10 @@ export class StoreProductsService {
           SELECT DISTINCT product_id, MAX(discount_percentage) as max_discount
           FROM customer_product_option_discount
           WHERE customer_id = (
-            SELECT customer_id FROM customer WHERE user_id = $1
+      SELECT customer_id FROM customer WHERE user_id = $1
           )
           GROUP BY product_id
-        `;
+      `;
         const productDiscountResult = await this.dataSource.query(productDiscountQuery, [userId]);
         productDiscountResult.forEach((row: any) => {
           if (row.max_discount > 0) {
@@ -1063,29 +1095,29 @@ export class StoreProductsService {
    */
   async getProductReviews(id: number, limit: number = 10, offset: number = 0) {
     const query = `
-      SELECT 
-        r.review_id,
-        r.product_id,
-        r.customer_id,
-        r.rating,
-        r.review_text,
-        r.reviewer_name,
-        r.created_at,
-        c.firstname,
-        c.lastname,
-        c.email
+    SELECT
+    r.review_id,
+      r.product_id,
+      r.customer_id,
+      r.rating,
+      r.review_text,
+      r.reviewer_name,
+      r.created_at,
+      c.firstname,
+      c.lastname,
+      c.email
       FROM product_review r
       LEFT JOIN customer c ON r.customer_id = c.customer_id
       WHERE r.product_id = $1 AND r.status = 1
       ORDER BY r.created_at DESC
       LIMIT $2 OFFSET $3
-    `;
+      `;
 
     const countQuery = `
       SELECT COUNT(*) as total
       FROM product_review
       WHERE product_id = $1 AND status = 1
-    `;
+      `;
 
     const [reviewsResult, countResult] = await Promise.all([
       this.dataSource.query(query, [id, Number(limit), Number(offset)]),
@@ -1099,7 +1131,7 @@ export class StoreProductsService {
       rating: review.rating,
       review_text: review.review_text,
       reviewer_name: review.reviewer_name ||
-        (review.firstname && review.lastname ? `${review.firstname} ${review.lastname}` : 'Anonymous'),
+        (review.firstname && review.lastname ? `${review.firstname} ${review.lastname} ` : 'Anonymous'),
       created_at: review.created_at,
     }));
 
@@ -1174,7 +1206,7 @@ export class StoreProductsService {
 
     // Insert review
     const insertQuery = `
-      INSERT INTO product_review (
+      INSERT INTO product_review(
         product_id,
         customer_id,
         user_id,
@@ -1183,9 +1215,9 @@ export class StoreProductsService {
         reviewer_name,
         reviewer_email,
         status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ) VALUES($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING review_id, created_at
-    `;
+      `;
 
     const status = 0; // Pending approval - admin must review and publish
 

@@ -21,6 +21,7 @@ import { Blog } from '../entities/Blog';
 import { ProductReview } from '../entities/ProductReview';
 import { GeneralReview } from '../entities/GeneralReview';
 import { ApiHistory } from '../entities/ApiHistory.entity';
+import { QuotationInquiry } from '../entities/QuotationInquiry';
 
 @Module({
   imports: [
@@ -47,9 +48,10 @@ import { ApiHistory } from '../entities/ApiHistory.entity';
       ProductReview,
       GeneralReview,
       ApiHistory,
+      QuotationInquiry,
     ]),
   ],
   exports: [TypeOrmModule],
 })
-export class DatabaseModule {}
+export class DatabaseModule { }
 
