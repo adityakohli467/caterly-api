@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-export type NotificationType = 'order' | 'contact_inquiry' | 'wholesale_enquiry' | 'newsletter_subscription';
+export type NotificationType = 'order' | 'contact_inquiry' | 'wholesale_enquiry' | 'newsletter_subscription' | 'quotation_inquiry';
 
 export interface CreateNotificationData {
   type: NotificationType;
@@ -10,6 +10,7 @@ export interface CreateNotificationData {
   contact_inquiry_id?: number;
   wholesale_enquiry_id?: number;
   subscription_id?: number;
+  quotation_inquiry_id?: number;
   metadata?: any;
 }
 
@@ -17,7 +18,7 @@ export interface CreateNotificationData {
 export class AdminNotificationsService {
   private readonly logger = new Logger(AdminNotificationsService.name);
 
-  constructor(private dataSource: DataSource) {}
+  constructor(private dataSource: DataSource) { }
 
   /**
    * Create notification for all admin users
@@ -39,7 +40,7 @@ export class AdminNotificationsService {
 
       // Build description from message and type
       const description = data.message || `${data.type} notification`;
-      
+
       // Use order_id if provided, otherwise use 0 as default (schema requires NOT NULL)
       const orderId = data.order_id || 0;
 
