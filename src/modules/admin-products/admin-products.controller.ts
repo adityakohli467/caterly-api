@@ -39,6 +39,7 @@ export class AdminProductsController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('customer_id') customer_id?: string,
+    @Query('category_id') category_id?: string,
   ) {
     return this.adminProductsService.listProducts({
       limit: limit ? parseInt(limit) : 20,
@@ -46,6 +47,7 @@ export class AdminProductsController {
       search,
       status: status ? parseInt(status) : undefined,
       customer_id: customer_id ? parseInt(customer_id) : undefined,
+      category_id: category_id ? parseInt(category_id) : undefined,
     });
   }
 

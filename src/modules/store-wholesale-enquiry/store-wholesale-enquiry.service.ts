@@ -1,11 +1,11 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { EmailService } from '../../common/services/email.service';
 import { ConfigService } from '@nestjs/config';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 
 @Injectable()
-export class StoreWholesaleEnquiryService {
+export class StoreWholesaleEnquiryService implements OnModuleInit {
   private readonly logger = new Logger(StoreWholesaleEnquiryService.name);
 
   constructor(
@@ -14,6 +14,35 @@ export class StoreWholesaleEnquiryService {
     private configService: ConfigService,
     private notificationsService: AdminNotificationsService,
   ) { }
+
+  async onModuleInit() {
+    try {
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS wholesale_enquiries (
+          id SERIAL PRIMARY KEY,
+          first_name VARCHAR(255) NOT NULL,
+          last_name VARCHAR(255) NOT NULL,
+          business_name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          phone_number VARCHAR(100),
+          business_address TEXT NOT NULL,
+          suburb VARCHAR(255) NOT NULL,
+          state VARCHAR(100) NOT NULL,
+          postcode VARCHAR(20) NOT NULL,
+          business_license VARCHAR(255),
+          business_website VARCHAR(255),
+          weekly_volume TEXT NOT NULL,
+          start_month VARCHAR(50) NOT NULL,
+          start_year VARCHAR(10) NOT NULL,
+          status VARCHAR(50) DEFAULT 'new',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      this.logger.log('Table wholesale_enquiries ensured.');
+    } catch (error) {
+      this.logger.error('Failed to ensure wholesale_enquiries table:', error);
+    }
+  }
 
   /**
    * Submit wholesale enquiry form

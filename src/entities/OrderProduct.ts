@@ -36,6 +36,18 @@ export class OrderProduct {
   @Column({ type: "decimal", precision: 10, scale: 2 })
   total!: number
 
+  @Column({ type: "text", nullable: true })
+  order_product_comment!: string
+
+  @Column({ type: "int", default: 1 })
+  sort_order!: number
+
+  @Column({ type: "int", default: 0 })
+  exclude_gst!: number
+
+  @Column({ type: "boolean", default: false })
+  is_prepared!: boolean
+
   // Relations
   @ManyToOne(() => Order, (order) => order.order_products)
   @JoinColumn({ name: "order_id" })

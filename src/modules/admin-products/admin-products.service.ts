@@ -23,8 +23,9 @@ export class AdminProductsService {
     search?: string;
     status?: number;
     customer_id?: number; // Optional: if provided, prices will be calculated based on customer type and discounts
+    category_id?: number;
   }) {
-    const { limit = 20, offset = 0, search, status } = filters;
+    const { limit = 20, offset = 0, search, status, category_id } = filters;
 
     let query = `
       SELECT 
@@ -89,6 +90,24 @@ export class AdminProductsService {
     if (status !== undefined) {
       query += ` AND p.product_status = $${paramIndex}`;
       params.push(Number(status));
+      paramIndex++;
+    }
+
+    // Category filter (recursive)
+    if (category_id) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM product_category pc 
+        WHERE pc.product_id = p.product_id 
+        AND pc.category_id IN (
+          WITH RECURSIVE cat_tree AS (
+            SELECT category_id FROM category WHERE category_id = $${paramIndex}
+            UNION ALL
+            SELECT c.category_id FROM category c JOIN cat_tree ct ON c.parent_category_id = ct.category_id
+          )
+          SELECT category_id FROM cat_tree
+        )
+      )`;
+      params.push(Number(category_id));
       paramIndex++;
     }
 

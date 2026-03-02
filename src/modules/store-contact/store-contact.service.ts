@@ -1,11 +1,11 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { EmailService } from '../../common/services/email.service';
 import { ConfigService } from '@nestjs/config';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 
 @Injectable()
-export class StoreContactService {
+export class StoreContactService implements OnModuleInit {
   private readonly logger = new Logger(StoreContactService.name);
 
   constructor(
@@ -14,6 +14,26 @@ export class StoreContactService {
     private configService: ConfigService,
     private notificationsService: AdminNotificationsService,
   ) { }
+
+  async onModuleInit() {
+    try {
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS contact_inquiries (
+          id SERIAL PRIMARY KEY,
+          first_name VARCHAR(255) NOT NULL,
+          last_name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) NOT NULL,
+          phone_number VARCHAR(100),
+          message TEXT NOT NULL,
+          status VARCHAR(50) DEFAULT 'new',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      this.logger.log('Table contact_inquiries ensured.');
+    } catch (error) {
+      this.logger.error('Failed to ensure contact_inquiries table:', error);
+    }
+  }
 
   /**
    * Submit contact form

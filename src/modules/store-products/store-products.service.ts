@@ -153,16 +153,36 @@ export class StoreProductsService {
         p.product_date_added,
         p.info_description,
         p.subcategory_id,
-        ph.heading as header_name,
-        c_sub.category_name as subcategory_name,
-        c_parent.category_name as parent_category_name,
-        c_parent.category_id as parent_category_id,
         (
-          SELECT json_agg(json_build_object('id', c.category_id, 'name', c.category_name))
-          FROM product_category pcc
-          JOIN category c ON pcc.category_id = c.category_id
-          WHERE pcc.product_id = p.product_id
-        ) as category_list,
+          SELECT ph.heading 
+          FROM product_header ph 
+          JOIN heading_product hp ON ph.heading_id = hp.heading_id 
+          WHERE hp.product_id = p.product_id 
+          LIMIT 1
+        ) as header_name,
+        (
+          SELECT c.category_name 
+          FROM category c 
+          WHERE c.category_id = p.subcategory_id
+        ) as subcategory_name,
+        (
+          SELECT cp.category_name 
+          FROM category c 
+          JOIN category cp ON c.parent_category_id = cp.category_id 
+          WHERE c.category_id = p.subcategory_id
+        ) as parent_category_name,
+        (
+          SELECT cp.category_id 
+          FROM category c 
+          JOIN category cp ON c.parent_category_id = cp.category_id 
+          WHERE c.category_id = p.subcategory_id
+        ) as parent_category_id,
+        (
+          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
+          FROM product_category pc
+          JOIN category c ON pc.category_id = c.category_id
+          WHERE pc.product_id = p.product_id
+        ) as categories,
         (
           SELECT json_agg(
             json_build_object(
@@ -175,11 +195,6 @@ export class StoreProductsService {
           WHERE pi.product_id = p.product_id
         ) as product_images
       FROM product p
-      LEFT JOIN heading_product hp ON p.product_id = hp.product_id
-      LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
-      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
-      LEFT JOIN category c_parent ON c_sub.parent_category_id = c_parent.category_id
-      LEFT JOIN product_category pc ON p.product_id = pc.product_id
       WHERE p.product_status = 1 AND p.show_in_storefront = true
     `;
 
@@ -203,14 +218,32 @@ export class StoreProductsService {
     }
 
     if (category_id) {
-      params.push(Number(category_id));
-      query += ` AND (pc.category_id = $${paramIndex} OR p.subcategory_id = $${paramIndex} OR c_sub.parent_category_id = $${paramIndex})`;
+      const catId = Number(category_id);
+      params.push(catId);
+      // Filter products that are directly in this category, or in a subcategory of this category,
+      // or have this category as their assigned subcategory_id
+      query += ` AND (
+        EXISTS (
+          SELECT 1 FROM product_category pc_filter 
+          WHERE pc_filter.product_id = p.product_id 
+          AND (
+            pc_filter.category_id = $${paramIndex} 
+            OR pc_filter.category_id IN (SELECT category_id FROM category WHERE parent_category_id = $${paramIndex})
+          )
+        )
+        OR p.subcategory_id = $${paramIndex}
+        OR EXISTS (
+          SELECT 1 FROM category c_sub_filter 
+          WHERE c_sub_filter.category_id = p.subcategory_id 
+          AND c_sub_filter.parent_category_id = $${paramIndex}
+        )
+      )`;
       paramIndex++;
     }
 
     if (heading_id) {
       params.push(Number(heading_id));
-      query += ` AND hp.heading_id = $${paramIndex}`;
+      query += ` AND EXISTS (SELECT 1 FROM heading_product hp_filter WHERE hp_filter.product_id = p.product_id AND hp_filter.heading_id = $${paramIndex})`;
       paramIndex++;
     }
 
@@ -239,9 +272,6 @@ export class StoreProductsService {
     }
 
     query += `
-      GROUP BY p.product_id, p.product_name, p.product_description, p.product_price, 
-               p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, p.product_date_added, p.info_description, 
-               p.subcategory_id, ph.heading, c_sub.category_name, c_parent.category_name, c_parent.category_id
       ${orderByClause}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -252,11 +282,8 @@ export class StoreProductsService {
 
     // Get total count
     let countQuery = `
-      SELECT COUNT(DISTINCT p.product_id) as total
+      SELECT COUNT(*) as total
       FROM product p
-      LEFT JOIN product_category pc ON p.product_id = pc.product_id
-      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
-      LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       WHERE p.product_status = 1 AND p.show_in_storefront = true
     `;
 
@@ -270,14 +297,30 @@ export class StoreProductsService {
     }
 
     if (category_id) {
-      countParams.push(Number(category_id));
-      countQuery += ` AND (pc.category_id = $${countParamIndex} OR p.subcategory_id = $${countParamIndex} OR c_sub.parent_category_id = $${countParamIndex})`;
+      const catId = Number(category_id);
+      countParams.push(catId);
+      countQuery += ` AND (
+        EXISTS (
+          SELECT 1 FROM product_category pc_filter 
+          WHERE pc_filter.product_id = p.product_id 
+          AND (
+            pc_filter.category_id = $${countParamIndex} 
+            OR pc_filter.category_id IN (SELECT category_id FROM category WHERE parent_category_id = $${countParamIndex})
+          )
+        )
+        OR p.subcategory_id = $${countParamIndex}
+        OR EXISTS (
+          SELECT 1 FROM category c_sub_filter 
+          WHERE c_sub_filter.category_id = p.subcategory_id 
+          AND c_sub_filter.parent_category_id = $${countParamIndex}
+        )
+      )`;
       countParamIndex++;
     }
 
     if (heading_id) {
       countParams.push(Number(heading_id));
-      countQuery += ` AND hp.heading_id = $${countParamIndex}`;
+      countQuery += ` AND EXISTS (SELECT 1 FROM heading_product hp_filter WHERE hp_filter.product_id = p.product_id AND hp_filter.heading_id = $${countParamIndex})`;
       countParamIndex++;
     }
 
@@ -726,39 +769,61 @@ export class StoreProductsService {
     ) : false;
 
     let query = `
-    SELECT
-    p.product_id,
-      p.product_name,
-      p.product_description,
-      p.product_price,
-      p.retail_price,
-      p.customer_type_visibility,
-      p.product_image,
-      p.product_status,
-      p.info_description,
-      p.subcategory_id,
-      ph.heading as header_name,
-      c_sub.category_name as subcategory_name,
-      c_parent.category_name as parent_category_name,
-      c_parent.category_id as parent_category_id,
-      (
-        SELECT json_agg(
-          json_build_object(
-            'product_image_id', pi.product_image_id,
-            'image_url', pi.image_url,
-            'image_order', pi.image_order
-          ) ORDER BY pi.image_order
-        )
+      SELECT 
+        p.product_id,
+        p.product_name,
+        p.product_description,
+        p.product_price,
+        p.retail_price,
+        p.customer_type_visibility,
+        p.product_image,
+        p.product_status,
+        p.info_description,
+        p.subcategory_id,
+        (
+          SELECT ph.heading 
+          FROM product_header ph 
+          JOIN heading_product hp ON ph.heading_id = hp.heading_id 
+          WHERE hp.product_id = p.product_id 
+          LIMIT 1
+        ) as header_name,
+        (
+          SELECT c.category_name 
+          FROM category c 
+          WHERE c.category_id = p.subcategory_id
+        ) as subcategory_name,
+        (
+          SELECT cp.category_name 
+          FROM category c 
+          JOIN category cp ON c.parent_category_id = cp.category_id 
+          WHERE c.category_id = p.subcategory_id
+        ) as parent_category_name,
+        (
+          SELECT cp.category_id 
+          FROM category c 
+          JOIN category cp ON c.parent_category_id = cp.category_id 
+          WHERE c.category_id = p.subcategory_id
+        ) as parent_category_id,
+        (
+          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
+          FROM product_category pc
+          JOIN category c ON pc.category_id = c.category_id
+          WHERE pc.product_id = p.product_id
+        ) as categories,
+        (
+          SELECT json_agg(
+            json_build_object(
+              'product_image_id', pi.product_image_id,
+              'image_url', pi.image_url,
+              'image_order', pi.image_order
+            ) ORDER BY pi.image_order
+          )
           FROM product_images pi
           WHERE pi.product_id = p.product_id
         ) as product_images
       FROM product p
-      LEFT JOIN heading_product hp ON p.product_id = hp.product_id
-      LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
-      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
-      LEFT JOIN category c_parent ON c_sub.parent_category_id = c_parent.category_id
       WHERE p.product_status = 1 AND p.show_in_storefront = true
-      `;
+    `;
 
     // Filter by customer type visibility
     if (userId && customerType) {
@@ -773,23 +838,10 @@ export class StoreProductsService {
       query += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
     }
 
-    // Check if featured_1 and featured_2 columns exist
-    const featuredCheck = await this.dataSource.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'product' 
-      AND column_name IN('featured_1', 'featured_2')
-      `);
-    const hasFeatured1 = featuredCheck.some((row: any) => row.column_name === 'featured_1');
-    const hasFeatured2 = featuredCheck.some((row: any) => row.column_name === 'featured_2');
-
     query += `
-      GROUP BY p.product_id, p.product_name, p.product_description, p.product_price,
-      p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, p.info_description, 
-      p.subcategory_id, ph.heading, c_sub.category_name, c_parent.category_name, c_parent.category_id
       ORDER BY p.product_id DESC
       LIMIT $1
-      `;
+    `;
 
     const result = await this.dataSource.query(query, [Number(limit)]);
 
@@ -948,10 +1000,36 @@ export class StoreProductsService {
         p.product_status,
         p.info_description,
         p.subcategory_id,
-        ph.heading as header_name,
-        c_sub.category_name as subcategory_name,
-        c_parent.category_name as parent_category_name,
-        c_parent.category_id as parent_category_id,
+        (
+          SELECT ph.heading 
+          FROM product_header ph 
+          JOIN heading_product hp ON ph.heading_id = hp.heading_id 
+          WHERE hp.product_id = p.product_id 
+          LIMIT 1
+        ) as header_name,
+        (
+          SELECT c.category_name 
+          FROM category c 
+          WHERE c.category_id = p.subcategory_id
+        ) as subcategory_name,
+        (
+          SELECT cp.category_name 
+          FROM category c 
+          JOIN category cp ON c.parent_category_id = cp.category_id 
+          WHERE c.category_id = p.subcategory_id
+        ) as parent_category_name,
+        (
+          SELECT cp.category_id 
+          FROM category c 
+          JOIN category cp ON c.parent_category_id = cp.category_id 
+          WHERE c.category_id = p.subcategory_id
+        ) as parent_category_id,
+        (
+          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
+          FROM product_category pc
+          JOIN category c ON pc.category_id = c.category_id
+          WHERE pc.product_id = p.product_id
+        ) as categories,
         (
           SELECT json_agg(
             json_build_object(
@@ -964,13 +1042,9 @@ export class StoreProductsService {
           WHERE pi.product_id = p.product_id
         ) as product_images
       FROM product p
-      LEFT JOIN heading_product hp ON p.product_id = hp.product_id
-      LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
-      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
-      LEFT JOIN category c_parent ON c_sub.parent_category_id = c_parent.category_id
       WHERE p.product_status = 1 AND p.show_in_storefront = true
-        AND p.` + featuredColumn + ` = true
-      `;
+        AND p.${featuredColumn} = true
+    `;
 
     // Filter by customer type visibility
     if (userId && customerType) {
@@ -986,12 +1060,9 @@ export class StoreProductsService {
     }
 
     query += `
-      GROUP BY p.product_id, p.product_name, p.product_description, p.product_price,
-      p.retail_price, p.customer_type_visibility, p.product_image, p.product_status, ph.heading,
-      p.subcategory_id, c_sub.category_name, c_parent.category_name, c_parent.category_id
       ORDER BY p.product_id DESC
       LIMIT $1
-      `;
+    `;
 
     const result = await this.dataSource.query(query, [Number(limit)]);
 
