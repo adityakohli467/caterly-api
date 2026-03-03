@@ -67,6 +67,14 @@ export class AdminOrdersService implements OnModuleInit {
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='postcode') THEN
             ALTER TABLE orders ADD COLUMN postcode INT;
           END IF;
+          -- company_id
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='company_id') THEN
+            ALTER TABLE orders ADD COLUMN company_id INT;
+          END IF;
+          -- department_id
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='department_id') THEN
+            ALTER TABLE orders ADD COLUMN department_id INT;
+          END IF;
 
           -- order_product columns
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='order_product_comment') THEN
@@ -143,6 +151,8 @@ export class AdminOrdersService implements OnModuleInit {
         COALESCE(o.email, c.email) as email,
         COALESCE(o.telephone, c.telephone) as telephone,
         c.customer_type,
+        COALESCE(o.company_id, c.company_id) as company_id,
+        COALESCE(o.department_id, c.department_id) as department_id,
         co.company_name,
         d.department_name,
         l.location_name,
@@ -159,8 +169,8 @@ export class AdminOrdersService implements OnModuleInit {
         END as has_successful_payment
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON c.company_id = co.company_id
-      LEFT JOIN department d ON c.department_id = d.department_id
+      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE 1=1
@@ -353,7 +363,9 @@ export class AdminOrdersService implements OnModuleInit {
         telephone: row.telephone,
         customer_type: row.customer_type,
         company: row.company_name,
+        company_id: row.company_id,
         department: row.department_name,
+        department_id: row.department_id,
         location_name: row.location_name,
         location_id: row.location_id,
         delivery_date: row.delivery_date_time ? new Date(row.delivery_date_time).toISOString().split('T')[0] : null,
@@ -389,8 +401,8 @@ export class AdminOrdersService implements OnModuleInit {
         COALESCE(o.email, c.email) as email,
         COALESCE(o.telephone, c.telephone) as telephone,
         c.customer_type,
-        c.company_id,
-        c.department_id,
+        COALESCE(o.company_id, c.company_id) as company_id,
+        COALESCE(o.department_id, d.department_id) as department_id,
         co.company_name,
         co.company_abn,
         d.department_name,
@@ -433,8 +445,8 @@ export class AdminOrdersService implements OnModuleInit {
         ), '[]'::json) as order_products
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON c.company_id = co.company_id
-      LEFT JOIN department d ON c.department_id = d.department_id
+      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.order_id = $1
@@ -601,6 +613,8 @@ export class AdminOrdersService implements OnModuleInit {
         email,
         telephone,
         location_id,
+        company_id,
+        department_id,
         delivery_date, // New: separate date field
         delivery_date_time, // Optional - for backward compatibility
         delivery_time, // New: separate time field for Caterly
@@ -726,8 +740,8 @@ export class AdminOrdersService implements OnModuleInit {
           customer_id, location_id, branch_id, shipping_method, delivery_date_time, delivery_fee, order_total,
           order_status, order_comments, coupon_id, coupon_discount, delivery_address, delivery_method,
           account_email, cost_center, delivery_contact, delivery_details, standing_order, user_id, payment_status,
-          firstname, lastname, email, telephone, gst
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+          firstname, lastname, email, telephone, gst, company_id, department_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
         RETURNING *`,
         [
           customer_id || null,
@@ -755,6 +769,8 @@ export class AdminOrdersService implements OnModuleInit {
           email || null,
           telephone || null,
           gst,
+          company_id || null,
+          department_id || null,
         ],
       );
 
@@ -856,6 +872,8 @@ export class AdminOrdersService implements OnModuleInit {
         email = currentOrder.email,
         telephone = currentOrder.telephone,
         location_id,
+        company_id,
+        department_id,
         delivery_date,
         delivery_date_time,
         delivery_time,
@@ -881,6 +899,8 @@ export class AdminOrdersService implements OnModuleInit {
       const finalLastname = lastname ?? currentOrder.lastname;
       const finalEmail = email ?? currentOrder.email;
       const finalTelephone = telephone ?? currentOrder.telephone;
+      const finalCompanyId = company_id ?? currentOrder.company_id;
+      const finalDepartmentId = department_id ?? currentOrder.department_id;
       const finalDeliveryFee = delivery_fee ?? currentOrder.delivery_fee;
       const finalOrderComments = order_comments ?? currentOrder.order_comments;
       const finalDeliveryAddress = delivery_address ?? currentOrder.delivery_address;
@@ -985,8 +1005,10 @@ export class AdminOrdersService implements OnModuleInit {
              email = $23,
              telephone = $24,
              gst = $25,
+             company_id = $26,
+             department_id = $27,
              date_modified = CURRENT_TIMESTAMP
-         WHERE order_id = $26
+         WHERE order_id = $28
          RETURNING *`,
         [
           finalCustomerId,
@@ -1014,6 +1036,8 @@ export class AdminOrdersService implements OnModuleInit {
           finalEmail,
           finalTelephone,
           resolvedGst,
+          finalCompanyId,
+          finalDepartmentId,
           id,
         ],
       );

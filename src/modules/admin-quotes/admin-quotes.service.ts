@@ -34,7 +34,8 @@ export class AdminQuotesService {
         COALESCE(o.lastname, c.lastname) as lastname,
         COALESCE(o.email, c.email) as email,
         COALESCE(o.telephone, c.telephone) as telephone,
-        c.customer_type,
+        COALESCE(o.company_id, c.company_id) as company_id,
+        COALESCE(o.department_id, c.department_id) as department_id,
         co.company_name,
         l.location_name,
         d.department_name,
@@ -43,9 +44,9 @@ export class AdminQuotesService {
         cp.coupon_discount
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON c.company_id = co.company_id
+      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
       LEFT JOIN locations l ON o.location_id = l.location_id
-      LEFT JOIN department d ON c.department_id = d.department_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.standing_order = 0
       AND (o.order_status = 1 OR o.order_status = 4 OR o.order_status = 7 OR o.order_status = 8 OR o.order_status = 9)
@@ -326,8 +327,8 @@ export class AdminQuotesService {
         COALESCE(o.lastname, c.lastname) as lastname,
         COALESCE(o.email, c.email) as email,
         COALESCE(o.telephone, c.telephone) as telephone,
-        c.company_id,
-        c.department_id,
+        COALESCE(o.company_id, c.company_id) as company_id,
+        COALESCE(o.department_id, c.department_id) as department_id,
         c.customer_type,
         co.company_name,
         co.company_abn,
@@ -369,8 +370,8 @@ export class AdminQuotesService {
         ), '[]'::json) as products
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON c.company_id = co.company_id
-      LEFT JOIN department d ON c.department_id = d.department_id
+      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.order_id = $1 AND o.standing_order = 0
@@ -530,6 +531,8 @@ export class AdminQuotesService {
       const {
         customer_id,
         location_id,
+        company_id,
+        department_id,
         delivery_date, // Optional - not required for Caterly
         delivery_time,
         delivery_method,
@@ -709,9 +712,11 @@ export class AdminQuotesService {
           coupon_id,
           coupon_discount,
           payment_status,
+          company_id,
+          department_id,
           date_added,
           date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING order_id`,
         [
           customer_id,
@@ -735,6 +740,8 @@ export class AdminQuotesService {
           couponId,
           finalCouponDiscount, // Store coupon discount amount for historical accuracy
           'quote', // Mark as 'quote' to distinguish from orders
+          company_id || null,
+          department_id || null,
         ],
       );
 
@@ -832,6 +839,8 @@ export class AdminQuotesService {
       const {
         customer_id,
         location_id,
+        company_id,
+        department_id,
         delivery_date,
         delivery_time,
         delivery_method,
@@ -1028,8 +1037,10 @@ export class AdminQuotesService {
              coupon_id = $14,
              coupon_discount = $15,
              order_status = $16,
+             company_id = $17,
+             department_id = $18,
              date_modified = CURRENT_TIMESTAMP
-         WHERE order_id = $17 AND standing_order = 0
+         WHERE order_id = $19 AND standing_order = 0
          RETURNING *`,
         [
           customer_id,
@@ -1048,6 +1059,8 @@ export class AdminQuotesService {
           couponId,
           finalCouponDiscount, // Store coupon discount amount for historical accuracy
           newOrderStatus, // Keep as quote unless explicitly converting
+          company_id || null,
+          department_id || null,
           id,
         ],
       );
