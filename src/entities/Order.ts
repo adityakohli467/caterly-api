@@ -126,6 +126,12 @@ export class Order {
   order_comments!: string
 
   @Column({ type: "int", nullable: true })
+  company_id!: number
+
+  @Column({ type: "int", nullable: true })
+  department_id!: number
+
+  @Column({ type: "int", nullable: true })
   coupon_id!: number
 
   @CreateDateColumn({ name: "date_added" })

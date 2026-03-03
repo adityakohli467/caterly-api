@@ -9,7 +9,7 @@ export class StoreQuotesService {
   constructor(
     private dataSource: DataSource,
     private invoiceService: InvoiceService,
-  ) {}
+  ) { }
 
   /**
    * Get public quote details by token (no authentication required)
@@ -34,8 +34,8 @@ export class StoreQuotesService {
         c.lastname,
         c.email,
         c.telephone,
-        c.company_id,
-        c.department_id,
+        COALESCE(o.company_id, c.company_id) as company_id,
+        COALESCE(o.department_id, c.department_id) as department_id,
         c.customer_type,
         co.company_name,
         d.department_name,
@@ -69,8 +69,8 @@ export class StoreQuotesService {
         ) as products
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON c.company_id = co.company_id
-      LEFT JOIN department d ON c.department_id = d.department_id
+      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.quote_token = $1 AND o.standing_order = 0
@@ -108,8 +108,8 @@ export class StoreQuotesService {
         c.lastname,
         c.email,
         c.telephone,
-        c.company_id,
-        c.department_id,
+        COALESCE(o.company_id, c.company_id) as company_id,
+        COALESCE(o.department_id, c.department_id) as department_id,
         c.customer_type,
         co.company_name,
         d.department_name,
@@ -143,8 +143,8 @@ export class StoreQuotesService {
         ) as products
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON c.company_id = co.company_id
-      LEFT JOIN department d ON c.department_id = d.department_id
+      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.order_id = $1 AND o.standing_order = 0
@@ -168,7 +168,7 @@ export class StoreQuotesService {
     const optionDiscountsMap = new Map();
     // Get customer product discounts (product-level)
     const productDiscountsMap = new Map();
-    
+
     if (quote.customer_id) {
       // Fetch option-level discounts
       const optionDiscountQuery = `
@@ -234,7 +234,7 @@ export class StoreQuotesService {
         } else {
           // Product has no options - apply product-level discount
           const productDiscountPercentage = productDiscountsMap.get(product.product_id) || 0;
-          
+
           if (productDiscountPercentage > 0) {
             const discountAmount = productSubtotal * (productDiscountPercentage / 100);
             subtotal += productSubtotal - discountAmount;
@@ -336,7 +336,7 @@ export class StoreQuotesService {
       ]);
 
       await queryRunner.commitTransaction();
-      
+
       // Auto-generate invoice when quote is approved (status 7) - after transaction commits
       if (newStatus === 7) {
         // Generate invoice asynchronously after transaction commits
@@ -349,7 +349,7 @@ export class StoreQuotesService {
           }
         }, 1000);
       }
-      
+
       return {
         success: true,
         quote: result[0],
@@ -423,7 +423,7 @@ export class StoreQuotesService {
       ]);
 
       await queryRunner.commitTransaction();
-      
+
       // Auto-generate invoice when quote is approved (status 7) - after transaction commits
       if (newStatus === 7) {
         // Generate invoice asynchronously after transaction commits

@@ -99,7 +99,7 @@ export class StoreOrdersService implements OnModuleInit {
       if (userId) {
         // Get customer with customer_type
         const customerQuery = `
-          SELECT c.customer_id, c.telephone, c.email, c.customer_type 
+          SELECT c.customer_id, c.telephone, c.email, c.customer_type, c.company_id, c.department_id
           FROM customer c 
           WHERE c.user_id = $1
         `;
@@ -314,8 +314,10 @@ export class StoreOrdersService implements OnModuleInit {
           firstname,
           lastname,
           email,
-          telephone
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+          telephone,
+          company_id,
+          department_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
         RETURNING order_id
       `;
 
@@ -341,7 +343,9 @@ export class StoreOrdersService implements OnModuleInit {
         firstname || null,
         lastname || null,
         email || null,
-        telephone || null
+        telephone || null,
+        customer?.company_id || null,
+        customer?.department_id || null
       ]);
 
       const orderId = orderResult[0].order_id;
@@ -650,11 +654,16 @@ export class StoreOrdersService implements OnModuleInit {
         o.date_added,
         o.delivery_date_time,
         o.delivery_address,
+        co.company_name,
+        d.department_name,
         COALESCE(COUNT(op.order_product_id), 0)::integer as item_count
       FROM orders o
       LEFT JOIN order_product op ON o.order_id = op.order_id
+      LEFT JOIN customer c ON o.customer_id = c.customer_id
+      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       WHERE o.customer_id = $1
-      GROUP BY o.order_id, o.order_total, o.order_status, o.date_added, o.delivery_date_time, o.delivery_address
+      GROUP BY o.order_id, o.order_total, o.order_status, o.date_added, o.delivery_date_time, o.delivery_address, co.company_name, d.department_name
       ORDER BY o.date_added DESC
       LIMIT $2 OFFSET $3
     `;
@@ -694,8 +703,13 @@ export class StoreOrdersService implements OnModuleInit {
       SELECT 
         o.*,
         cp.coupon_code,
-        cp.type as coupon_type
+        cp.type as coupon_type,
+        co.company_name,
+        d.department_name
       FROM orders o
+      LEFT JOIN customer c ON o.customer_id = c.customer_id
+      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.order_id = $1 AND (o.customer_id IS NULL OR o.user_id IS NULL)
     `;
@@ -763,8 +777,13 @@ export class StoreOrdersService implements OnModuleInit {
       SELECT 
         o.*,
         cp.coupon_code,
-        cp.type as coupon_type
+        cp.type as coupon_type,
+        co.company_name,
+        d.department_name
       FROM orders o
+      LEFT JOIN customer c ON o.customer_id = c.customer_id
+      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.order_id = $1
     `;
