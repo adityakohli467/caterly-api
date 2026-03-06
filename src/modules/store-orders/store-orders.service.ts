@@ -58,6 +58,8 @@ export class StoreOrdersService implements OnModuleInit {
       coupon_code?: string;
       postcode?: string;
       gst_status?: number;
+      location_id?: number;
+      name?: string;
     },
   ) {
     const {
@@ -80,6 +82,8 @@ export class StoreOrdersService implements OnModuleInit {
       coupon_code,
       postcode,
       gst_status,
+      location_id,
+      name,
     } = orderData;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -99,7 +103,7 @@ export class StoreOrdersService implements OnModuleInit {
       if (userId) {
         // Get customer with customer_type
         const customerQuery = `
-          SELECT c.customer_id, c.telephone, c.email, c.customer_type, c.company_id, c.department_id
+          SELECT c.customer_id, c.telephone, c.email, c.customer_type, c.company_id, c.department_id, c.firstname, c.lastname, c.name
           FROM customer c 
           WHERE c.user_id = $1
         `;
@@ -316,8 +320,12 @@ export class StoreOrdersService implements OnModuleInit {
           email,
           telephone,
           company_id,
-          department_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+          department_id,
+          customer_order_name,
+          customer_order_email,
+          customer_order_telephone,
+          location_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
         RETURNING order_id
       `;
 
@@ -340,12 +348,16 @@ export class StoreOrdersService implements OnModuleInit {
         couponDiscount,
         gstStatus,
         standingOrderDays,
-        firstname || null,
-        lastname || null,
+        firstname || (name ? name.split(' ')[0] : null),
+        lastname || (name ? name.split(' ').slice(1).join(' ') : null),
         email || null,
         telephone || null,
         customer?.company_id || null,
-        customer?.department_id || null
+        customer?.department_id || null,
+        name || (firstname || lastname ? `${firstname || ''} ${lastname || ''}`.trim() : null) || customer?.name || `${customer?.firstname || ''} ${customer?.lastname || ''}`.trim() || 'Guest',
+        email || customer?.email || null,
+        telephone || customer?.telephone || null,
+        location_id || 1
       ]);
 
       const orderId = orderResult[0].order_id;

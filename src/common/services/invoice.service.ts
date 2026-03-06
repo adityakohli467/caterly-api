@@ -31,6 +31,7 @@ export interface InvoiceData {
     comment?: string;
     product_desc_1?: string;
     product_desc_2?: string;
+    product_description?: string;
     options?: Array<{
       option_name: string;
       option_value: string;
@@ -52,6 +53,9 @@ export interface InvoiceData {
   payment_date?: string;
   order_comments?: string;
   is_quote?: boolean;
+  bank_account_name?: string;
+  bank_account_number?: string;
+  bank_bsb?: string;
 }
 
 @Injectable()
@@ -123,6 +127,9 @@ export class InvoiceService {
         loc.location_name,
         loc.pickup_address as location_address,
         loc.contact as location_phone,
+        loc.account_name as bank_account_name,
+        loc.account_number as bank_account_number,
+        loc.bsb as bank_bsb,
         o.coupon_id,
         o.coupon_discount as stored_coupon_discount,
         cp.coupon_code,
@@ -164,7 +171,8 @@ export class InvoiceService {
         op.order_product_id,
         op.order_product_comment,
         p.product_desc_1,
-        p.product_desc_2
+        p.product_desc_2,
+        p.product_description
       FROM order_product op
       LEFT JOIN product p ON op.product_id = p.product_id
       WHERE op.order_id = $1
@@ -206,6 +214,7 @@ export class InvoiceService {
         comment: row.order_product_comment || undefined,
         product_desc_1: row.product_desc_1 || undefined,
         product_desc_2: row.product_desc_2 || undefined,
+        product_description: row.product_description || undefined,
         options: productOptions.length > 0 ? productOptions.map((opt: any) => ({
           option_name: opt.option_name,
           option_value: opt.option_value,
@@ -244,10 +253,10 @@ export class InvoiceService {
     }
 
     const afterDiscount = subtotal - couponDiscount;
-    // GST is inclusive: calculate as 11% but display as 10%
+    // GST should be 11% of total (calculated as inclusive 11/111 if already in total, or as requested)
     const lateFee = parseFloat(order.late_fee || 0);
-    const total = afterDiscount + deliveryFee + lateFee; // Total is inclusive of GST
-    const gst = total * (11 / 111); // Calculate GST as 11% but display as 10%
+    const total = afterDiscount + deliveryFee + lateFee;
+    const gst = total * 0.11; // Calculate GST as 11% of total (informational only)
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);
@@ -278,7 +287,7 @@ export class InvoiceService {
         deliveryTime = deliveryDateTime.toLocaleTimeString('en-AU', {
           hour: '2-digit',
           minute: '2-digit',
-          hour12: false,
+          hour12: true, // Use AM/PM
         });
       } catch (error) {
         this.logger.warn('Could not parse delivery time:', error);
@@ -336,6 +345,9 @@ export class InvoiceService {
       payment_date: order.payment_date,
       order_comments: order.order_comments,
       is_quote: isQuote,
+      bank_account_name: order.bank_account_name,
+      bank_account_number: order.bank_account_number,
+      bank_bsb: order.bank_bsb,
     };
   }
 
@@ -432,15 +444,15 @@ export class InvoiceService {
         const pageHeight = doc.page.height;
 
         // Company Logo/Text - Centered at top (matching caterly format)
-        // For kj4, use "ZENN" text branding instead of logo image
+        // For kj4, use "Caterly" text branding
         let logoHeight = 0;
-        const logoStartY = headerY; // Start at header position
-        const brandingText = 'Caterly'; // Hardcode Caterly text for branding
+        const logoStartY = headerY;
+        const brandingText = 'Caterly';
         doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
         const logoTextWidth = doc.widthOfString(brandingText);
-        const logoTextX = (pageWidth - logoTextWidth) / 2; // Center horizontally
+        const logoTextX = pageMargin; // Left align like a logo
         doc.text(brandingText, logoTextX, logoStartY);
-        logoHeight = 35 + 5; // Add spacing
+        logoHeight = 35 + 5;
 
         // Calculate total header height (company name + logo/text)
         const totalHeaderHeight = logoStartY + logoHeight - headerY;
@@ -511,90 +523,92 @@ export class InvoiceService {
         doc.font('Helvetica').text(auDateStr, 130, detailsY + 9);
 
         if (data.delivery_date) {
-          doc.font('Helvetica-Bold').text('Delivery Date:', 40, detailsY + 18);
+          doc.font('Helvetica-Bold').text('Delivery Day:', 40, detailsY + 18);
           const deliveryDate = new Date(data.delivery_date);
+          const auDeliveryDayStr = deliveryDate.toLocaleDateString('en-AU', {
+            weekday: 'long',
+            timeZone: 'Australia/Sydney',
+          });
+          doc.font('Helvetica').text(auDeliveryDayStr, 130, detailsY + 18);
+
+          doc.font('Helvetica-Bold').text('Delivery Date:', 40, detailsY + 27);
           const auDeliveryDateStr = deliveryDate.toLocaleDateString('en-AU', {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
             timeZone: 'Australia/Sydney',
           });
-          doc.font('Helvetica').text(auDeliveryDateStr, 130, detailsY + 18);
+          doc.font('Helvetica').text(auDeliveryDateStr, 130, detailsY + 27);
 
           // Add delivery time if available
           if (data.delivery_time) {
-            doc.font('Helvetica-Bold').text('Delivery Time:', 40, detailsY + 27);
-            doc.font('Helvetica').text(data.delivery_time, 130, detailsY + 27);
+            doc.font('Helvetica-Bold').text('Delivery Time:', 40, detailsY + 36);
+            doc.font('Helvetica').text(data.delivery_time, 130, detailsY + 36);
           }
         }
 
-        // Bill To Section - adjust Y position if delivery time is shown
-        const billToY = data.delivery_time ? detailsY + 9 : detailsY;
+        // Bill To Section - Left side
+        const billToY = detailsY + (data.delivery_time ? 50 : 40);
         doc.fontSize(9).font('Helvetica-Bold').fillColor(primaryColor);
-        doc.text('Bill To:', 360, billToY);
-
-        doc.rect(355, billToY + 9, 205, 1).fillColor(primaryColor).fill();
+        doc.text('Bill To:', 40, billToY);
+        doc.rect(40, billToY + 10, 240, 1).fillColor(primaryColor).fill();
 
         doc.fontSize(7).font('Helvetica').fillColor(darkGray);
-        let billToInfoY = billToY + 15;
-
-        doc.font('Helvetica-Bold').text(data.customer_name, 360, billToInfoY, { width: 200 });
-        billToInfoY += 10;
+        let leftColY = billToY + 16;
+        doc.font('Helvetica-Bold').text(data.customer_name, 40, leftColY, { width: 230 });
+        leftColY += 10;
         doc.font('Helvetica');
 
         if (data.company_name) {
-          doc.text(data.company_name, 360, billToInfoY, { width: 200 });
-          billToInfoY += 9;
+          doc.text(data.company_name, 40, leftColY, { width: 230 });
+          leftColY += 9;
         }
-
         if (data.department_name) {
-          doc.text(`Dept: ${data.department_name}`, 360, billToInfoY, { width: 200 });
-          billToInfoY += 9;
+          doc.text(`Dept: ${data.department_name}`, 40, leftColY, { width: 230 });
+          leftColY += 9;
         }
-
         if (data.customer_email) {
-          doc.text(`Email: ${data.customer_email}`, 360, billToInfoY, { width: 200 });
-          billToInfoY += 9;
+          doc.text(`Email: ${data.customer_email}`, 40, leftColY, { width: 230 });
+          leftColY += 9;
+        }
+        if (data.customer_phone) {
+          doc.text(`Phone: ${data.customer_phone}`, 40, leftColY, { width: 230 });
+          leftColY += 9;
         }
 
-        if (data.customer_phone) {
-          doc.text(`Phone: ${data.customer_phone}`, 360, billToInfoY, { width: 200 });
-          billToInfoY += 9;
-        }
+        // Delivery Details Section - Right side
+        const deliveryDetailsY = billToY;
+        doc.fontSize(9).font('Helvetica-Bold').fillColor(primaryColor);
+        doc.text('Delivery Details:', 320, deliveryDetailsY);
+        doc.rect(320, deliveryDetailsY + 10, 240, 1).fillColor(primaryColor).fill();
+
+        doc.fontSize(7).font('Helvetica').fillColor(darkGray);
+        let rightColY = deliveryDetailsY + 16;
 
         if (data.location_name) {
-          doc.text(`Location: ${data.location_name}`, 360, billToInfoY, { width: 200 });
-          billToInfoY += 9;
+          doc.text(`Location: ${data.location_name}`, 320, rightColY, { width: 230 });
+          rightColY += 9;
         }
 
         if (data.delivery_address) {
-          const addressLines = data.delivery_address.split('\n');
-          addressLines.forEach((line: string) => {
-            if (line.trim()) {
-              doc.text(`Delivery: ${line.trim()}`, 360, billToInfoY, { width: 200 });
-              billToInfoY += 9;
-            }
-          });
+          doc.text(`Address: ${data.delivery_address}`, 320, rightColY, { width: 230 });
+          const addressHeight = doc.heightOfString(`Address: ${data.delivery_address}`, { width: 230 });
+          rightColY += addressHeight + 2;
         }
 
         if (data.delivery_contact) {
-          doc.text(`Delivery Contact: ${data.delivery_contact}`, 360, billToInfoY, { width: 200 });
-          billToInfoY += 9;
+          doc.text(`Contact: ${data.delivery_contact}`, 320, rightColY, { width: 230 });
+          rightColY += 9;
         }
 
         if (data.delivery_details) {
-          const detailsLines = data.delivery_details.split('\n');
-          detailsLines.forEach((line: string) => {
-            if (line.trim()) {
-              doc.text(`Delivery Notes: ${line.trim()}`, 360, billToInfoY, { width: 200 });
-              billToInfoY += 9;
-            }
-          });
+          doc.text(`Notes: ${data.delivery_details}`, 320, rightColY, { width: 230 });
+          const detailsHeight = doc.heightOfString(`Notes: ${data.delivery_details}`, { width: 230 });
+          rightColY += detailsHeight + 2;
         }
 
-        // Items Table Section - adjust based on delivery time and additional fields
-        const baseTableStartY = data.delivery_time ? detailsY + 36 : detailsY + 25;
-        const tableStartY = Math.max(baseTableStartY, billToInfoY + 10);
+        // Items Table Section
+        const tableStartY = Math.max(leftColY, rightColY) + 15;
 
         doc.rect(40, tableStartY, 520, 18).fillColor(primaryColor).fill().fillColor('#ffffff');
 
@@ -630,21 +644,21 @@ export class InvoiceService {
 
           doc.moveTo(40, tableY - 3).lineTo(560, tableY - 3).strokeColor(borderGray).lineWidth(0.5).stroke();
 
-          doc.fontSize(7).font('Helvetica');
+          doc.fontSize(7).font('Helvetica').fillColor(darkGray);
           doc.text(item.product_name, 50, tableY + 1, { width: 300 });
 
           let extraHeight = 0;
 
-          // Show product comment if available
-          if (item.comment) {
+          // Show product descriptions if available
+          if (item.product_description) {
             doc.fontSize(6).fillColor(lightGray);
-            doc.text(`Note: ${item.comment}`, 55, tableY + 8, { width: 295 });
+            const descHeight = doc.heightOfString(item.product_description, { width: 295 });
+            doc.text(item.product_description, 55, tableY + 8 + extraHeight, { width: 295 });
             doc.fillColor(darkGray);
             doc.fontSize(7);
-            extraHeight += 7;
+            extraHeight += descHeight + 1;
           }
 
-          // Show product descriptions if available
           if (item.product_desc_1) {
             doc.fontSize(6).fillColor(lightGray);
             doc.text(item.product_desc_1, 55, tableY + 8 + extraHeight, { width: 295 });
@@ -661,6 +675,15 @@ export class InvoiceService {
             extraHeight += 7;
           }
 
+          // Show product comment if available
+          if (item.comment) {
+            doc.fontSize(6).fillColor(lightGray);
+            doc.text(`Note: ${item.comment}`, 55, tableY + 8 + extraHeight, { width: 295 });
+            doc.fillColor(darkGray);
+            doc.fontSize(7);
+            extraHeight += 7;
+          }
+
           // Show options if available
           if (item.options && item.options.length > 0) {
             item.options.forEach((opt: any) => {
@@ -672,6 +695,7 @@ export class InvoiceService {
             });
           }
 
+          doc.fillColor(darkGray); // Ensure prices are in darkGray
           doc.text(item.quantity.toString(), 360, tableY + 1);
           doc.text(`$${item.price.toFixed(2)}`, 410, tableY + 1);
           doc.font('Helvetica-Bold');
@@ -725,7 +749,7 @@ export class InvoiceService {
           currentY += 9;
         }
 
-        doc.text('GST (10%):', totalsX, currentY, { width: 120, align: 'right' });
+        doc.text('GST (11%):', totalsX, currentY, { width: 120, align: 'right' });
         doc.text(`$${data.gst.toFixed(2)}`, totalsX + 130, currentY, { width: 90, align: 'right' });
         currentY += 10;
 
@@ -764,19 +788,22 @@ export class InvoiceService {
         doc.font('Helvetica').fontSize(7).fillColor(darkGray);
         currentY += 15;
 
-        // Order Comments Section
-        if (data.order_comments && currentY < pageHeight - 40) {
-          const commentsY = currentY + 12;
+        // Delivery Notes Section
+        if (data.delivery_details) {
           doc.fontSize(7).font('Helvetica-Bold');
-          doc.text('Notes:', 40, commentsY);
+          doc.text('Delivery Notes:', 40, currentY);
           doc.font('Helvetica').fontSize(6);
-          const commentLines = doc.heightOfString(data.order_comments, { width: 520 });
-          if (commentsY + commentLines < pageHeight - 30) {
-            doc.text(data.order_comments, 40, commentsY + 8, {
-              width: 520,
-              align: 'left',
-            });
-          }
+          doc.text(data.delivery_details, 40, currentY + 8, { width: 520 });
+          currentY += doc.heightOfString(data.delivery_details, { width: 520 }) + 15;
+        }
+
+        // Order Comments Section
+        if (data.order_comments) {
+          doc.fontSize(7).font('Helvetica-Bold');
+          doc.text('Order Comments:', 40, currentY);
+          doc.font('Helvetica').fontSize(6);
+          doc.text(data.order_comments, 40, currentY + 8, { width: 520 });
+          currentY += doc.heightOfString(data.order_comments, { width: 520 }) + 15;
         }
 
         // Footer Section
@@ -813,6 +840,22 @@ export class InvoiceService {
               });
               footerTextY += 8;
             }
+          }
+
+          // Bank Account Information
+          if (data.bank_account_name || data.bank_account_number || data.bank_bsb) {
+            doc.fontSize(6).font('Helvetica-Bold').fillColor(darkGray);
+            doc.text('Payment Information:', 40, footerTextY, { width: 520, align: 'left' });
+            footerTextY += 7;
+
+            doc.font('Helvetica').fontSize(6).fillColor(lightGray);
+            const bankInfo: string[] = [];
+            if (data.bank_account_name) bankInfo.push(`Account Name: ${data.bank_account_name}`);
+            if (data.bank_bsb) bankInfo.push(`BSB: ${data.bank_bsb}`);
+            if (data.bank_account_number) bankInfo.push(`Account No: ${data.bank_account_number}`);
+
+            doc.text(bankInfo.join(' | '), 40, footerTextY, { width: 520, align: 'left' });
+            footerTextY += 8;
           }
 
           // Thank you message
