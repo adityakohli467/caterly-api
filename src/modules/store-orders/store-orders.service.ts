@@ -548,12 +548,12 @@ export class StoreOrdersService implements OnModuleInit {
   <style>
     body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #0d6efd; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
     .content { padding: 20px; }
     .order-details { background-color: #f9f9f9; padding: 15px; margin: 15px 0; border-radius: 5px; }
     .order-info { margin: 10px 0; }
     .order-info strong { display: inline-block; width: 150px; }
-    .cta-button { display: inline-block; padding: 12px 24px; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
+    .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>
 </head>
@@ -577,7 +577,7 @@ export class StoreOrdersService implements OnModuleInit {
 
       <div style="text-align: center; margin: 30px 0;">
         <a href="${paymentLink}" class="cta-button">Pay Now</a>
-        <a href="${invoiceUrl}" class="cta-button" style="background-color: #28a745;">View Invoice</a>
+        <a href="${invoiceUrl}" class="cta-button" style="background-color: #000000;">View Invoice</a>
       </div>
 
       <p>You can pay for your order by clicking the "Pay Now" button above. Once payment is received, we'll process your order.</p>

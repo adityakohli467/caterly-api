@@ -1156,7 +1156,7 @@ export class AdminOrdersService implements OnModuleInit {
   <style>
     body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #0d6efd; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
     .content { padding: 20px; }
     .status-badge { display: inline-block; padding: 8px 16px; border-radius: 5px; font-weight: bold; margin: 10px 0; }
     .status-paid { background-color: #28a745; color: white; }
