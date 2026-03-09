@@ -103,7 +103,7 @@ export class StoreOrdersService implements OnModuleInit {
       if (userId) {
         // Get customer with customer_type
         const customerQuery = `
-          SELECT c.customer_id, c.telephone, c.email, c.customer_type, c.company_id, c.department_id, c.firstname, c.lastname, c.name
+          SELECT c.customer_id, c.telephone, c.email, c.customer_type, c.company_id, c.department_id, c.firstname, c.lastname
           FROM customer c 
           WHERE c.user_id = $1
         `;
