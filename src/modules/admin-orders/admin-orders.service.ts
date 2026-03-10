@@ -1156,7 +1156,7 @@ export class AdminOrdersService implements OnModuleInit {
   <style>
     body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #0d6efd; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
     .content { padding: 20px; }
     .status-badge { display: inline-block; padding: 8px 16px; border-radius: 5px; font-weight: bold; margin: 10px 0; }
     .status-paid { background-color: #28a745; color: white; }
@@ -1863,14 +1863,14 @@ export class AdminOrdersService implements OnModuleInit {
         </p>
         <br/>
         <p style="margin-top: 20px;">
-          <a href="${paymentLink}" style="background-color: #337ab7; color: #fff; padding: 8px 15px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: 700;">
+          <a href="${paymentLink}" style="background-color: #E03A3E; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: 700;">
             Click here to pay
           </a>
         </p>
         <br/>
         <p style="margin-top: 20px;">
           <a href="${paymentLink}">
-            <button style="background-color: #337ab7; border: solid 1px #337ab7; cursor: pointer; font-weight: 700; color: #fff; padding: 8px 15px; border-radius: 4px;">
+            <button style="background-color: #E03A3E; border: solid 1px #E03A3E; cursor: pointer; font-weight: 700; color: #fff; padding: 12px 24px; border-radius: 5px;">
               Click here to pay
             </button>
           </a>
@@ -1878,7 +1878,7 @@ export class AdminOrdersService implements OnModuleInit {
         <br/>
         <p style="margin-top: 20px;">
           <a href="${invoiceLink}">
-            <button style="background-color: red; border: solid 1px red; cursor: pointer; font-weight: 700; color: #fff; padding: 8px 15px; border-radius: 4px;">
+            <button style="background-color: #000000; border: solid 1px #000000; cursor: pointer; font-weight: 700; color: #fff; padding: 12px 24px; border-radius: 5px;">
               View PDF Invoice
             </button>
           </a>

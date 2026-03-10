@@ -435,7 +435,7 @@ export class EmailService {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #0d6efd; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
     .content { padding: 20px; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>

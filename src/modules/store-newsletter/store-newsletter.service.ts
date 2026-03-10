@@ -140,7 +140,9 @@ export class StoreNewsletterService implements OnModuleInit {
   private async sendWelcomeEmail(email: string): Promise<void> {
     try {
       const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3006';
+      const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
+        this.configService.get<string>('FRONTEND_URL') ||
+        'http://localhost:3006';
 
       const emailHtml = `
 <!DOCTYPE html>

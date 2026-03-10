@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { DataSource } from 'typeorm';
 import { EmailService } from '../../common/services/email.service';
 import { InvoiceService } from '../../common/services/invoice.service';
+import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class AdminQuotesService {
     private dataSource: DataSource,
     private emailService: EmailService,
     private invoiceService: InvoiceService,
+    private configService: ConfigService,
   ) { }
 
   async findAll(query: any): Promise<any> {
@@ -1468,9 +1470,9 @@ export class AdminQuotesService {
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
       const deliveryFee = parseFloat(quote.delivery_fee || 0);
-      const preGstTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-      const gst = Math.round((preGstTotal * 0.1) * 100) / 100;
-      const calculatedTotal = Math.round((preGstTotal + gst) * 100) / 100;
+      const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
+      // GST is inclusive: calculate as 11% of the total but it conceptually represents the 10% tax component
+      const gst = Math.round((calculatedTotal * (11 / 111)) * 100) / 100;
 
       // Set calculated fields on quote object for email template
       quote.subtotal = subtotal;
@@ -1498,8 +1500,10 @@ export class AdminQuotesService {
         );
       }
 
-      // Use production storefront URL for quote links
-      const baseUrl = 'http://16.176.19.248:3000';
+      // Use configured store portal URL for quote links
+      const baseUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
+        this.configService.get<string>('FRONTEND_URL') ||
+        'http://localhost:3006';
       const publicQuoteUrl = `${baseUrl}/quote/${quoteToken}`;
 
       const customerName = quote.firstname && quote.lastname ? `${quote.firstname} ${quote.lastname}` : 'Customer';
@@ -1524,10 +1528,10 @@ export class AdminQuotesService {
             .quote-details strong { color: #333333 !important; }
             .product-item { padding: 10px; border-bottom: 1px solid #eee; color: #333333 !important; }
             .product-item strong { color: #333333 !important; }
-            .total { font-weight: bold; font-size: 18px; color: #055160 !important; }
+            .total { font-weight: bold; font-size: 18px; color: #E03A3E !important; }
             .footer { text-align: center; padding: 20px; color: #666666 !important; font-size: 12px; }
             .footer p { color: #666666 !important; }
-            .cta-button { display: inline-block; padding: 12px 24px; background-color: #055160; color: #ffffff !important; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: 500; }
+            .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: #ffffff !important; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: 500; }
           </style>
         </head>
         <body>
@@ -1540,7 +1544,7 @@ export class AdminQuotesService {
               <p style="color: #333333 !important;">Please review the quote details below and provide your feedback.</p>
               
               <div class="quote-details">
-                <h2 style="color: #055160 !important; margin-top: 0;">Customer Details</h2>
+                <h2 style="color: #E03A3E !important; margin-top: 0;">Customer Details</h2>
                 ${quote.company_name ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Company Name:</strong> ${quote.company_name}</p>` : ''}
                 ${quote.department_name ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Department:</strong> ${quote.department_name}</p>` : ''}
                 <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Customer Name:</strong> ${customerName}</p>
@@ -1550,7 +1554,7 @@ export class AdminQuotesService {
               </div>
 
               <div class="quote-details">
-                <h2 style="color: #055160 !important; margin-top: 0;">Delivery/Pick Up Details</h2>
+                <h2 style="color: #E03A3E !important; margin-top: 0;">Delivery/Pick Up Details</h2>
                 ${quote.delivery_date_time ? (() => {
           const date = new Date(quote.delivery_date_time);
           const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -1582,7 +1586,7 @@ export class AdminQuotesService {
               </div>
 
               <div class="quote-details">
-                <h2 style="color: #055160 !important; margin-top: 0;">Quote Items</h2>
+                <h2 style="color: #E03A3E !important; margin-top: 0;">Quote Items</h2>
                 ${quoteProducts
           .map(
             (product: any) => `
@@ -1601,15 +1605,15 @@ export class AdminQuotesService {
                 <hr>
                 <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Subtotal:</strong> $${Number(quote.subtotal || 0).toFixed(2)}</p>
                 ${quote.coupon_code && quote.coupon_discount ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Coupon Discount (${quote.coupon_code}):</strong> -$${Number(quote.coupon_discount).toFixed(2)}</p>` : ''}
-                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">GST (10%):</strong> $${Number(quote.gst || 0).toFixed(2)}</p>
+                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">GST (Included):</strong> $${Number(quote.gst || 0).toFixed(2)}</p>
                 ${quote.delivery_fee ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Fee:</strong> $${Number(quote.delivery_fee).toFixed(2)}</p>` : ''}
-                <p class="total" style="color: #055160 !important; font-weight: bold; font-size: 18px;">Total: $${Number(quote.calculated_total || quote.order_total || 0).toFixed(2)}</p>
+                <p class="total" style="color: #E03A3E !important; font-weight: bold; font-size: 18px;">Total: $${Number(quote.calculated_total || quote.order_total || 0).toFixed(2)}</p>
               </div>
 
               ${customMessage ? `<div class="quote-details"><p style="color: #333333 !important;">${customMessage}</p></div>` : ''}
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${publicQuoteUrl}" class="cta-button" style="color: #ffffff !important; background-color: #055160; text-decoration: none; padding: 12px 24px; border-radius: 5px; display: inline-block; font-weight: 500;">Review & Approve Quote</a>
+                <a href="${publicQuoteUrl}" class="cta-button" style="color: #ffffff !important; background-color: #E03A3E; text-decoration: none; padding: 12px 24px; border-radius: 5px; display: inline-block; font-weight: 500;">Review & Approve Quote</a>
               </div>
               
               <p style="font-size: 0.9em; color: #666666 !important;">

@@ -460,8 +460,10 @@ export class StoreAuthService {
       [user.user_id, resetToken, expiresAt]
     );
 
-    // Send reset email
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    // Send reset email - always store portal for this service
+    const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
+      this.configService.get<string>('FRONTEND_URL') ||
+      'http://localhost:3000';
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
     const emailHtml = `

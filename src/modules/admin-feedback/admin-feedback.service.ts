@@ -176,14 +176,14 @@ export class AdminFeedbackService {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #0d6efd; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
     .content { padding: 20px; }
     .section { margin-bottom: 20px; }
-    .section-title { font-weight: bold; color: #0d6efd; font-size: 18px; margin-bottom: 10px; border-bottom: 2px solid #0d6efd; padding-bottom: 5px; }
+    .section-title { font-weight: bold; color: #E03A3E; font-size: 18px; margin-bottom: 10px; border-bottom: 2px solid #E03A3E; padding-bottom: 5px; }
     .field { margin-bottom: 12px; }
     .label { font-weight: bold; color: #666; display: inline-block; min-width: 150px; }
     .value { color: #333; }
-    .rating-box { background-color: #f9f9f9; border-left: 4px solid #0d6efd; padding: 15px; margin-top: 10px; }
+    .rating-box { background-color: #f9f9f9; border-left: 4px solid #E03A3E; padding: 15px; margin-top: 10px; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>
 </head>

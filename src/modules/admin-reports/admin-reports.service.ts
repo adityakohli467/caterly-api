@@ -6,7 +6,7 @@ import { Parser } from '@json2csv/plainjs';
 export class AdminReportsService {
   private readonly logger = new Logger(AdminReportsService.name);
 
-  constructor(private dataSource: DataSource) {}
+  constructor(private dataSource: DataSource) { }
 
   /**
    * Helper function to get status name
@@ -145,7 +145,7 @@ export class AdminReportsService {
     params.push(Number(limit), Number(offset));
 
     const result = await this.dataSource.query(query, params);
-    
+
     // Get total count
     let countQuery = `
       SELECT COUNT(*) 
@@ -263,7 +263,7 @@ export class AdminReportsService {
           subtotal += parseFloat(product.product_total || 0);
         });
       }
-      
+
       // Add options to subtotal
       if (orderOptionsMap[row.order_id]) {
         orderOptionsMap[row.order_id].forEach((option: any) => {
@@ -274,7 +274,7 @@ export class AdminReportsService {
       const deliveryFee = parseFloat(row.delivery_fee) || 0;
       const couponDiscount = parseFloat(row.coupon_discount) || 0;
       const couponType = row.coupon_type;
-      
+
       // Calculate discount based on coupon type
       let discount = 0;
       if (couponType && couponDiscount > 0) {
@@ -288,7 +288,7 @@ export class AdminReportsService {
         // Ensure discount doesn't exceed subtotal
         discount = Math.min(discount, subtotal);
       }
-      
+
       // Calculate GST on amount after discount (GST is inclusive: calculate as 11% but display as 10%)
       const afterDiscount = subtotal - discount;
       // Total = subtotal - discount + delivery fee (inclusive of GST)
@@ -352,14 +352,12 @@ export class AdminReportsService {
         c.firstname || ' ' || c.lastname as customer_name,
         comp.company_name,
         d.department_name,
-        l.location_name,
         o.customer_company_name,
         o.customer_department_name
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       LEFT JOIN company comp ON c.company_id = comp.company_id
       LEFT JOIN department d ON c.department_id = d.department_id
-      LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE 1=1
     `;
@@ -424,7 +422,7 @@ export class AdminReportsService {
     query += ' ORDER BY o.date_added DESC';
 
     const result = await this.dataSource.query(query, params);
-    
+
     // Fetch order products and options for accurate calculations
     const orderIds = result.map((row: any) => row.order_id);
     let orderProductsMap: { [key: number]: any[] } = {};
@@ -462,7 +460,7 @@ export class AdminReportsService {
         orderOptionsMap[row.order_id].push(row);
       });
     }
-    
+
     const csvData = result.map((row: any) => {
       // Calculate subtotal from products
       let subtotal = 0;
@@ -471,7 +469,7 @@ export class AdminReportsService {
           subtotal += parseFloat(product.product_total || 0);
         });
       }
-      
+
       // Add options to subtotal
       if (orderOptionsMap[row.order_id]) {
         orderOptionsMap[row.order_id].forEach((option: any) => {
@@ -482,7 +480,7 @@ export class AdminReportsService {
       const deliveryFee = parseFloat(row.delivery_fee) || 0;
       const couponDiscount = parseFloat(row.coupon_discount) || 0;
       const couponType = row.coupon_type;
-      
+
       // Calculate discount based on coupon type
       let discount = 0;
       if (couponType && couponDiscount > 0) {
@@ -505,7 +503,6 @@ export class AdminReportsService {
         'Customer': row.customer_name || 'N/A',
         'Company': row.company_name || row.customer_company_name || 'N/A',
         'Department': row.department_name || row.customer_department_name || 'N/A',
-        'Location': row.location_name || 'N/A',
         'Status': this.getStatusName(row.order_status),
         'Subtotal': subtotal.toFixed(2),
         'Delivery Fee': deliveryFee.toFixed(2),
@@ -522,7 +519,6 @@ export class AdminReportsService {
       'Customer',
       'Company',
       'Department',
-      'Location',
       'Status',
       'Subtotal',
       'Delivery Fee',

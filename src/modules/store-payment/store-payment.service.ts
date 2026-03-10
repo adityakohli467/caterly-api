@@ -69,8 +69,8 @@ export class StorePaymentService {
 
       // SECURITY: Check if order is already paid (prevent duplicate payment attempts)
       if (order.payment_status === 'paid' || order.payment_date) {
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-          this.configService.get<string>('ADMIN_PORTAL_URL') ||
+        const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
+          this.configService.get<string>('FRONTEND_URL') ||
           'http://localhost:3000';
         const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         return this.generateRedirectHtml(alreadyPaidUrl, 'Order Already Paid');

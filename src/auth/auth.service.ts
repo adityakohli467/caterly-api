@@ -20,7 +20,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private emailService: EmailService,
-  ) {}
+  ) { }
 
   async login(username: string, password: string): Promise<any> {
     if (!username || !password) {
@@ -283,8 +283,13 @@ export class AuthService {
       [user.user_id, resetToken, expiresAt],
     );
 
-    // Send reset email
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    // Send reset email - use appropriate portal based on user level
+    const isAdmin = user.auth_level < 3;
+    const portalUrl = isAdmin
+      ? this.configService.get<string>('ADMIN_PORTAL_URL')
+      : this.configService.get<string>('STORE_PORTAL_URL');
+
+    const frontendUrl = portalUrl || this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
     await this.emailService.sendEmail({
