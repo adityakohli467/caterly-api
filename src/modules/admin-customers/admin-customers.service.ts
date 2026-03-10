@@ -823,9 +823,9 @@ export class AdminCustomersService {
       : customer.firstname || customer.user_username || 'Customer';
 
     const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
-    const storefrontUrl = this.configService.get<string>('STOREFRONT_URL') ||
+    const storefrontUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
       this.configService.get<string>('FRONTEND_URL') ||
-      'https://storefront.example.com';
+      'https://main.d398mni576b06r.amplifyapp.com';
 
     const emailSubject = `Your Wholesale Account Has Been Approved - ${companyName}`;
 

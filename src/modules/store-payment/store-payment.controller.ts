@@ -129,7 +129,7 @@ export class StorePaymentController {
     @Res() res: Response,
   ) {
     // Redirect to frontend payment page with Pin Payments
-    const frontendUrl = process.env.FRONTEND_URL || process.env.ADMIN_PORTAL_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.STORE_PORTAL_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
     const paymentUrl = `${frontendUrl}/payment?order_id=${orderId}`;
     res.redirect(paymentUrl);
   }

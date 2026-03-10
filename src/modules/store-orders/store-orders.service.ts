@@ -522,8 +522,8 @@ export class StoreOrdersService implements OnModuleInit {
           const backendUrl = this.configService.get<string>('BACKEND_URL') ||
             this.configService.get<string>('FRONTEND_URL') ||
             'http://localhost:9000';
-          const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-            this.configService.get<string>('STORE_URL') ||
+          const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
+            this.configService.get<string>('FRONTEND_URL') ||
             'http://localhost:3000';
 
           // Generate payment link (deep link)
