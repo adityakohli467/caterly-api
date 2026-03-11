@@ -325,28 +325,100 @@ export class StoreAuthService {
     // Send registration notification email
     try {
       const customerName = `${firstname} ${lastname}`;
-      if (company_name) {
-        // Wholesale registration - pending approval
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+      const loginUrl = `${frontendUrl}/auth/login`;
+      const contactNumber = this.configService.get<string>('COMPANY_PHONE') || '';
+      const contactEmail = this.configService.get<string>('COMPANY_EMAIL') || '';
+      const companyNameVar = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
+
+      // Always send regular customer registration since Caterly only has retailers
+      await this.notificationService.sendNotification({
+        templateKey: 'customer_registration',
+        recipientEmail: email,
+        recipientName: customerName,
+        variables: {},
+        customSubject: `Welcome to ${companyNameVar} – Your Account is Ready`,
+        customBody: (() => {
+          return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+    .button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>${companyNameVar}</h1>
+    </div>
+    <div class="content">
+      <p>Dear ${customerName},</p>
+      <p>Welcome to ${companyNameVar}.</p>
+      <p>Your retailer account has been successfully created. You can now sign in to browse products, place orders, and manage your account anytime.</p>
+      <div style="text-align: center;">
+        <a href="${loginUrl}" class="button">Login Here</a>
+      </div>
+      <p>If you have any questions, please contact us at ${contactNumber} ${contactEmail}.</p>
+      <p>Kind regards,<br/>${companyNameVar} Team</p>
+    </div>
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} ${companyNameVar}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+          `;
+        })(),
+      });
+
+      // Notify Admin about new Customer registration
+      if (contactEmail) {
         await this.notificationService.sendNotification({
-          templateKey: 'wholesale_registration',
-          recipientEmail: email,
-          recipientName: customerName,
+          templateKey: 'admin_new_customer_notification',
+          recipientEmail: contactEmail,
+          recipientName: 'Admin',
           variables: {
             customer_name: customerName,
-            status: 'pending',
-            approved: false,
+            customer_email: email,
+            telephone: telephone || 'N/A',
           },
-        });
-      } else {
-        // Regular customer registration
-        await this.notificationService.sendNotification({
-          templateKey: 'customer_registration',
-          recipientEmail: email,
-          recipientName: customerName,
-          variables: {
-            customer_name: customerName,
-            email: email,
-          },
+          customSubject: `New Customer Registration: ${customerName}`,
+          customBody: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>New Retailer Registration Received</h2>
+    </div>
+    <div class="content">
+      <p>A new retailer has registered on the storefront.</p>
+      <ul>
+        <li><strong>Name:</strong> ${customerName}</li>
+        <li><strong>Email:</strong> ${email}</li>
+        <li><strong>Phone:</strong> ${telephone || 'N/A'}</li>
+      </ul>
+      <p>They can now log in and browse products.</p>
+    </div>
+  </div>
+</body>
+</html>`,
         });
       }
     } catch (error: any) {
@@ -370,9 +442,7 @@ export class StoreAuthService {
       token,
       user: userWithoutPassword,
       customer,
-      message: company_name
-        ? 'Registration successful. Your account is pending approval.'
-        : 'Registration successful',
+      message: 'Registration successful',
       expiresIn: 14400, // 4 hours in seconds
     };
   }
@@ -466,7 +536,17 @@ export class StoreAuthService {
       'http://localhost:3000';
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
-    const emailHtml = `
+    await this.notificationService.sendNotification({
+      templateKey: 'forgot_password',
+      recipientEmail: user.email,
+      recipientName: user.username || 'Customer',
+      variables: {},
+      customSubject: `Reset Your Password - ${this.configService.get<string>('COMPANY_NAME') || 'Caterly'}`,
+      customBody: (() => {
+        const contactNumber = this.configService.get<string>('COMPANY_PHONE') || '';
+        const contactEmail = this.configService.get<string>('COMPANY_EMAIL') || '';
+        const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
+        return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -475,40 +555,38 @@ export class StoreAuthService {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #2952E6; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
     .content { padding: 20px; }
-    .button { display: inline-block; padding: 12px 24px; background-color: #2952E6; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+    .button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-    .warning { color: #d32f2f; font-size: 12px; margin-top: 10px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>Password Reset Request</h1>
+      <h1>Reset Your Password</h1>
     </div>
     <div class="content">
-      <p>Hello ${user.username || 'User'},</p>
-      <p>You requested to reset your password. Click the button below to reset it:</p>
+      <p>Dear ${user.username || 'Customer'},</p>
+      <p>We received a request to reset the password for your ${companyName} account.</p>
+      <p>To reset your password, please click the link below:</p>
       <div style="text-align: center;">
         <a href="${resetUrl}" class="button">Reset Password</a>
       </div>
       <p>Or copy and paste this link into your browser:</p>
       <p style="word-break: break-all; color: #666;">${resetUrl}</p>
-      <p class="warning">This link will expire in 1 hour. If you didn't request this, please ignore this email.</p>
+      <p>If you did not request a password reset, please disregard this email.</p>
+      <p>If you have any questions, please contact us at ${contactNumber} ${contactEmail}.</p>
+      <p>Kind regards,<br/>${companyName} Team</p>
     </div>
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} ${this.configService.get<string>('COMPANY_NAME') || 'Caterly'}. All rights reserved.</p>
+      <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
     </div>
   </div>
 </body>
 </html>
-    `;
-
-    await this.emailService.sendEmail({
-      to: user.email,
-      subject: 'Password Reset Request',
-      html: emailHtml,
+        `;
+      })(),
     });
 
     return {

@@ -11,6 +11,8 @@ import { EmailService } from '../../common/services/email.service';
 import { ConfigService } from '@nestjs/config';
 import { PinPaymentsService } from '../../common/services/pinpayments.service';
 import { FatZebraService } from '../../common/services/fatzebra.service';
+import { NotificationService } from '../../common/services/notification.service';
+import { InvoiceService } from '../../common/services/invoice.service';
 
 @Injectable()
 export class StorePaymentService {
@@ -22,6 +24,8 @@ export class StorePaymentService {
     private configService: ConfigService,
     private pinPaymentsService: PinPaymentsService,
     private fatZebraService: FatZebraService,
+    private notificationService: NotificationService,
+    private invoiceService: InvoiceService,
   ) { }
 
   /**
@@ -1018,61 +1022,81 @@ export class StorePaymentService {
         `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
         'Customer';
 
-      const orderTotal = parseFloat(order.order_total || 0);
-      const authToken = crypto.createHash('sha1')
-        .update(`${customerName}|${customerName}|${orderId}|${orderTotal}`)
-        .digest('hex');
-
       const toEmail = order.customer_order_email || order.email;
       const managerEmail = order.accounts_email || null;
-      const emailList = managerEmail ? [toEmail, managerEmail].filter(Boolean) : [toEmail].filter(Boolean);
+      const adminEmail = this.configService.get<string>('COMPANY_EMAIL') || null;
+
+      const baseEmails = [toEmail, managerEmail, adminEmail].filter(Boolean) as string[];
+      // Remove duplicates
+      const emailList = [...new Set(baseEmails)];
 
       if (emailList.length > 0) {
-        const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
-        const invoiceViewUrl = `${backendUrl}/admin/orders/${orderId}/invoice/view?auth=${authToken}&ofrom=backend`;
+        const orderTotal = parseFloat(order.order_total || 0);
 
-        const emailBody = `
+        // Generate PDF Invoice
+        let pdfBuffer: Buffer | null = null;
+        try {
+          pdfBuffer = await this.invoiceService.getInvoicePDF(orderId);
+        } catch (invoiceError) {
+          this.logger.error("Failed to generate invoice PDF for payment email:", invoiceError);
+        }
+
+        const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
+        const contactNumber = this.configService.get<string>('COMPANY_PHONE') || '';
+        const formattedAmount = `$${(isNaN(orderTotal) ? 0 : orderTotal).toFixed(2)}`;
+
+        await this.notificationService.sendNotification({
+          templateKey: "order_payment_received",
+          recipientEmail: emailList,
+          recipientName: customerName,
+          variables: {
+            customer_name: customerName,
+            order_number: String(orderId),
+            invoice_number: String(orderId),
+            amount_paid: formattedAmount,
+            company_name: companyName,
+            contact_number: contactNumber,
+            contact_email: adminEmail || '',
+          },
+          customSubject: `Payment Received – Order #${orderId} – ${companyName}`,
+          customBody: `
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+  </style>
 </head>
-<body style="font-family: serif; line-height: 1.6; color: #000; margin: 0; padding: 0;">
-  <div style="max-width: 825px; margin: 0 auto; padding: 25px;">
-    <p style="margin: 0; font-size: 18px; line-height: 21px;">Dear ${customerName},</p>
-    <p style="margin: 0; font-size: 18px; line-height: 21px;">&#160;</p>
-    <div style="margin-top: 20px;">
-      <p style="margin: 0; font-size: 18px; line-height: 31px;">
-        <strong>The Invoice for your order at Caterly (Order #${orderId}) can be viewed at</strong>
+<body>
+  <div class="container">
+    <div class="header"><h1>${companyName}</h1></div>
+    <div class="content">
+      <p>Dear ${customerName},</p>
+      <p>Thank you for your payment.</p>
+      <p>This email confirms that payment has been successfully received for your order. Your <strong>tax invoice number</strong> is attached to this email for your records.</p>
+      <p>
+        Order number: ${orderId}<br/>
+        Invoice number: ${orderId}<br/>
+        Payment amount: ${formattedAmount}
       </p>
-      <br/><br/>
-      <a href="${invoiceViewUrl}">
-        <button style="background-color:#E03A3E;border:solid 1px #E03A3E;cursor:pointer;border-radius:0.25rem;font-weight:600;font-size:0.8125rem;line-height:normal;padding:0.5rem 0.9rem;color:white">
-          View Invoice
-        </button>
-      </a>
-      <br/>
-      <p>Please call us on Caterly (1300 827 286) for any queries.</p>
-    </div>
-    <div style="margin-top: 20px;">
-      <p style="font-size:18px;line-height:14px;"><strong>Note:</strong> Payment must be made 7 days from the delivery date. Late payment fees will incur after 21 days.</p>
-      <p>Please click on this link to view our <a href="https://caterly.com.au/index.php?route=information/information&information_id=5">Terms and Conditions</a></p>
-      <p style="margin: 0; font-size: 18px; line-height: 31px;">
-        Thank you and have a great day!<br/><br/>
-        Kind Regards,<br/>
-        Caterly Team
-      </p>
+      <p>If you have any questions, please contact us at ${contactNumber} or ${adminEmail || ''}.</p>
+      <p>Kind regards,<br/>${companyName} Team</p>
     </div>
   </div>
 </body>
-</html>
-            `;
-
-        await this.emailService.sendEmail({
-          to: emailList,
-          subject: 'Caterly',
-          html: emailBody,
+</html>`,
+          attachments: pdfBuffer
+            ? [
+              {
+                filename: `tax-invoice-${orderId}.pdf`,
+                content: pdfBuffer,
+                contentType: "application/pdf",
+              },
+            ]
+            : undefined,
         });
       }
     } catch (emailError) {
