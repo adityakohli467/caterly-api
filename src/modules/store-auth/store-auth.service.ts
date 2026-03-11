@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, ForbiddenException, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -8,7 +8,7 @@ import { EmailService } from '../../common/services/email.service';
 import { NotificationService } from '../../common/services/notification.service';
 
 @Injectable()
-export class StoreAuthService {
+export class StoreAuthService implements OnModuleInit {
   constructor(
     private dataSource: DataSource,
     private jwtService: JwtService,
@@ -16,6 +16,27 @@ export class StoreAuthService {
     private emailService: EmailService,
     private notificationService: NotificationService,
   ) { }
+
+  async onModuleInit() {
+    await this.createTablesIfNotExist();
+  }
+
+  private async createTablesIfNotExist() {
+    try {
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id SERIAL PRIMARY KEY,
+          user_id INT NOT NULL,
+          token VARCHAR(255) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          used BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    } catch (error) {
+      console.error('Error creating password_reset_tokens table:', error);
+    }
+  }
 
   /**
    * Customer Login
@@ -325,7 +346,7 @@ export class StoreAuthService {
     // Send registration notification email
     try {
       const customerName = `${firstname} ${lastname}`;
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+      const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') || this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
       const loginUrl = `${frontendUrl}/auth/login`;
       const contactNumber = this.configService.get<string>('COMPANY_PHONE') || '';
       const contactEmail = this.configService.get<string>('COMPANY_EMAIL') || '';
