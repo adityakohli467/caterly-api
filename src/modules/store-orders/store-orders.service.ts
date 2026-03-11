@@ -250,7 +250,8 @@ export class StoreOrdersService implements OnModuleInit {
       const gstStatus = Number(gst_status || 0);
       const baseTotal = afterDiscount + deliveryFee;
       const gst = gstStatus ? Math.round(afterDiscount * 0.10 * 100) / 100 : 0;
-      const total = Math.round((baseTotal + gst) * 100) / 100;
+      // GST is not added to total for Caterly
+      const total = Math.round(baseTotal * 100) / 100;
 
       let parsedUnit = frequency_unit;
       let parsedValue = frequency_value;
@@ -324,8 +325,9 @@ export class StoreOrdersService implements OnModuleInit {
           customer_order_name,
           customer_order_email,
           customer_order_telephone,
-          location_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+          location_id,
+          gst
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
         RETURNING order_id
       `;
 
@@ -357,7 +359,8 @@ export class StoreOrdersService implements OnModuleInit {
         name || (firstname || lastname ? `${firstname || ''} ${lastname || ''}`.trim() : null) || customer?.name || `${customer?.firstname || ''} ${customer?.lastname || ''}`.trim() || 'Guest',
         email || customer?.email || null,
         telephone || customer?.telephone || null,
-        location_id || 1
+        location_id || 1,
+        gst
       ]);
 
       const orderId = orderResult[0].order_id;
@@ -662,6 +665,7 @@ export class StoreOrdersService implements OnModuleInit {
       SELECT 
         o.order_id,
         o.order_total as total,
+        o.gst,
         o.order_status,
         o.date_added,
         o.delivery_date_time,
@@ -768,8 +772,12 @@ export class StoreOrdersService implements OnModuleInit {
       });
     }
 
+    const afterDiscount = subtotal; // Assuming no discounts for guest order for now as per code
+    const gstValue = order.gst ? parseFloat(order.gst) : Math.round(afterDiscount * 0.1 * 100) / 100;
+
     // Ensure frontend gets total consistently
     order.total = order.order_total;
+    order.gst = gstValue;
 
     return {
       order: {
@@ -911,9 +919,9 @@ export class StoreOrdersService implements OnModuleInit {
     }
 
     const afterDiscount = afterWholesaleDiscount - couponDiscount;
-    // GST is inclusive: calculate as 11% but display as 10%
-    const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100; // Total is inclusive of GST
-    const gst = Math.round((calculatedTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
+    const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
+    // Use stored GST if available, otherwise calculate 10% of subtotal as informational
+    const gstValue = order.gst ? parseFloat(order.gst) : Math.round(afterDiscount * 0.1 * 100) / 100;
 
     return {
       order: {
@@ -925,7 +933,7 @@ export class StoreOrdersService implements OnModuleInit {
         coupon_code: couponCode,
         after_wholesale_discount: afterWholesaleDiscount.toFixed(2),
         after_discount: afterDiscount.toFixed(2),
-        gst: gst.toFixed(2),
+        gst: gstValue.toFixed(2),
         delivery_fee: deliveryFee.toFixed(2),
         total: orderTotal.toFixed(2),
         calculated_total: calculatedTotal.toFixed(2),
