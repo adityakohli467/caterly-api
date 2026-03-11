@@ -253,10 +253,10 @@ export class InvoiceService {
     }
 
     const afterDiscount = subtotal - couponDiscount;
-    // GST should be 11% of total (calculated as inclusive 11/111 if already in total, or as requested)
     const lateFee = parseFloat(order.late_fee || 0);
-    const total = afterDiscount + deliveryFee + lateFee;
-    const gst = total * 0.11; // Calculate GST as 11% of total (informational only)
+    const total = Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
+    // Calculate informational GST as 10% of subtotal after discount
+    const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);
@@ -749,7 +749,7 @@ export class InvoiceService {
           currentY += 9;
         }
 
-        doc.text('GST (11%):', totalsX, currentY, { width: 120, align: 'right' });
+        doc.text('GST (10%):', totalsX, currentY, { width: 120, align: 'right' });
         doc.text(`$${data.gst.toFixed(2)}`, totalsX + 130, currentY, { width: 90, align: 'right' });
         currentY += 10;
 

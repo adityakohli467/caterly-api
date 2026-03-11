@@ -352,10 +352,10 @@ export class AdminOrdersService implements OnModuleInit {
       }
 
       const afterDiscount = subtotal - couponDiscount;
-      // GST is inclusive: calculate as 11% but display as 10%
       const deliveryFee = parseFloat(row.delivery_fee || 0);
-      const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100; // Total is inclusive of GST
-      const gst = Math.round((calculatedTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
+      const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
+      // Use stored GST if available, otherwise calculate 10% of subtotal as informational
+      const gst = row.gst ? parseFloat(row.gst) : Math.round(afterDiscount * 0.1 * 100) / 100;
 
       return {
         order_id: row.order_id,
@@ -383,7 +383,7 @@ export class AdminOrdersService implements OnModuleInit {
         date_modified: row.date_modified,
         coupon_code: couponCode,
         coupon_discount: couponDiscount,
-        gst: parseFloat(row.gst || 0),
+        gst: gst,
         is_completed: row.is_completed || 0,
       };
     });
@@ -524,7 +524,8 @@ export class AdminOrdersService implements OnModuleInit {
     const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
     const deliveryFee = parseFloat(order.delivery_fee || 0);
     const lateFee = parseFloat(order.late_fee || 0);
-    const orderTotal = Math.round((afterDiscount + gst + deliveryFee + lateFee) * 100) / 100;
+    // GST is not added to total for Caterly
+    const orderTotal = Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
 
     // Check payment status from payment_history
     const paymentStatusQuery = `
@@ -680,10 +681,10 @@ export class AdminOrdersService implements OnModuleInit {
 
       const totalDiscount = couponDiscount;
       const afterDiscount = subtotal - couponDiscount;
-      // GST is inclusive: calculate as 11% but display as 10%
       const deliveryFeeAmount = parseFloat(delivery_fee || 0);
-      const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100; // Total is inclusive of GST
-      const gst = Math.round((orderTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
+      // GST is not added to total for Caterly
+      const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100;
+      const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time

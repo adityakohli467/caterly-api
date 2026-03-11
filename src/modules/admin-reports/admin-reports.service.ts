@@ -291,9 +291,8 @@ export class AdminReportsService {
 
       // Calculate GST on amount after discount (GST is inclusive: calculate as 11% but display as 10%)
       const afterDiscount = subtotal - discount;
-      // Total = subtotal - discount + delivery fee (inclusive of GST)
-      const total = afterDiscount + deliveryFee;
-      const gst = total * (11 / 111); // Calculate GST as 11% but display as 10%
+      const total = Math.round((afterDiscount + deliveryFee) * 100) / 100;
+      const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
 
       return {
         ...row,
@@ -492,9 +491,8 @@ export class AdminReportsService {
         discount = Math.min(discount, subtotal);
       }
       const afterDiscount = subtotal - discount;
-      // GST is inclusive: calculate as 11% but display as 10%
-      const total = afterDiscount + deliveryFee; // Total is inclusive of GST
-      const gst = total * (11 / 111); // Calculate GST as 11% but display as 10%
+      const total = Math.round((afterDiscount + deliveryFee) * 100) / 100;
+      const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
 
       return {
         'Order ID': row.order_id,
