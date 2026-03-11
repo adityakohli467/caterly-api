@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -10,9 +10,10 @@ import { Customer } from '../entities/Customer';
 import { Company } from '../entities/Company';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { EmailService } from '../common/services/email.service';
+import { NotificationService } from '../common/services/notification.service';
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -20,7 +21,29 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private emailService: EmailService,
+    private notificationService: NotificationService,
   ) { }
+
+  async onModuleInit() {
+    await this.createTablesIfNotExist();
+  }
+
+  private async createTablesIfNotExist() {
+    try {
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id SERIAL PRIMARY KEY,
+          user_id INT NOT NULL,
+          token VARCHAR(255) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          used BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    } catch (error) {
+      console.error('Error creating password_reset_tokens table (AuthService):', error);
+    }
+  }
 
   async login(username: string, password: string): Promise<any> {
     if (!username || !password) {
@@ -292,16 +315,58 @@ export class AuthService {
     const frontendUrl = portalUrl || this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
-    await this.emailService.sendEmail({
-      to: user.email,
-      subject: 'Password Reset Request',
-      html: `
-        <h2>Password Reset Request</h2>
-        <p>Click the link below to reset your password:</p>
-        <a href="${resetUrl}">${resetUrl}</a>
-        <p>This link will expire in 1 hour.</p>
-        <p>If you did not request this, please ignore this email.</p>
-      `,
+    await this.notificationService.sendNotification({
+      templateKey: 'forgot_password',
+      recipientEmail: user.email,
+      recipientName: user.username || 'Customer',
+      variables: {},
+      customSubject: `Reset Your Password - ${this.configService.get<string>('COMPANY_NAME') || 'Caterly'}`,
+      customBody: (() => {
+        const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
+        const contactNumber = this.configService.get<string>('COMPANY_PHONE') || '';
+        const contactEmail = this.configService.get<string>('COMPANY_EMAIL') || '';
+
+        return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
+    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+    .button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Reset Your Password</h1>
+    </div>
+    <div class="content">
+      <p>Dear ${user.username || 'Customer'},</p>
+      <p>We received a request to reset the password for your ${companyName} account.</p>
+      <p>To reset your password, please click the link below:</p>
+      <div style="text-align: center;">
+        <a href="${resetUrl}" class="button">Reset Password</a>
+      </div>
+      <p>Or copy and paste this link into your browser:</p>
+      <p style="word-break: break-all; color: #666;">${resetUrl}</p>
+      <p>If you did not request a password reset, please disregard this email.</p>
+      <p>If you have any questions, please contact us at ${contactNumber} ${contactEmail}.</p>
+      <p>Kind regards,<br/>${companyName} Team</p>
+    </div>
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+        `;
+      })(),
     });
 
     return {
