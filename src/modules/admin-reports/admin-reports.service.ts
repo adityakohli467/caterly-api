@@ -27,6 +27,21 @@ export class AdminReportsService {
   }
 
   /**
+   * Helper function to format date to dd/mm/yy
+   */
+  private formatDate(date: any): string {
+    if (!date) return 'N/A';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return 'N/A';
+
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = String(d.getFullYear()).slice(-2);
+
+    return `${day}/${month}/${year}`;
+  }
+
+  /**
    * List reports with filters
    */
   async listReports(filters: {
@@ -301,6 +316,8 @@ export class AdminReportsService {
         discount,
         gst,
         total,
+        order_date: this.formatDate(row.order_date),
+        delivery_date_time: this.formatDate(row.delivery_date_time),
         customer_name: row.customer_name || 'N/A',
         company_name: row.company_name || row.customer_company_name || 'N/A',
         department_name: row.department_name || row.customer_department_name || 'N/A',
@@ -496,8 +513,8 @@ export class AdminReportsService {
 
       return {
         'Order ID': row.order_id,
-        'Order Date': row.order_date,
-        'Delivery Date': row.delivery_date_time,
+        'Date Placed': this.formatDate(row.order_date),
+        'Delivery Date': this.formatDate(row.delivery_date_time),
         'Customer': row.customer_name || 'N/A',
         'Company': row.company_name || row.customer_company_name || 'N/A',
         'Department': row.department_name || row.customer_department_name || 'N/A',
@@ -512,7 +529,7 @@ export class AdminReportsService {
 
     const fields = [
       'Order ID',
-      'Order Date',
+      'Date Placed',
       'Delivery Date',
       'Customer',
       'Company',
