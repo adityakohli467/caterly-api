@@ -663,9 +663,8 @@ export class AdminQuotesService {
 
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      const preGstTotal = Math.round((afterDiscount + parseFloat(delivery_fee.toString())) * 100) / 100;
-      const gst = Math.round((preGstTotal * 0.1) * 100) / 100;
-      const orderTotal = Math.round((preGstTotal + gst) * 100) / 100;
+      const orderTotal = Math.round((afterDiscount + parseFloat(delivery_fee.toString())) * 100) / 100;
+      const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
 
       // Build delivery_date_time: only set if both date and time are provided
       // If null/empty, consider it a future order/quote (no delivery date set)
@@ -968,9 +967,8 @@ export class AdminQuotesService {
 
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
-      const preGstTotal = Math.round((afterDiscount + parseFloat(delivery_fee.toString())) * 100) / 100;
-      const gst = Math.round((preGstTotal * 0.1) * 100) / 100;
-      const orderTotal = Math.round((preGstTotal + gst) * 100) / 100;
+      const orderTotal = Math.round((afterDiscount + parseFloat(delivery_fee.toString())) * 100) / 100;
+      const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
@@ -1043,8 +1041,9 @@ export class AdminQuotesService {
              order_status = $16,
              company_id = $17,
              department_id = $18,
+             gst = $19,
              date_modified = CURRENT_TIMESTAMP
-         WHERE order_id = $19 AND standing_order = 0
+         WHERE order_id = $20 AND standing_order = 0
          RETURNING *`,
         [
           customer_id,
