@@ -117,6 +117,7 @@ export class InvoiceService {
         o.order_comments,
         o.delivery_address,
         o.order_total,
+        o.gst as stored_gst,
         COALESCE(NULLIF(o.firstname || ' ' || o.lastname, ' '), c.firstname || ' ' || c.lastname) as customer_name,
         COALESCE(o.email, c.email) as customer_email,
         COALESCE(o.telephone, c.telephone) as customer_phone,
@@ -254,9 +255,14 @@ export class InvoiceService {
 
     const afterDiscount = subtotal - couponDiscount;
     const lateFee = parseFloat(order.late_fee || 0);
-    const total = Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
-    // Calculate informational GST as 10% of subtotal after discount
-    const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
+    
+    // Use stored total and GST if available, otherwise recalculate
+    // This ensures consistency with what's stored in the database
+    const storedTotal = parseFloat(order.order_total || 0);
+    const storedGst = order.stored_gst !== null ? parseFloat(order.stored_gst) : null;
+
+    const total = storedTotal > 0 ? storedTotal : Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
+    const gst = storedGst !== null ? storedGst : Math.round((afterDiscount * 0.1) * 100) / 100;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);
@@ -749,7 +755,8 @@ export class InvoiceService {
           currentY += 9;
         }
 
-        doc.text('GST (10%):', totalsX, currentY, { width: 120, align: 'right' });
+        const gstLabel = data.is_quote ? 'GST (10%):' : 'GST (10%) (Included):';
+        doc.text(gstLabel, totalsX, currentY, { width: 120, align: 'right' });
         doc.text(`$${data.gst.toFixed(2)}`, totalsX + 130, currentY, { width: 90, align: 'right' });
         currentY += 10;
 
