@@ -45,6 +45,7 @@ export class StoreSubscriptionsService {
             'quantity', op.quantity,
             'price', op.price,
             'total', op.total,
+            'item_comments', op.order_product_comment,
             'product_image', p.product_image,
             'options', COALESCE((
               SELECT json_agg(json_build_object(
@@ -107,6 +108,7 @@ export class StoreSubscriptionsService {
             'quantity', op.quantity,
             'price', op.price,
             'total', op.total,
+            'item_comments', op.order_product_comment,
             'product_image', p.product_image,
             'options', COALESCE((
               SELECT json_agg(json_build_object(

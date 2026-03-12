@@ -48,6 +48,7 @@ export class AdminSubscriptionsService {
             'quantity', op.quantity,
             'price', op.price,
             'total', op.total,
+            'item_comments', op.order_product_comment,
             'options', (
               SELECT json_agg(json_build_object(
                 'option_name', opo.option_name,
@@ -168,6 +169,7 @@ export class AdminSubscriptionsService {
             'quantity', op.quantity,
             'price', op.price,
             'total', op.total,
+            'item_comments', op.order_product_comment,
             'options', (
               SELECT json_agg(json_build_object(
                 'option_name', opo.option_name,

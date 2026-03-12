@@ -15,8 +15,9 @@ export class StoreCartService {
     product_id: number;
     quantity?: number;
     options?: any[];
+    item_comments?: string;
   }) {
-    const { product_id, quantity = 1, options = [] } = data;
+    const { product_id, quantity = 1, options = [], item_comments } = data;
 
     if (!product_id) {
       throw new BadRequestException('Product ID is required');
@@ -87,6 +88,7 @@ export class StoreCartService {
         quantity,
         image: product.product_image,
         options: productOptions,
+        item_comments,
         subtotal: itemTotal,
       },
     };
@@ -153,6 +155,7 @@ export class StoreCartService {
         image: product.product_image,
         subtotal: itemTotal,
         options: item.options || [],
+        item_comments: item.item_comments || null,
       });
     }
 

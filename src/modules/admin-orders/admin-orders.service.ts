@@ -427,6 +427,7 @@ export class AdminOrdersService implements OnModuleInit {
               'price', op.price,
               'total', op.total,
               'product_comment', op.order_product_comment,
+              'item_comments', op.order_product_comment,
               'is_prepared', COALESCE(op.is_prepared, false),
               'product_desc_1', p.product_desc_1,
               'product_desc_2', p.product_desc_2,

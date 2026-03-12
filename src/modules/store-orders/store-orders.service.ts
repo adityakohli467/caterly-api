@@ -205,6 +205,7 @@ export class StoreOrdersService implements OnModuleInit {
           price: product.product_price,
           total: itemTotal,
           options: item.options || [],
+          item_comments: item.item_comments || null,
         });
       }
 
@@ -375,8 +376,9 @@ export class StoreOrdersService implements OnModuleInit {
             quantity,
             price,
             total,
-            sort_order
-          ) VALUES ($1, $2, $3, $4, $5, $6)
+            sort_order,
+            order_product_comment
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
           RETURNING order_product_id
         `;
 
@@ -387,6 +389,7 @@ export class StoreOrdersService implements OnModuleInit {
           item.price,
           item.total,
           i + 1,
+          item.item_comments || null,
         ]);
 
         const orderProductId = opResult[0].order_product_id;
@@ -840,6 +843,7 @@ export class StoreOrdersService implements OnModuleInit {
     const productsQuery = `
       SELECT 
         op.*,
+        op.order_product_comment as item_comments,
         p.product_name,
         p.product_image
       FROM order_product op
