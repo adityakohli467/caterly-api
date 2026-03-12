@@ -75,6 +75,14 @@ export class AdminOrdersService implements OnModuleInit {
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='department_id') THEN
             ALTER TABLE orders ADD COLUMN department_id INT;
           END IF;
+          -- delivery_frequency
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_frequency') THEN
+            ALTER TABLE orders ADD COLUMN delivery_frequency VARCHAR(255);
+          END IF;
+          -- delivery_start_date
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_start_date') THEN
+            ALTER TABLE orders ADD COLUMN delivery_start_date VARCHAR(255);
+          END IF;
 
           -- order_product columns
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='order_product_comment') THEN
@@ -153,6 +161,8 @@ export class AdminOrdersService implements OnModuleInit {
         o.customer_order_name,
         o.customer_order_email,
         o.customer_order_telephone,
+        o.delivery_frequency,
+        o.delivery_start_date,
         c.customer_type,
         COALESCE(o.company_id, c.company_id) as company_id,
         COALESCE(o.department_id, c.department_id) as department_id,

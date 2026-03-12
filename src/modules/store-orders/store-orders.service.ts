@@ -327,8 +327,10 @@ export class StoreOrdersService implements OnModuleInit {
           customer_order_email,
           customer_order_telephone,
           location_id,
-          gst
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+          gst,
+          delivery_frequency,
+          delivery_start_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
         RETURNING order_id
       `;
 
@@ -361,7 +363,9 @@ export class StoreOrdersService implements OnModuleInit {
         email || customer?.email || null,
         telephone || customer?.telephone || null,
         location_id || 1,
-        gst
+        gst,
+        delivery_frequency || null,
+        delivery_start_date || null
       ]);
 
       const orderId = orderResult[0].order_id;
@@ -673,6 +677,8 @@ export class StoreOrdersService implements OnModuleInit {
         o.date_added,
         o.delivery_date_time,
         o.delivery_address,
+        o.delivery_frequency,
+        o.delivery_start_date,
         co.company_name,
         d.department_name,
         COALESCE(COUNT(op.order_product_id), 0)::integer as item_count

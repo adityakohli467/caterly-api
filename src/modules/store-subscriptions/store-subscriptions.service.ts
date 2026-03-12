@@ -38,6 +38,8 @@ export class StoreSubscriptionsService {
         o.order_comments,
         o.delivery_address,
         o.standing_order,
+        o.delivery_frequency,
+        o.delivery_start_date,
         (
           SELECT json_agg(json_build_object(
             'product_id', op.product_id,
@@ -101,6 +103,8 @@ export class StoreSubscriptionsService {
     const query = `
       SELECT 
         o.*,
+        o.delivery_frequency,
+        o.delivery_start_date,
         (
           SELECT json_agg(json_build_object(
             'product_id', op.product_id,

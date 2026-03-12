@@ -39,6 +39,8 @@ export class AdminSubscriptionsService {
         o.customer_department_name,
         o.sent_to_customer,
         o.sent_to_customer_at,
+        o.delivery_frequency,
+        o.delivery_start_date,
         c.firstname || ' ' || c.lastname as customer_name,
         co.company_name,
         (
@@ -158,6 +160,8 @@ export class AdminSubscriptionsService {
     const query = `
       SELECT 
         o.*,
+        o.delivery_frequency,
+        o.delivery_start_date,
         c.firstname || ' ' || c.lastname as customer_name,
         c.email as customer_email,
         c.telephone as customer_phone,
