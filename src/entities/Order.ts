@@ -131,6 +131,12 @@ export class Order {
   @Column({ type: "int", nullable: true })
   department_id!: number
 
+  @Column({ type: "varchar", length: 255, nullable: true })
+  delivery_frequency!: string
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  delivery_start_date!: string
+
   @Column({ type: "int", nullable: true })
   coupon_id!: number
 
