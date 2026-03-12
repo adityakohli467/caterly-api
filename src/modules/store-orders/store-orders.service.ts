@@ -881,6 +881,7 @@ export class StoreOrdersService implements OnModuleInit {
         price: parseFloat(product.price || '0'),
         total: itemTotal,
         product_image: product.product_image,
+        item_comments: product.item_comments || null,
         options: optionsResult.map((opt: any) => ({
           option_name: opt.option_name,
           option_value: opt.option_value,
