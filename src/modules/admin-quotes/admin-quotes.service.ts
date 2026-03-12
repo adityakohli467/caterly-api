@@ -716,9 +716,10 @@ export class AdminQuotesService {
           payment_status,
           company_id,
           department_id,
+          gst,
           date_added,
           date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING order_id`,
         [
           customer_id,
@@ -744,6 +745,7 @@ export class AdminQuotesService {
           'quote', // Mark as 'quote' to distinguish from orders
           company_id || null,
           department_id || null,
+          gst,
         ],
       );
 
@@ -1063,6 +1065,7 @@ export class AdminQuotesService {
           newOrderStatus, // Keep as quote unless explicitly converting
           company_id || null,
           department_id || null,
+          gst,
           id,
         ],
       );
