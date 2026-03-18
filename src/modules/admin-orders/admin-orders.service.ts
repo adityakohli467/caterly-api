@@ -1853,7 +1853,7 @@ export class AdminOrdersService implements OnModuleInit {
     const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
       this.configService.get<string>('FRONTEND_URL') ||
       'http://localhost:3000';
-    const invoiceLink = `${frontendUrl}/invoice?order_id=${id}&auth=${authToken}`;
+    const invoiceLink = `${frontendUrl}/orders/${id}/invoice?auth=${authToken}`;
     const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
     const companyPhone = this.configService.get<string>('COMPANY_PHONE') || '1300 827 286';
 
@@ -1881,30 +1881,17 @@ export class AdminOrdersService implements OnModuleInit {
         <p style="margin: 0; font-size: 18px; line-height: 21px;">
           <strong>Please click on the payment button below to make payment for your order #${id}:</strong>
         </p>
-        <br/>
         <p style="margin-top: 20px;">
           <a href="${paymentLink}" style="background-color: #E03A3E; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: 700;">
             Click here to pay
           </a>
         </p>
-        <br/>
         <p style="margin-top: 20px;">
-          <a href="${paymentLink}">
-            <button style="background-color: #E03A3E; border: solid 1px #E03A3E; cursor: pointer; font-weight: 700; color: #fff; padding: 12px 24px; border-radius: 5px;">
-              Click here to pay
-            </button>
+          <a href="${invoiceLink}" style="background-color: #000000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: 700;">
+            View PDF Invoice
           </a>
         </p>
-        <br/>
-        <p style="margin-top: 20px;">
-          <a href="${invoiceLink}">
-            <button style="background-color: #000000; border: solid 1px #000000; cursor: pointer; font-weight: 700; color: #fff; padding: 12px 24px; border-radius: 5px;">
-              View PDF Invoice
-            </button>
-          </a>
-        </p>
-        <br/>
-        <p>Please call us on ${companyPhone} for any queries.</p>
+        <p style="margin-top: 20px;">Please call us on ${companyPhone} for any queries.</p>
       </div>
       
       <div style="margin-top: 20px; font-size: 18px; line-height: 24px;">

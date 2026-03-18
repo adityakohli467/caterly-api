@@ -978,7 +978,7 @@ export class StoreOrdersService implements OnModuleInit {
     const customerName = order.customer_order_name ||
       `${order.firstname || order.account_firstname || ''} ${order.lastname || order.account_lastname || ''}`.trim() ||
       'Guest';
-    
+
     const orderTotal = parseFloat(order.order_total);
     const expectedToken = crypto
       .createHash('sha1')
