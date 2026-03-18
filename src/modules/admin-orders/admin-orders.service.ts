@@ -1889,14 +1889,6 @@ export class AdminOrdersService implements OnModuleInit {
         </p>
         <br/>
         <p style="margin-top: 20px;">
-          <a href="${paymentLink}">
-            <button style="background-color: #E03A3E; border: solid 1px #E03A3E; cursor: pointer; font-weight: 700; color: #fff; padding: 12px 24px; border-radius: 5px;">
-              Click here to pay
-            </button>
-          </a>
-        </p>
-        <br/>
-        <p style="margin-top: 20px;">
           <a href="${invoiceLink}">
             <button style="background-color: #000000; border: solid 1px #000000; cursor: pointer; font-weight: 700; color: #fff; padding: 12px 24px; border-radius: 5px;">
               View PDF Invoice
