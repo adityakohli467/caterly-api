@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { EmailService } from '../../common/services/email.service';
+import { InvoiceService } from '../../common/services/invoice.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -14,6 +15,7 @@ export class StoreOrdersService implements OnModuleInit {
     private notificationsService: AdminNotificationsService,
     private emailService: EmailService,
     private configService: ConfigService,
+    private invoiceService: InvoiceService,
   ) { }
 
   async onModuleInit() {
@@ -545,7 +547,7 @@ export class StoreOrdersService implements OnModuleInit {
             .createHash('sha1')
             .update(`${customerName}|${customerName}|${orderId}|${orderTotal}`)
             .digest('hex');
-          const invoiceUrl = `${backendUrl}/admin/orders/${orderId}/invoice/view?auth=${authToken}&ofrom=frontend`;
+          const invoiceUrl = `${frontendUrl}/invoice?order_id=${orderId}&auth=${authToken}`;
 
           const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
@@ -950,5 +952,46 @@ export class StoreOrdersService implements OnModuleInit {
         calculated_total: calculatedTotal.toFixed(2),
       },
     };
+  }
+  /**
+   * Verify invoice token for public access
+   */
+  async verifyInvoiceToken(orderId: number, token: string): Promise<boolean> {
+    const orderQuery = `
+      SELECT 
+        o.order_id, 
+        o.order_total,
+        o.customer_order_name,
+        o.firstname,
+        o.lastname,
+        c.firstname as account_firstname,
+        c.lastname as account_lastname
+      FROM orders o
+      LEFT JOIN customer c ON o.customer_id = c.customer_id
+      WHERE o.order_id = $1
+    `;
+    const result = await this.dataSource.query(orderQuery, [orderId]);
+    const order = result[0];
+
+    if (!order) return false;
+
+    const customerName = order.customer_order_name ||
+      `${order.firstname || order.account_firstname || ''} ${order.lastname || order.account_lastname || ''}`.trim() ||
+      'Guest';
+    
+    const orderTotal = parseFloat(order.order_total);
+    const expectedToken = crypto
+      .createHash('sha1')
+      .update(`${customerName}|${customerName}|${orderId}|${orderTotal}`)
+      .digest('hex');
+
+    return token === expectedToken;
+  }
+
+  /**
+   * Get invoice PDF buffer
+   */
+  async getInvoicePdf(orderId: number): Promise<Buffer> {
+    return this.invoiceService.getInvoicePDF(orderId);
   }
 }
