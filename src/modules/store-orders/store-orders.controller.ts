@@ -14,7 +14,11 @@ import {
   UploadedFiles,
   BadRequestException,
   Logger,
+  Headers,
+  Res,
+  UnauthorizedException,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { StoreOrdersService } from './store-orders.service';
@@ -30,6 +34,46 @@ export class StoreOrdersController {
     private readonly storeOrdersService: StoreOrdersService,
     private readonly adminUploadService: AdminUploadService,
   ) { }
+
+  @Get(':id/invoice/view')
+  @ApiOperation({ summary: 'View invoice (redirects to frontend)' })
+  async viewInvoice(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('auth') auth: string,
+    @Res() res: Response,
+  ) {
+    const verified = await this.storeOrdersService.verifyInvoiceToken(id, auth);
+    if (!verified) {
+      throw new UnauthorizedException('Invalid invoice token');
+    }
+
+    const frontendUrl = process.env.STORE_PORTAL_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/invoice?order_id=${id}&auth=${auth}`);
+  }
+
+  @Get(':id/invoice/pdf')
+  @ApiOperation({ summary: 'Get invoice PDF (public with token)' })
+  async getInvoicePdf(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('auth') auth: string,
+    @Res() res: Response,
+  ) {
+    const verified = await this.storeOrdersService.verifyInvoiceToken(id, auth);
+    if (!verified) {
+      throw new UnauthorizedException('Invalid invoice token');
+    }
+
+    // Logic to serve PDF - we can get it via StoreOrdersService if we add a method there
+    // or use InvoiceService directly if we inject it here.
+    // Let's assume we can get it from the service.
+    const pdfBuffer = await this.storeOrdersService.getInvoicePdf(id);
+    const filename = `invoice-${id}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length.toString());
+    res.send(pdfBuffer);
+  }
 
   @Post()
   @UseGuards(JwtAuthGuard)
