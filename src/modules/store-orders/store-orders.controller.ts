@@ -129,10 +129,12 @@ export class StoreOrdersController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get single guest order details (public)' })
   @ApiParam({ name: 'id', type: Number })
+  @ApiQuery({ name: 'auth', required: false, type: String })
   async getGuestOrder(
     @Param('id', ParseIntPipe) id: number,
+    @Query('auth') auth?: string,
   ) {
-    return this.storeOrdersService.getGuestOrder(id);
+    return this.storeOrdersService.getGuestOrder(id, auth);
   }
 
   @Get(':id')

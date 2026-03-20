@@ -538,15 +538,17 @@ export class StoreOrdersService implements OnModuleInit {
             this.configService.get<string>('FRONTEND_URL') ||
             'http://localhost:3000';
 
-          // Generate payment link (deep link)
-          const paymentLink = `${frontendUrl}/payment?order_id=${orderId}`;
-
-          // Generate invoice view link
+          // Generate auth token (same as invoice for consistency)
           const orderTotal = parseFloat(order.order_total || total);
           const authToken = crypto
             .createHash('sha1')
             .update(`${customerName}|${customerName}|${orderId}|${orderTotal}`)
             .digest('hex');
+
+          // Generate payment link (deep link)
+          const paymentLink = `${frontendUrl}/payment?order_id=${orderId}&auth=${authToken}`;
+
+          // Generate invoice view link
           const invoiceUrl = `${frontendUrl}/invoice?order_id=${orderId}&auth=${authToken}`;
 
           const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
@@ -724,9 +726,16 @@ export class StoreOrdersService implements OnModuleInit {
   /**
    * Get single guest order details (for payment)
    */
-  async getGuestOrder(orderId: number) {
+  async getGuestOrder(orderId: number, auth?: string) {
+    // 1. First find if a token was provided and if it is valid
+    let tokenVerified = false;
+    if (auth) {
+      tokenVerified = await this.verifyInvoiceToken(orderId, auth);
+    }
+
     // Get order with coupon info
-    const orderQuery = `
+    // If token is verified, we allow fetching any order by ID (regardless of guest status)
+    let orderQuery = `
       SELECT 
         o.*,
         cp.coupon_code,
@@ -738,8 +747,13 @@ export class StoreOrdersService implements OnModuleInit {
       LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
       LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
-      WHERE o.order_id = $1 AND (o.customer_id IS NULL OR o.user_id IS NULL)
+      WHERE o.order_id = $1
     `;
+
+    // If no valid token, strictly limit to genuine guest orders (no user/customer ID)
+    if (!tokenVerified) {
+      orderQuery += ` AND (o.customer_id IS NULL OR o.user_id IS NULL)`;
+    }
 
     const orderResult = await this.dataSource.query(orderQuery, [orderId]);
     const order = orderResult[0];
