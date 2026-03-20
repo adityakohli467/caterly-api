@@ -1837,23 +1837,25 @@ export class AdminOrdersService implements OnModuleInit {
       throw new BadRequestException('No email address found for this order');
     }
 
-    // Generate payment link (SecurePay route)
-    const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
-    const paymentLink = `${backendUrl}/store/payment/${id}/process`;
-
     // Customer name
     const customerName = order.customer_order_name || `${order.firstname || ''} ${order.lastname || ''}`.trim() || 'Customer';
 
-    // Generate invoice download link
+    // Generate auth token (same as invoice for consistency)
     const orderTotalValue = parseFloat(order.order_total || 0);
     const authToken = crypto
       .createHash('sha1')
       .update(`${customerName}|${customerName}|${id}|${orderTotalValue}`)
       .digest('hex');
+
+    // Generate payment link (SecurePay route)
+    const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
+    const paymentLink = `${backendUrl}/store/payment/${id}/process?auth=${authToken}`;
+
+    // Generate invoice download link
     const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
       this.configService.get<string>('FRONTEND_URL') ||
       'http://localhost:3000';
-    const invoiceLink = `${frontendUrl}/orders/${id}/invoice?auth=${authToken}`;
+    const invoiceLink = `${frontendUrl}/invoice?order_id=${id}&auth=${authToken}`;
     const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
     const companyPhone = this.configService.get<string>('COMPANY_PHONE') || '1300 827 286';
 

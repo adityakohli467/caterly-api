@@ -122,15 +122,20 @@ export class StorePaymentController {
   @Get(':orderId/process')
   @ApiOperation({ summary: 'Process payment - redirects to Pin Payments flow' })
   @ApiParam({ name: 'orderId', type: Number })
+  @ApiQuery({ name: 'auth', required: false, type: String })
   @ApiQuery({ name: 'ofrom', required: false, type: String })
   async processPayment(
     @Param('orderId', ParseIntPipe) orderId: number,
+    @Query('auth') auth: string,
     @Query('ofrom') ofrom: string = 'backend',
     @Res() res: Response,
   ) {
     // Redirect to frontend payment page with Pin Payments
     const frontendUrl = process.env.STORE_PORTAL_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
-    const paymentUrl = `${frontendUrl}/payment?order_id=${orderId}`;
+    let paymentUrl = `${frontendUrl}/payment?order_id=${orderId}`;
+    if (auth) {
+      paymentUrl += `&auth=${auth}`;
+    }
     res.redirect(paymentUrl);
   }
 
