@@ -13,6 +13,7 @@ import { PinPaymentsService } from '../../common/services/pinpayments.service';
 import { FatZebraService } from '../../common/services/fatzebra.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { InvoiceService } from '../../common/services/invoice.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 
 @Injectable()
 export class StorePaymentService {
@@ -26,6 +27,7 @@ export class StorePaymentService {
     private fatZebraService: FatZebraService,
     private notificationService: NotificationService,
     private invoiceService: InvoiceService,
+    private adminNotificationsService: AdminNotificationsService,
   ) { }
 
   /**
@@ -408,8 +410,18 @@ export class StorePaymentService {
 
         await queryRunner.commitTransaction();
 
-        // Send payment confirmation email
+        // Send payment/order confirmation email
         await this.sendPaymentConfirmationEmail(orderId, order);
+        
+        // Notify admin (this is when the order is "officially" placed)
+        const customerName = order.customer_order_name ||
+          `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
+          'Guest';
+        await this.adminNotificationsService.createNotification({
+          type: 'order',
+          message: `New order #${orderId} placed by ${customerName} for $${parseFloat(order.order_total || 0).toFixed(2)}`,
+          order_id: orderId,
+        }).catch(err => this.logger.error('Failed to notify admin of new paid order:', err));
 
         const redirectUrl = this.configService.get<string>('PAYMENT_SUCCESS_REDIRECT_URL') ||
           'https://caterly.com.au/externalRedirect.html';
@@ -496,8 +508,18 @@ export class StorePaymentService {
 
         await queryRunner.commitTransaction();
 
-        // Send confirmation email
+        // Send payment/order confirmation email
         await this.sendPaymentConfirmationEmail(orderId, order);
+        
+        // Notify admin
+        const customerName = order.customer_order_name ||
+          `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
+          'Guest';
+        await this.adminNotificationsService.createNotification({
+          type: 'order',
+          message: `New order #${orderId} placed by ${customerName} for $${parseFloat(order.order_total || 0).toFixed(2)}`,
+          order_id: orderId,
+        }).catch(err => this.logger.error('Failed to notify admin of new paid order:', err));
 
         const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
           this.configService.get<string>('ADMIN_PORTAL_URL') ||
@@ -780,8 +802,15 @@ export class StorePaymentService {
 
         await queryRunner.commitTransaction();
 
-        // Send payment confirmation email
+        // Send payment/order confirmation email
         await this.sendPaymentConfirmationEmail(orderId, order);
+        
+        // Notify admin
+        await this.adminNotificationsService.createNotification({
+          type: 'order',
+          message: `New order #${orderId} placed by ${customerName} for $${(totalCents / 100).toFixed(2)}`,
+          order_id: orderId,
+        }).catch(err => this.logger.error('Failed to notify admin of new paid order:', err));
 
         const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
           this.configService.get<string>('ADMIN_PORTAL_URL') ||
@@ -959,8 +988,15 @@ export class StorePaymentService {
 
         await queryRunner.commitTransaction();
 
-        // Send payment confirmation email
+        // Send payment/order confirmation email
         await this.sendPaymentConfirmationEmail(orderId, order);
+        
+        // Notify admin
+        await this.adminNotificationsService.createNotification({
+          type: 'order',
+          message: `New order #${orderId} placed by ${customerName} for $${(totalCents / 100).toFixed(2)}`,
+          order_id: orderId,
+        }).catch(err => this.logger.error('Failed to notify admin of new paid order:', err));
 
         const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
           this.configService.get<string>('ADMIN_PORTAL_URL') ||
@@ -1023,92 +1059,111 @@ export class StorePaymentService {
         'Customer';
 
       const toEmail = order.customer_order_email || order.email;
-      const managerEmail = order.accounts_email || null;
-      const adminEmail = this.configService.get<string>('COMPANY_EMAIL') || null;
+      if (!toEmail) return;
 
-      const baseEmails = [toEmail, managerEmail, adminEmail].filter(Boolean) as string[];
-      // Remove duplicates
-      const emailList = [...new Set(baseEmails)];
+      const orderTotal = parseFloat(order.order_total || 0);
 
-      if (emailList.length > 0) {
-        const orderTotal = parseFloat(order.order_total || 0);
+      // Generate PDF Invoice
+      let pdfBuffer: Buffer | null = null;
+      try {
+        pdfBuffer = await this.invoiceService.getInvoicePDF(orderId);
+      } catch (invoiceError) {
+        this.logger.error("Failed to generate invoice PDF for payment email:", invoiceError);
+      }
 
-        // Generate PDF Invoice
-        let pdfBuffer: Buffer | null = null;
-        try {
-          pdfBuffer = await this.invoiceService.getInvoicePDF(orderId);
-        } catch (invoiceError) {
-          this.logger.error("Failed to generate invoice PDF for payment email:", invoiceError);
-        }
+      const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
+      const contactNumber = this.configService.get<string>('COMPANY_PHONE') || '1300 827 286';
+      
+      const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
+        this.configService.get<string>('FRONTEND_URL') ||
+        'http://localhost:3000';
 
-        const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
-        const contactNumber = this.configService.get<string>('COMPANY_PHONE') || '';
-        const formattedAmount = `$${(isNaN(orderTotal) ? 0 : orderTotal).toFixed(2)}`;
+      // Generate auth token for invoice view
+      const authToken = crypto
+        .createHash('sha1')
+        .update(`${customerName}|${customerName}|${orderId}|${orderTotal}`)
+        .digest('hex');
 
-        const logoAttachment = this.emailService.getLogoAttachment();
-        const attachments: any[] = [];
-        
-        if (pdfBuffer) {
-          attachments.push({
-            filename: `tax-invoice-${orderId}.pdf`,
-            content: pdfBuffer,
-            contentType: "application/pdf",
-          });
-        }
-        
-        if (logoAttachment) {
-          attachments.push(logoAttachment);
-        }
+      const invoiceUrl = `${frontendUrl}/orders/${orderId}/invoice?auth=${authToken}`;
 
-        await this.notificationService.sendNotification({
-          templateKey: "order_payment_received",
-          recipientEmail: emailList,
-          recipientName: customerName,
-          variables: {
-            customer_name: customerName,
-            order_number: String(orderId),
-            invoice_number: String(orderId),
-            amount_paid: formattedAmount,
-            company_name: companyName,
-            contact_number: contactNumber,
-            contact_email: adminEmail || '',
-          },
-          attachments: attachments.length > 0 ? attachments : undefined,
-          customSubject: `Payment Received – Order #${orderId} – ${companyName}`,
-          customBody: `
+      const logoAttachment = this.emailService.getLogoAttachment();
+      const attachments: any[] = logoAttachment ? [logoAttachment] : [];
+      
+      if (pdfBuffer) {
+        attachments.push({
+          filename: `tax-invoice-${orderId}.pdf`,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        });
+      }
+
+      const emailHtml = `
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
     .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .logo { max-width: 200px; height: auto; }
     .content { padding: 20px; }
+    .order-details { background-color: #f9f9f9; padding: 15px; margin: 15px 0; border-radius: 5px; }
+    .order-info { margin: 10px 0; }
+    .order-info strong { display: inline-block; width: 150px; }
+    .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white !important; text-decoration: none; border-radius: 5px; margin: 10px 5px; font-weight: bold; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+    .payment-badge { display: inline-block; padding: 5px 15px; background-color: #4CAF50; color: white; border-radius: 20px; font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" style="max-width: 200px; height: auto;">' : `<h1>${companyName}</h1>`}
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
+      <h2>Order Confirmation #${orderId}</h2>
     </div>
     <div class="content">
       <p>Dear ${customerName},</p>
-      <p>Thank you for your payment.</p>
-      <p>This email confirms that payment has been successfully received for your order. Your <strong>tax invoice number</strong> is attached to this email for your records.</p>
-      <p>
-        Order number: ${orderId}<br/>
-        Invoice number: ${orderId}<br/>
-        Payment amount: ${formattedAmount}
-      </p>
-      <p>If you have any questions, please contact us at ${contactNumber} or ${adminEmail || ''}.</p>
-      <p>Kind regards,<br/>${companyName} Team</p>
+      <div class="payment-badge">Payment Received</div>
+      <p>Thank you for your order! Your payment has been successfully processed, and your order is now being prepared.</p>
+      
+      <div class="order-details">
+        <h3>Order Details</h3>
+        <div class="order-info"><strong>Order Number:</strong> #${orderId}</div>
+        <div class="order-info"><strong>Order Total:</strong> $${orderTotal.toFixed(2)}</div>
+        ${order.delivery_date_time ? `<div class="order-info"><strong>Delivery Date:</strong> ${new Date(order.delivery_date_time).toLocaleDateString()}</div>` : ''}
+        ${order.delivery_address ? `<div class="order-info"><strong>Delivery Address:</strong> ${order.delivery_address}</div>` : ''}
+      </div>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${invoiceUrl}" class="cta-button">View Tax Invoice</a>
+      </div>
+
+      <p>A copy of your tax invoice is also attached to this email for your records.</p>
+      
+      <p>If you have any questions about your order, please don't hesitate to contact us at ${contactNumber}.</p>
+      
+      <p>Thank you for choosing ${companyName}!</p>
+    </div>
+    <div class="footer">
+      <p>If you have any questions, please contact us.</p>
+      <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
     </div>
   </div>
 </body>
-</html>`,
-        });
-      }
+</html>
+      `;
+
+      await this.emailService.sendEmail({
+        to: toEmail,
+        subject: `Order Confirmation #${orderId} - ${companyName}`,
+        html: emailHtml,
+        attachments: attachments,
+      });
+
+      this.logger.log(`Order/Payment confirmation email sent to ${toEmail} for order #${orderId}`);
+
     } catch (emailError) {
       this.logger.error("Failed to send payment confirmation email:", emailError);
     }

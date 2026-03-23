@@ -187,12 +187,12 @@ export class AdminOrdersService implements OnModuleInit {
       LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE 1=1
-      AND o.order_status NOT IN (0, 4, 9) -- Exclude "Cancelled/Quote" (0), "Awaiting Approval" (4), and "Modify" (9)
+      AND o.order_status NOT IN (0, 4, 9, 10) -- Exclude "Cancelled/Quote" (0), "Awaiting Approval" (4), "Modify" (9), and "Pending Payment" (10)
       -- Exclude quotes (payment_status = 'quote') - quotes should only appear in quotes list
       AND (o.payment_status IS NULL OR o.payment_status != 'quote')
       -- Note: Status 1 (New) orders ARE included in the orders list, but quotes are excluded
       -- Standing orders (subscriptions) are included unless filtered by order_type
-      AND o.order_status != 0
+      AND o.order_status NOT IN (0, 10)
     `;
 
     if (order_type) {
@@ -1273,7 +1273,7 @@ export class AdminOrdersService implements OnModuleInit {
         COUNT(CASE WHEN order_status = 5 THEN 1 END) as completed_orders,
         COUNT(CASE WHEN order_status = 2 THEN 1 END) as paid_orders
       FROM orders
-      WHERE order_status NOT IN (0, 8)
+      WHERE order_status NOT IN (0, 8, 10)
       -- Exclude quotes (payment_status = 'quote')
       AND (payment_status IS NULL OR payment_status != 'quote')
       -- Note: Status 1 (New) orders ARE included, but quotes are excluded
@@ -1285,8 +1285,8 @@ export class AdminOrdersService implements OnModuleInit {
     const deliveriesTodayResult = await this.dataSource.query(`
       SELECT COUNT(*) as deliveries_today
       FROM orders
-      WHERE order_status NOT IN (0, 8)
-      AND order_status NOT IN (1, 9)
+      WHERE order_status NOT IN (0, 8, 10)
+      AND order_status NOT IN (1, 9, 10)
       -- Exclude quotes (payment_status = 'quote')
       AND (payment_status IS NULL OR payment_status != 'quote')
       AND delivery_date_time IS NOT NULL
@@ -1309,7 +1309,7 @@ export class AdminOrdersService implements OnModuleInit {
       SELECT COUNT(*) as today_orders
       FROM orders
       WHERE DATE(date_added) = CURRENT_DATE
-      AND order_status NOT IN (0, 8)
+      AND order_status NOT IN (0, 8, 10)
       -- Exclude quotes (payment_status = 'quote')
       AND (payment_status IS NULL OR payment_status != 'quote')
       -- Include status 1 (New) orders, but exclude quotes
@@ -1333,7 +1333,7 @@ export class AdminOrdersService implements OnModuleInit {
         c.telephone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      WHERE o.order_status NOT IN (0, 8)
+      WHERE o.order_status NOT IN (0, 8, 10)
       -- Exclude quotes (payment_status = 'quote')
       AND (o.payment_status IS NULL OR o.payment_status != 'quote')
       -- Only show orders with delivery_date_time set to TODAY (not future dates)
@@ -1378,7 +1378,7 @@ export class AdminOrdersService implements OnModuleInit {
         c.telephone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      WHERE o.order_status NOT IN (0, 8)
+      WHERE o.order_status NOT IN (0, 8, 10)
       -- Exclude quotes (payment_status = 'quote')
       AND (o.payment_status IS NULL OR o.payment_status != 'quote')
       -- Only show orders scheduled for tomorrow
@@ -1429,7 +1429,7 @@ export class AdminOrdersService implements OnModuleInit {
         c.telephone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      WHERE o.order_status NOT IN (0, 8)
+      WHERE o.order_status NOT IN (0, 8, 10)
       -- Include status 1 (New) orders
       AND o.delivery_date_time IS NOT NULL
       AND DATE(o.delivery_date_time) >= $1
@@ -1472,7 +1472,7 @@ export class AdminOrdersService implements OnModuleInit {
         c.telephone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      WHERE o.order_status NOT IN (0, 8)
+      WHERE o.order_status NOT IN (0, 8, 10)
       -- Include status 1 (New) orders in recent orders
       ORDER BY o.date_added DESC
       LIMIT 10
