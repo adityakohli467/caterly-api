@@ -257,7 +257,7 @@ export class InvoiceService {
 
     const afterDiscount = subtotal - couponDiscount;
     const lateFee = parseFloat(order.late_fee || 0);
-    
+
     // Use stored total and GST if available, otherwise recalculate
     // This ensures consistency with what's stored in the database
     const storedTotal = parseFloat(order.order_total || 0);
@@ -384,9 +384,9 @@ export class InvoiceService {
       return {
         companyName: 'Caterly', // Force Caterly branding
         companyEmail: settings.company_email || this.configService.get<string>('COMPANY_EMAIL') || 'info@caterly.com.au',
-        companyPhone: settings.company_phone || this.configService.get<string>('COMPANY_PHONE') || '+61 3 1234 5678',
+        companyPhone: settings.company_phone || this.configService.get<string>('COMPANY_PHONE') || '+61 1300 827 286',
         companyAbn: settings.company_abn || this.configService.get<string>('COMPANY_ABN') || 'ABN: 12 345 678 901',
-        companyAddress: settings.company_address || this.configService.get<string>('COMPANY_ADDRESS') || '123 Business Street\nMelbourne, VIC 3000',
+        companyAddress: settings.company_address || this.configService.get<string>('COMPANY_ADDRESS') || '75 Dorcas St, South Melbourne 3205',
       };
     } catch (error) {
       this.logger.warn('Could not fetch company settings from database, using defaults:', error);
@@ -454,9 +454,27 @@ export class InvoiceService {
         // Company Logo - Left aligned at top (matching caterly format)
         let logoHeight = 40; // Default height for text fallback
         const logoStartY = headerY;
-        const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
 
-        if (fs.existsSync(logoPath)) {
+        // Try multiple potential paths for the logo (exhaustive search)
+        const potentialLogoPaths = [
+          path.join(process.cwd(), 'src', 'assets', 'logo.png'),
+          path.join(process.cwd(), 'assets', 'logo.png'),
+          path.join(process.cwd(), 'dist', 'src', 'assets', 'logo.png'),
+          path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
+          path.join(__dirname, '..', '..', 'assets', 'logo.png'),
+          path.resolve(process.cwd(), 'src/assets/logo.png'),
+          'src/assets/logo.png',
+        ];
+
+        let logoPath: string | null = null;
+        for (const p of potentialLogoPaths) {
+          if (fs.existsSync(p)) {
+            logoPath = p;
+            break;
+          }
+        }
+
+        if (logoPath) {
           try {
             const logoWidth = 120; // Fixed width for logo
             doc.image(logoPath, pageMargin, logoStartY, { width: logoWidth });
@@ -464,16 +482,14 @@ export class InvoiceService {
           } catch (error) {
             this.logger.warn('Could not add logo to PDF:', error);
             // Fallback to text if image adding fails
-            const brandingText = 'Caterly';
             doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
-            doc.text(brandingText, pageMargin, logoStartY);
+            doc.text('Caterly', pageMargin, logoStartY);
             logoHeight = 35 + 5;
           }
         } else {
           // Fallback to text branding if logo file doesn't exist
-          const brandingText = 'Caterly';
           doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
-          doc.text(brandingText, pageMargin, logoStartY);
+          doc.text('Caterly', pageMargin, logoStartY);
           logoHeight = 35 + 5;
         }
 
@@ -667,32 +683,36 @@ export class InvoiceService {
 
           doc.moveTo(40, tableY - 3).lineTo(560, tableY - 3).strokeColor(borderGray).lineWidth(0.5).stroke();
 
+          const sanitizedProductName = item.product_name.replace(/[^\x20-\x7E\n]/g, '');
           doc.fontSize(7).font('Helvetica').fillColor(darkGray);
-          doc.text(item.product_name, 50, tableY + 1, { width: 300 });
+          doc.text(sanitizedProductName, 50, tableY + 1, { width: 300 });
 
           let extraHeight = 0;
 
           // Show product descriptions if available
           if (item.product_description) {
+            const sanitizedDesc = item.product_description.replace(/[^\x20-\x7E\n]/g, ''); // Remove non-printable characters like Ð
             doc.fontSize(6).fillColor(lightGray);
-            const descHeight = doc.heightOfString(item.product_description, { width: 295 });
-            doc.text(item.product_description, 55, tableY + 8 + extraHeight, { width: 295 });
+            const descHeight = doc.heightOfString(sanitizedDesc, { width: 295 });
+            doc.text(sanitizedDesc, 55, tableY + 8 + extraHeight, { width: 295 });
             doc.fillColor(darkGray);
             doc.fontSize(7);
             extraHeight += descHeight + 1;
           }
 
           if (item.product_desc_1) {
+            const sanitizedDesc1 = item.product_desc_1.replace(/[^\x20-\x7E\n]/g, '');
             doc.fontSize(6).fillColor(lightGray);
-            doc.text(item.product_desc_1, 55, tableY + 8 + extraHeight, { width: 295 });
+            doc.text(sanitizedDesc1, 55, tableY + 8 + extraHeight, { width: 295 });
             doc.fillColor(darkGray);
             doc.fontSize(7);
             extraHeight += 7;
           }
 
           if (item.product_desc_2) {
+            const sanitizedDesc2 = item.product_desc_2.replace(/[^\x20-\x7E\n]/g, '');
             doc.fontSize(6).fillColor(lightGray);
-            doc.text(item.product_desc_2, 55, tableY + 8 + extraHeight, { width: 295 });
+            doc.text(sanitizedDesc2, 55, tableY + 8 + extraHeight, { width: 295 });
             doc.fillColor(darkGray);
             doc.fontSize(7);
             extraHeight += 7;
@@ -700,8 +720,9 @@ export class InvoiceService {
 
           // Show product comment if available
           if (item.comment) {
+            const sanitizedComment = item.comment.replace(/[^\x20-\x7E\n]/g, '');
             doc.fontSize(6).fillColor(lightGray);
-            doc.text(`Note: ${item.comment}`, 55, tableY + 8 + extraHeight, { width: 295 });
+            doc.text(`Note: ${sanitizedComment}`, 55, tableY + 8 + extraHeight, { width: 295 });
             doc.fillColor(darkGray);
             doc.fontSize(7);
             extraHeight += 7;
@@ -842,27 +863,17 @@ export class InvoiceService {
           if (data.location_name || data.location_address || data.location_phone) {
             doc.fontSize(6).font('Helvetica-Bold').fillColor(darkGray);
             doc.text('Location Information:', 40, footerTextY, { width: 520, align: 'left' });
-            footerTextY += 7;
+            footerTextY = doc.y + 1;
 
             doc.font('Helvetica').fontSize(6).fillColor(lightGray);
             const locationInfo: string[] = [];
-
-            if (data.location_name) {
-              locationInfo.push(data.location_name);
-            }
-            if (data.location_address) {
-              locationInfo.push(data.location_address);
-            }
-            if (data.location_phone) {
-              locationInfo.push(`Phone: ${data.location_phone}`);
-            }
+            if (data.location_name) locationInfo.push(data.location_name);
+            if (data.location_address) locationInfo.push(data.location_address);
+            if (data.location_phone) locationInfo.push(`Phone: ${data.location_phone}`);
 
             if (locationInfo.length > 0) {
-              doc.text(locationInfo.join(' | '), 40, footerTextY, {
-                width: 520,
-                align: 'left',
-              });
-              footerTextY += 8;
+              doc.text(locationInfo.join(' | '), 40, footerTextY, { width: 520, align: 'left' });
+              footerTextY = doc.y + 2;
             }
           }
 
@@ -870,7 +881,7 @@ export class InvoiceService {
           if (data.bank_account_name || data.bank_account_number || data.bank_bsb) {
             doc.fontSize(6).font('Helvetica-Bold').fillColor(darkGray);
             doc.text('Payment Information:', 40, footerTextY, { width: 520, align: 'left' });
-            footerTextY += 7;
+            footerTextY = doc.y + 1;
 
             doc.font('Helvetica').fontSize(6).fillColor(lightGray);
             const bankInfo: string[] = [];
@@ -879,7 +890,7 @@ export class InvoiceService {
             if (data.bank_account_number) bankInfo.push(`Account No: ${data.bank_account_number}`);
 
             doc.text(bankInfo.join(' | '), 40, footerTextY, { width: 520, align: 'left' });
-            footerTextY += 8;
+            footerTextY = doc.y + 2;
           }
 
           // Thank you message

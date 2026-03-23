@@ -549,7 +549,7 @@ export class StoreOrdersService implements OnModuleInit {
           const paymentLink = `${frontendUrl}/payment?order_id=${orderId}&auth=${authToken}`;
 
           // Generate invoice view link
-          const invoiceUrl = `${frontendUrl}/invoice?order_id=${orderId}&auth=${authToken}`;
+          const invoiceUrl = `${frontendUrl}/orders/${orderId}/invoice?auth=${authToken}`;
 
           const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
@@ -593,8 +593,8 @@ export class StoreOrdersService implements OnModuleInit {
       </div>
 
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${paymentLink}" class="cta-button">Pay Now</a>
-        <a href="${invoiceUrl}" class="cta-button" style="background-color: #000000;">View Invoice</a>
+        <a href="${paymentLink}" class="cta-button" style="color: white !important; text-decoration: none;">Pay Now</a>
+        <a href="${invoiceUrl}" class="cta-button" style="background-color: #E03A3E; color: white !important; text-decoration: none;">View Invoice</a>
       </div>
 
       <p>You can pay for your order by clicking the "Pay Now" button above. Once payment is received, we'll process your order.</p>

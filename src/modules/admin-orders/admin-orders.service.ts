@@ -1866,7 +1866,7 @@ export class AdminOrdersService implements OnModuleInit {
     const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
       this.configService.get<string>('FRONTEND_URL') ||
       'http://localhost:3000';
-    const invoiceLink = `${frontendUrl}/invoice?order_id=${id}&auth=${authToken}`;
+    const invoiceLink = `${frontendUrl}/orders/${id}/invoice?auth=${authToken}`;
     const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
     const companyPhone = this.configService.get<string>('COMPANY_PHONE') || '1300 827 286';
 
@@ -1908,7 +1908,7 @@ export class AdminOrdersService implements OnModuleInit {
           </a>
         </p>
         <p style="margin-top: 20px;">
-          <a href="${invoiceLink}" style="background-color: #000000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: 700;">
+          <a href="${invoiceLink}" style="background-color: #E03A3E; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: 700;">
             View PDF Invoice
           </a>
         </p>

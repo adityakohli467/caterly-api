@@ -315,11 +315,14 @@ export class AuthService implements OnModuleInit {
     const frontendUrl = portalUrl || this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
+    const logoAttachment = this.emailService.getLogoAttachment();
+
     await this.notificationService.sendNotification({
       templateKey: 'forgot_password',
       recipientEmail: user.email,
       recipientName: user.username || 'Customer',
       variables: {},
+      attachments: logoAttachment ? [logoAttachment] : [],
       customSubject: `Reset Your Password - ${this.configService.get<string>('COMPANY_NAME') || 'Caterly'}`,
       customBody: (() => {
         const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
@@ -335,7 +338,7 @@ export class AuthService implements OnModuleInit {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: white; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
     .content { padding: 20px; }
     .button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
@@ -344,14 +347,14 @@ export class AuthService implements OnModuleInit {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Reset Your Password</h1>
+      ${logoAttachment ? `<img src="cid:logo" alt="${companyName}" style="max-width: 200px; height: auto;">` : `<h1>Reset Your Password</h1>`}
     </div>
     <div class="content">
       <p>Dear ${user.username || 'Customer'},</p>
       <p>We received a request to reset the password for your ${companyName} account.</p>
       <p>To reset your password, please click the link below:</p>
       <div style="text-align: center;">
-        <a href="${resetUrl}" class="button">Reset Password</a>
+        <a href="${resetUrl}" class="button" style="color: white !important; text-decoration: none;">Reset Password</a>
       </div>
       <p>Or copy and paste this link into your browser:</p>
       <p style="word-break: break-all; color: #666;">${resetUrl}</p>
