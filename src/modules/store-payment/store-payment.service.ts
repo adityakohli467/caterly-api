@@ -1045,6 +1045,21 @@ export class StorePaymentService {
         const contactNumber = this.configService.get<string>('COMPANY_PHONE') || '';
         const formattedAmount = `$${(isNaN(orderTotal) ? 0 : orderTotal).toFixed(2)}`;
 
+        const logoAttachment = this.emailService.getLogoAttachment();
+        const attachments: any[] = [];
+        
+        if (pdfBuffer) {
+          attachments.push({
+            filename: `tax-invoice-${orderId}.pdf`,
+            content: pdfBuffer,
+            contentType: "application/pdf",
+          });
+        }
+        
+        if (logoAttachment) {
+          attachments.push(logoAttachment);
+        }
+
         await this.notificationService.sendNotification({
           templateKey: "order_payment_received",
           recipientEmail: emailList,
@@ -1058,21 +1073,25 @@ export class StorePaymentService {
             contact_number: contactNumber,
             contact_email: adminEmail || '',
           },
+          attachments: attachments.length > 0 ? attachments : undefined,
           customSubject: `Payment Received – Order #${orderId} – ${companyName}`,
           customBody: `
 <!DOCTYPE html>
 <html>
 <head>
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }
-    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
     .content { padding: 20px; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header"><h1>${companyName}</h1></div>
+    <div class="header">
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" style="max-width: 200px; height: auto;">' : `<h1>${companyName}</h1>`}
+    </div>
     <div class="content">
       <p>Dear ${customerName},</p>
       <p>Thank you for your payment.</p>
@@ -1088,15 +1107,6 @@ export class StorePaymentService {
   </div>
 </body>
 </html>`,
-          attachments: pdfBuffer
-            ? [
-              {
-                filename: `tax-invoice-${orderId}.pdf`,
-                content: pdfBuffer,
-                contentType: "application/pdf",
-              },
-            ]
-            : undefined,
         });
       }
     } catch (emailError) {
