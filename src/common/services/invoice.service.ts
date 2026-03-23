@@ -3,7 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import PDFDocument from 'pdfkit';
-// Removed fs and path imports - no logo images used, only ZENN text
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { S3Service } from './s3.service';
 import { Order } from '../../entities/Order';
 
@@ -449,19 +451,34 @@ export class InvoiceService {
         const pageMargin = 40;
         const pageHeight = doc.page.height;
 
-        // Company Logo/Text - Centered at top (matching caterly format)
-        // For kj4, use "Caterly" text branding
-        let logoHeight = 0;
+        // Company Logo - Left aligned at top (matching caterly format)
+        let logoHeight = 40; // Default height for text fallback
         const logoStartY = headerY;
-        const brandingText = 'Caterly';
-        doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
-        const logoTextWidth = doc.widthOfString(brandingText);
-        const logoTextX = pageMargin; // Left align like a logo
-        doc.text(brandingText, logoTextX, logoStartY);
-        logoHeight = 35 + 5;
+        const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
+
+        if (fs.existsSync(logoPath)) {
+          try {
+            const logoWidth = 120; // Fixed width for logo
+            doc.image(logoPath, pageMargin, logoStartY, { width: logoWidth });
+            logoHeight = 45; // Height taken by the logo (+ small margin)
+          } catch (error) {
+            this.logger.warn('Could not add logo to PDF:', error);
+            // Fallback to text if image adding fails
+            const brandingText = 'Caterly';
+            doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
+            doc.text(brandingText, pageMargin, logoStartY);
+            logoHeight = 35 + 5;
+          }
+        } else {
+          // Fallback to text branding if logo file doesn't exist
+          const brandingText = 'Caterly';
+          doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
+          doc.text(brandingText, pageMargin, logoStartY);
+          logoHeight = 35 + 5;
+        }
 
         // Calculate total header height (company name + logo/text)
-        const totalHeaderHeight = logoStartY + logoHeight - headerY;
+        const totalHeaderHeight = logoHeight;
 
         // Company Information - Address in top right corner (compact) - matching caterly format
         const companyEmail = companySettings.companyEmail;

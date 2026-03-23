@@ -829,24 +829,27 @@ export class AdminCustomersService {
 
     const emailSubject = `Your Wholesale Account Has Been Approved - ${companyName}`;
 
+    const logoAttachment = this.emailService.getLogoAttachment();
     const emailBody = `
       <!DOCTYPE html>
       <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #2952E6; color: white; padding: 20px; text-align: center; }
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px; background-color: #fff; }
+          .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+          .logo { max-width: 200px; height: auto; }
           .content { padding: 20px; background-color: #f9f9f9; }
           .message { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
           .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-          .cta-button { display: inline-block; padding: 12px 24px; background-color: #2952E6; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+          .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: bold; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h1>Account Approved!</h1>
+            ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
+            <h2>Account Approved!</h2>
           </div>
           <div class="content">
             <div class="message">
@@ -882,6 +885,7 @@ export class AdminCustomersService {
       to: customerEmail,
       subject: emailSubject,
       html: emailBody,
+      attachments: logoAttachment ? [logoAttachment] : [],
     });
 
     this.logger.log(`Approval email sent to ${customerEmail}`);

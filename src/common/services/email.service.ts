@@ -23,6 +23,8 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private mailerSend: MailerSend | null = null;
   private transporter: nodemailer.Transporter | null = null;
+  private logoAttachment: any = null;
+
 
   constructor(private configService: ConfigService) { }
 
@@ -162,6 +164,35 @@ export class EmailService {
       return false;
     }
   }
+
+  /**
+   * Get the logo attachment for embedding in emails
+   */
+  getLogoAttachment(): any {
+    if (this.logoAttachment) {
+      return this.logoAttachment;
+    }
+
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
+      if (fs.existsSync(logoPath)) {
+        const logoBuffer = fs.readFileSync(logoPath);
+        this.logoAttachment = {
+          filename: 'logo.png',
+          content: logoBuffer,
+          contentType: 'image/png',
+          cid: 'logo', // Content ID for embedding in HTML
+        };
+        return this.logoAttachment;
+      }
+    } catch (error) {
+      this.logger.warn('Could not load logo for email attachment:', error);
+    }
+    return null;
+  }
+
 
   /**
    * Send email with optional attachments (using SMTP or MailerSend)
@@ -426,6 +457,9 @@ export class EmailService {
       'Caterly';
     const emailSubject = `Invoice #${orderId} - ${companyName}`;
 
+    // Load logo for embedding
+    const logoAttachment = this.getLogoAttachment();
+
     const emailBody = `
 <!DOCTYPE html>
 <html>
@@ -435,7 +469,8 @@ export class EmailService {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .logo { max-width: 200px; height: auto; }
     .content { padding: 20px; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>
@@ -443,7 +478,8 @@ export class EmailService {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Invoice for Order #${orderId}</h1>
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
+      <h2>Invoice for Order #${orderId}</h2>
     </div>
     <div class="content">
       <p>Dear ${name},</p>
@@ -460,17 +496,23 @@ export class EmailService {
 </html>
     `;
 
+    const attachments: any[] = [
+      {
+        filename: `invoice-${orderId}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+      },
+    ];
+
+    if (logoAttachment) {
+      attachments.push(logoAttachment);
+    }
+
     return this.sendEmail({
       to: recipientEmail,
       subject: emailSubject,
       html: emailBody,
-      attachments: [
-        {
-          filename: `invoice-${orderId}.pdf`,
-          content: pdfBuffer,
-          contentType: 'application/pdf',
-        },
-      ],
+      attachments: attachments,
     });
   }
 

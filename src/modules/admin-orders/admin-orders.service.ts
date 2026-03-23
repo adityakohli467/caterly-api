@@ -1159,6 +1159,7 @@ export class AdminOrdersService implements OnModuleInit {
 
         // Only send email for important status changes
         if ([0, 2, 3, 5, 7, 8].includes(orderStatus)) {
+          const logoAttachment = this.emailService.getLogoAttachment();
           const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -1168,7 +1169,8 @@ export class AdminOrdersService implements OnModuleInit {
   <style>
     body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .logo { max-width: 200px; height: auto; }
     .content { padding: 20px; }
     .status-badge { display: inline-block; padding: 8px 16px; border-radius: 5px; font-weight: bold; margin: 10px 0; }
     .status-paid { background-color: #28a745; color: white; }
@@ -1183,7 +1185,8 @@ export class AdminOrdersService implements OnModuleInit {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Order Status Update</h1>
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
+      <h2>Order Status Update</h2>
     </div>
     <div class="content">
       <p>Dear ${customerName},</p>
@@ -1212,6 +1215,7 @@ export class AdminOrdersService implements OnModuleInit {
             to: recipientEmail,
             subject: `Order #${id} Status Update - ${statusMessage.charAt(0).toUpperCase() + statusMessage.slice(1)}`,
             html: emailHtml,
+            attachments: logoAttachment ? [logoAttachment] : [],
           });
 
           this.logger.log(`Order status update email sent to ${recipientEmail} for order #${id}`);
@@ -1736,15 +1740,17 @@ export class AdminOrdersService implements OnModuleInit {
       this.logger.error('Failed to generate PDF buffer for email:', error);
     }
 
+    const logoAttachment = this.emailService.getLogoAttachment();
     const emailHtml = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px; }
-          .header { background-color: #E03A3E; color: #fff; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px; background-color: #fff; }
+          .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; border-bottom: 3px solid #E03A3E; }
+          .logo { max-width: 200px; height: auto; }
           .content { padding: 20px; }
           .footer { margin-top: 20px; font-size: 12px; color: #777; text-align: center; }
         </style>
@@ -1752,7 +1758,8 @@ export class AdminOrdersService implements OnModuleInit {
       <body>
         <div class="container">
           <div class="header">
-            <h1>${isQuote ? 'Quote' : 'Order Confirmation'}</h1>
+            ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>Caterly</h1>`}
+            <h2>${isQuote ? 'Quote' : 'Order Confirmation'}</h2>
           </div>
           <div class="content">
             <p>Dear ${order.customer_order_name || 'Customer'},</p>
@@ -1778,6 +1785,10 @@ export class AdminOrdersService implements OnModuleInit {
         content: pdfBuffer,
         contentType: 'application/pdf',
       });
+    }
+
+    if (logoAttachment) {
+      attachments.push(logoAttachment);
     }
 
     await this.emailService.sendEmail({
@@ -1862,20 +1873,28 @@ export class AdminOrdersService implements OnModuleInit {
     // Prepare email content (matching caterly format)
     const emailSubject = `Payment Request - Order #${id} - ${companyName}`;
 
+    const logoAttachment = this.emailService.getLogoAttachment();
     const emailBody = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .logo { max-width: 200px; height: auto; }
+  </style>
 </head>
 <body style="font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
   <div style="max-width: 825px; margin: 0 auto; background-color: #fff;">
+    <div class="header">
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1 style="color: #E03A3E;">${companyName}</h1>`}
+    </div>
     <div style="padding: 25px;">
       <p style="margin: 0; font-size: 18px; line-height: 21px;">
         Dear ${customerName},
       </p>
-      <p style="margin: 0; font-size: 18px; line-height: 21px;">
+      <p style="margin: 0; font-size: 18px; line-height: 21px; margin-top: 10px;">
         Thank you for ordering with us.
       </p>
       
@@ -1913,10 +1932,16 @@ export class AdminOrdersService implements OnModuleInit {
     let emailError: string | null = null;
 
     try {
+      const attachments: any[] = [];
+      if (logoAttachment) {
+        attachments.push(logoAttachment);
+      }
+
       const emailResult = await this.emailService.sendEmail({
         to: emailToList,
         subject: emailSubject,
         html: emailBody,
+        attachments: attachments,
       });
 
       if (emailResult.success) {

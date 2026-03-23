@@ -88,6 +88,7 @@ export class StoreContactService implements OnModuleInit {
       'info@caterly.com.au';
     const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
+    const logoAttachment = this.emailService.getLogoAttachment();
     const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -97,19 +98,21 @@ export class StoreContactService implements OnModuleInit {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #2952E6; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .logo { max-width: 200px; height: auto; }
     .content { padding: 20px; }
     .field { margin-bottom: 15px; }
     .label { font-weight: bold; color: #666; }
     .value { color: #333; margin-top: 5px; }
-    .message-box { background-color: #f9f9f9; border-left: 4px solid #2952E6; padding: 15px; margin-top: 10px; }
+    .message-box { background-color: #f9f9f9; border-left: 4px solid #E03A3E; padding: 15px; margin-top: 10px; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>New Contact Form Submission</h1>
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
+      <h2>New Contact Form Submission</h2>
     </div>
     <div class="content">
       <p>You have received a new contact form submission:</p>
@@ -155,6 +158,7 @@ export class StoreContactService implements OnModuleInit {
         to: adminEmail,
         subject: `New Contact Form Submission from ${firstName} ${lastName}`,
         html: emailHtml,
+        attachments: logoAttachment ? [logoAttachment] : [],
       });
     } catch (emailError) {
       this.logger.error('Failed to send contact form email:', emailError);
@@ -171,7 +175,8 @@ export class StoreContactService implements OnModuleInit {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #2952E6; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .logo { max-width: 200px; height: auto; }
     .content { padding: 20px; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>
@@ -179,7 +184,8 @@ export class StoreContactService implements OnModuleInit {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Thank You for Contacting Us!</h1>
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
+      <h2>Thank You for Contacting Us!</h2>
     </div>
     <div class="content">
       <p>Dear ${firstName},</p>
@@ -202,6 +208,7 @@ export class StoreContactService implements OnModuleInit {
         to: email,
         subject: `Thank you for contacting ${companyName}`,
         html: confirmationHtml,
+        attachments: logoAttachment ? [logoAttachment] : [],
       });
     } catch (emailError) {
       this.logger.error('Failed to send confirmation email:', emailError);

@@ -553,6 +553,7 @@ export class StoreOrdersService implements OnModuleInit {
 
           const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
+          const logoAttachment = this.emailService.getLogoAttachment();
           const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -562,7 +563,8 @@ export class StoreOrdersService implements OnModuleInit {
   <style>
     body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .logo { max-width: 200px; height: auto; }
     .content { padding: 20px; }
     .order-details { background-color: #f9f9f9; padding: 15px; margin: 15px 0; border-radius: 5px; }
     .order-info { margin: 10px 0; }
@@ -574,7 +576,8 @@ export class StoreOrdersService implements OnModuleInit {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Order Confirmation #${orderId}</h1>
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
+      <h2>Order Confirmation #${orderId}</h2>
     </div>
     <div class="content">
       <p>Dear ${customerName},</p>
@@ -613,6 +616,7 @@ export class StoreOrdersService implements OnModuleInit {
             to: customerEmail,
             subject: `Order Confirmation #${orderId} - ${companyName}`,
             html: emailHtml,
+            attachments: logoAttachment ? [logoAttachment] : [],
           });
 
           this.logger.log(`Order confirmation email sent to ${customerEmail} for order #${orderId}`);

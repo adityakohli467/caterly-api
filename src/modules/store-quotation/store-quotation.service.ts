@@ -133,10 +133,12 @@ export class StoreQuotationService implements OnModuleInit {
     const adminEmail = this.configService.get('ADMIN_EMAIL') || 'catering@caterly.com.au';
     const companyName = this.configService.get('COMPANY_NAME') || 'Caterly';
 
+    const logoAttachment = this.emailService.getLogoAttachment();
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        <div style="background-color: #E03A3E; color: white; padding: 20px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px;">New Quotation Request</h1>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background-color: #fff;">
+        <div style="background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E;">
+          ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" style="max-width: 200px; height: auto;">' : `<h1 style="margin: 0; font-size: 24px;">${companyName}</h1>`}
+          <h2 style="margin: 10px 0 0 0; font-size: 20px;">New Quotation Request</h2>
         </div>
         <div style="padding: 30px; color: #333;">
           <p>You have received a new quotation inquiry from the storefront.</p>
@@ -172,6 +174,7 @@ export class StoreQuotationService implements OnModuleInit {
         to: adminEmail,
         subject: `New Quotation Request: ${inquiry.name} - ${inquiry.occasion || 'Inquiry'}`,
         html: html,
+        attachments: logoAttachment ? [logoAttachment] : [],
       });
     } catch (error) {
       this.logger.error('Failed to send admin quotation notification:', error);
@@ -180,11 +183,14 @@ export class StoreQuotationService implements OnModuleInit {
 
   private async sendUserConfirmation(inquiry: any) {
     const companyName = this.configService.get('COMPANY_NAME') || 'Caterly';
+    const logoAttachment = this.emailService.getLogoAttachment();
+
 
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-        <div style="background-color: #E03A3E; color: white; padding: 20px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px;">Thank You for Your Inquiry</h1>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background-color: #fff;">
+        <div style="background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E;">
+          ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" style="max-width: 200px; height: auto;">' : `<h1 style="margin: 0; font-size: 24px;">${companyName}</h1>`}
+          <h2 style="margin: 10px 0 0 0; font-size: 20px;">Thank You for Your Inquiry</h2>
         </div>
         <div style="padding: 30px; color: #333; line-height: 1.6;">
           <p>Hi ${inquiry.name},</p>
@@ -209,6 +215,7 @@ export class StoreQuotationService implements OnModuleInit {
         to: inquiry.email,
         subject: `We've received your quotation request - ${companyName}`,
         html: html,
+        attachments: logoAttachment ? [logoAttachment] : [],
       });
     } catch (error) {
       this.logger.error('Failed to send user quotation confirmation:', error);
