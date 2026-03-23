@@ -349,7 +349,7 @@ export class StoreAuthService implements OnModuleInit {
       const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') || this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
       const loginUrl = `${frontendUrl}/auth/login`;
       const contactNumber = this.configService.get<string>('COMPANY_PHONE') || '';
-      const contactEmail = this.configService.get<string>('COMPANY_EMAIL') || '';
+      const contactEmail = this.configService.get<string>('ADMIN_EMAIL') || this.configService.get<string>('COMPANY_EMAIL') || '';
       const companyNameVar = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
       // Always send regular customer registration since Caterly only has retailers
