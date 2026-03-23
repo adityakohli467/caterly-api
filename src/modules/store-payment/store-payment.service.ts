@@ -1114,7 +1114,7 @@ export class StorePaymentService {
     .order-info strong { display: inline-block; width: 150px; }
     .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white !important; text-decoration: none; border-radius: 5px; margin: 10px 5px; font-weight: bold; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-    .payment-badge { display: inline-block; padding: 5px 15px; background-color: #4CAF50; color: white; border-radius: 20px; font-weight: bold; margin-bottom: 10px; }
+    .payment-badge { display: inline-block; padding: 5px 15px; background-color: #E03A3E; color: white; border-radius: 20px; font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 <body>
@@ -1125,7 +1125,7 @@ export class StorePaymentService {
     </div>
     <div class="content">
       <p>Dear ${customerName},</p>
-      <div class="payment-badge">Payment Received</div>
+      <div class="payment-badge">Payment Received</div>  
       <p>Thank you for your order! Your payment has been successfully processed, and your order is now being prepared.</p>
       
       <div class="order-details">
@@ -1157,6 +1157,7 @@ export class StorePaymentService {
 
       await this.emailService.sendEmail({
         to: toEmail,
+        bcc: this.configService.get<string>('ADMIN_EMAIL') || [],
         subject: `Order Confirmation #${orderId} - ${companyName}`,
         html: emailHtml,
         attachments: attachments,
