@@ -341,7 +341,7 @@ export class StoreOrdersService implements OnModuleInit {
         1, // branch_id
         1, // shipping_method
         total,
-        1, // order_status = new
+        10, // order_status = pending payment (10)
         deliveryDateTime,
         deliveryFee,
         delivery_address,
@@ -500,131 +500,21 @@ export class StoreOrdersService implements OnModuleInit {
       `;
       const completeOrder = await this.dataSource.query(completeOrderQuery, [orderId]);
 
-      // Create notification for admin users
+      // Admin notification will be sent after successful payment
+      /*
       if (this.notificationsService) {
-        const order = completeOrder[0];
-        const customerName = order.customer_order_name ||
-          `${order.firstname || order.account_firstname || ''} ${order.lastname || order.account_lastname || ''}`.trim() ||
-          'Guest';
-
-        this.notificationsService.createNotification({
-          type: 'order',
-          message: `New order #${orderId} placed by ${customerName} for $${total.toFixed(2)}`,
-          order_id: orderId,
-          metadata: {
-            order_total: total,
-            customer_name: customerName,
-            delivery_date: delivery_date,
-            delivery_time: delivery_time,
-          },
-        }).catch((err) => {
-          this.logger.error('Failed to create order notification', err);
-        });
+        ...
       }
+      */
 
-      // Send order confirmation email to customer
+      // Order confirmation email will be sent after successful payment
+      /*
       try {
-        const order = completeOrder[0];
-        const customerEmail = order.customer_order_email || order.email || order.account_email;
-        const customerName = order.customer_order_name ||
-          `${order.firstname || order.account_firstname || ''} ${order.lastname || order.account_lastname || ''}`.trim() ||
-          'Guest';
-
-        if (customerEmail) {
-          const backendUrl = this.configService.get<string>('BACKEND_URL') ||
-            this.configService.get<string>('FRONTEND_URL') ||
-            'http://localhost:9000';
-          const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
-            this.configService.get<string>('FRONTEND_URL') ||
-            'http://localhost:3000';
-
-          // Generate auth token (same as invoice for consistency)
-          const orderTotal = parseFloat(order.order_total || total);
-          const authToken = crypto
-            .createHash('sha1')
-            .update(`${customerName}|${customerName}|${orderId}|${orderTotal}`)
-            .digest('hex');
-
-          // Generate payment link (deep link)
-          const paymentLink = `${frontendUrl}/payment?order_id=${orderId}&auth=${authToken}`;
-
-          // Generate invoice view link
-          const invoiceUrl = `${frontendUrl}/orders/${orderId}/invoice?auth=${authToken}`;
-
-          const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
-
-          const logoAttachment = this.emailService.getLogoAttachment();
-          const emailHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
-    .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
-    .logo { max-width: 200px; height: auto; }
-    .content { padding: 20px; }
-    .order-details { background-color: #f9f9f9; padding: 15px; margin: 15px 0; border-radius: 5px; }
-    .order-info { margin: 10px 0; }
-    .order-info strong { display: inline-block; width: 150px; }
-    .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
-    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
-      <h2>Order Confirmation #${orderId}</h2>
-    </div>
-    <div class="content">
-      <p>Dear ${customerName},</p>
-      <p>Thank you for your order! We've received your order and it's being processed.</p>
-      
-      <div class="order-details">
-        <h3>Order Details</h3>
-        <div class="order-info"><strong>Order Number:</strong> #${orderId}</div>
-        <div class="order-info"><strong>Order Total:</strong> $${total.toFixed(2)}</div>
-        ${delivery_date ? `<div class="order-info"><strong>Delivery Date:</strong> ${new Date(delivery_date).toLocaleDateString()}</div>` : ''}
-        ${delivery_time ? `<div class="order-info"><strong>Delivery Time:</strong> ${delivery_time}</div>` : ''}
-        ${order.delivery_address ? `<div class="order-info"><strong>Delivery Address:</strong> ${order.delivery_address}</div>` : ''}
-      </div>
-
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${paymentLink}" class="cta-button" style="color: white !important; text-decoration: none;">Pay Now</a>
-        <a href="${invoiceUrl}" class="cta-button" style="background-color: #E03A3E; color: white !important; text-decoration: none;">View Invoice</a>
-      </div>
-
-      <p>You can pay for your order by clicking the "Pay Now" button above. Once payment is received, we'll process your order.</p>
-      
-      <p>If you have any questions about your order, please don't hesitate to contact us.</p>
-      
-      <p>Thank you for choosing ${companyName}!</p>
-    </div>
-    <div class="footer">
-      <p>If you have any questions, please contact us.</p>
-      <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
-    </div>
-  </div>
-</body>
-</html>
-          `;
-
-          await this.emailService.sendEmail({
-            to: customerEmail,
-            subject: `Order Confirmation #${orderId} - ${companyName}`,
-            html: emailHtml,
-            attachments: logoAttachment ? [logoAttachment] : [],
-          });
-
-          this.logger.log(`Order confirmation email sent to ${customerEmail} for order #${orderId}`);
-        }
+        ...
       } catch (emailError) {
-        this.logger.error('Failed to send order confirmation email:', emailError);
-        // Don't fail the order creation if email fails
+        ...
       }
+      */
 
       // Get coupon code if coupon was applied
       let couponCode = null;
@@ -635,7 +525,7 @@ export class StoreOrdersService implements OnModuleInit {
       }
 
       return {
-        message: 'Order placed successfully',
+        message: 'Order created successfully. Please complete payment to place your order.',
         order: {
           ...completeOrder[0],
           items: orderItems,
