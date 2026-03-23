@@ -48,7 +48,7 @@ export class StoreOrdersController {
     }
 
     const frontendUrl = process.env.STORE_PORTAL_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
-    return res.redirect(`${frontendUrl}/invoice?order_id=${id}&auth=${auth}`);
+    return res.redirect(`${frontendUrl}/orders/${id}/invoice?auth=${auth}`);
   }
 
   @Get(':id/invoice/pdf')

@@ -176,8 +176,32 @@ export class EmailService {
     try {
       const fs = require('fs');
       const path = require('path');
-      const logoPath = path.join(process.cwd(), 'src', 'assets', 'logo.png');
-      if (fs.existsSync(logoPath)) {
+      
+      // Try multiple potential paths for the logo (exhaustive search)
+      const potentialPaths = [
+        path.join(process.cwd(), 'src', 'assets', 'logo.png'),
+        path.join(process.cwd(), 'assets', 'logo.png'),
+        path.join(process.cwd(), 'dist', 'src', 'assets', 'logo.png'),
+        path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
+        path.join(__dirname, '..', '..', 'assets', 'logo.png'), // Relative to src/common/services
+        path.resolve(process.cwd(), 'src/assets/logo.png'),
+        path.resolve(process.cwd(), 'assets/logo.png'),
+        'src/assets/logo.png',
+        'assets/logo.png'
+      ];
+
+      let logoPath = null;
+      for (const p of potentialPaths) {
+        try {
+          if (fs.existsSync(p)) {
+            logoPath = p;
+            break;
+          }
+        } catch (_) {}
+      }
+
+      if (logoPath) {
+        this.logger.log(`Logo found at: ${logoPath}`);
         const logoBuffer = fs.readFileSync(logoPath);
         this.logoAttachment = {
           filename: 'logo.png',
@@ -248,20 +272,20 @@ export class EmailService {
       // Handle attachments
       if (options.attachments && options.attachments.length > 0) {
         mailOptions.attachments = options.attachments.map(att => {
+          const attachment: any = {
+            filename: att.filename,
+            contentType: att.contentType,
+            cid: (att as any).cid, // Support CID for embedded images
+          };
+
           if (Buffer.isBuffer(att.content)) {
-            return {
-              filename: att.filename,
-              content: att.content,
-              contentType: att.contentType,
-            };
+            attachment.content = att.content;
           } else {
             // If it's a string, assume it's base64
-            return {
-              filename: att.filename,
-              content: Buffer.from(att.content, 'base64'),
-              contentType: att.contentType,
-            };
+            attachment.content = Buffer.from(att.content as string, 'base64');
           }
+          
+          return attachment;
         });
       }
 
