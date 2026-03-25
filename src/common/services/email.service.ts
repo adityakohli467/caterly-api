@@ -180,12 +180,13 @@ export class EmailService {
       // Try multiple potential paths for the logo (exhaustive search)
       const potentialPaths = [
         path.join(process.cwd(), 'src', 'assets', 'logo.png'),
-        path.join(process.cwd(), 'assets', 'logo.png'),
-        path.join(process.cwd(), 'dist', 'src', 'assets', 'logo.png'),
-        path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
-        path.join(__dirname, '..', '..', 'assets', 'logo.png'), // Relative to src/common/services
         path.resolve(process.cwd(), 'src/assets/logo.png'),
-        path.resolve(process.cwd(), 'assets/logo.png'),
+        path.join(__dirname, '..', '..', 'assets', 'logo.png'), // src/assets relative to src/common/services
+        path.join(__dirname, '..', '..', '..', 'src', 'assets', 'logo.png'), // src/assets relative to compiled dist
+        path.join(__dirname, '..', '..', '..', 'assets', 'logo.png'), // assets relative to dist
+        path.join(process.cwd(), 'assets', 'logo.png'),
+        path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
+        path.join(process.cwd(), 'dist', 'src', 'assets', 'logo.png'),
         'src/assets/logo.png',
         'assets/logo.png'
       ];
@@ -201,15 +202,21 @@ export class EmailService {
       }
 
       if (logoPath) {
-        this.logger.log(`Logo found at: ${logoPath}`);
-        const logoBuffer = fs.readFileSync(logoPath);
-        this.logoAttachment = {
-          filename: 'logo.png',
-          content: logoBuffer,
-          contentType: 'image/png',
-          cid: 'logo', // Content ID for embedding in HTML
-        };
-        return this.logoAttachment;
+        try {
+          const logoBuffer = fs.readFileSync(logoPath);
+          this.logger.log(`Logo found and read successfully from: ${logoPath} (${logoBuffer.length} bytes)`);
+          this.logoAttachment = {
+            filename: 'logo.png',
+            content: logoBuffer,
+            contentType: 'image/png',
+            cid: 'logo', // Content ID for embedding in HTML
+          };
+          return this.logoAttachment;
+        } catch (readError) {
+          this.logger.error(`Found logo at ${logoPath} but could not read it:`, readError);
+        }
+      } else {
+        this.logger.warn('Email logo not found in any of the potential paths. Checked paths: ' + potentialPaths.join(', '));
       }
     } catch (error) {
       this.logger.warn('Could not load logo for email attachment:', error);

@@ -458,20 +458,26 @@ export class InvoiceService {
         // Try multiple potential paths for the logo (exhaustive search)
         const potentialLogoPaths = [
           path.join(process.cwd(), 'src', 'assets', 'logo.png'),
-          path.join(process.cwd(), 'assets', 'logo.png'),
-          path.join(process.cwd(), 'dist', 'src', 'assets', 'logo.png'),
-          path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
-          path.join(__dirname, '..', '..', 'assets', 'logo.png'),
           path.resolve(process.cwd(), 'src/assets/logo.png'),
+          path.join(__dirname, '..', '..', 'assets', 'logo.png'), // src/assets relative to src/common/services
+          path.join(__dirname, '..', '..', '..', 'src', 'assets', 'logo.png'), // src/assets relative to compiled dist
+          path.join(__dirname, '..', '..', '..', 'assets', 'logo.png'), // assets relative to dist
+          path.join(process.cwd(), 'assets', 'logo.png'),
+          path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
+          path.join(process.cwd(), 'dist', 'src', 'assets', 'logo.png'),
           'src/assets/logo.png',
+          'assets/logo.png',
         ];
 
         let logoPath: string | null = null;
         for (const p of potentialLogoPaths) {
-          if (fs.existsSync(p)) {
-            logoPath = p;
-            break;
-          }
+          try {
+            if (fs.existsSync(p)) {
+              logoPath = p;
+              this.logger.log(`PDF logo found at: ${logoPath}`);
+              break;
+            }
+          } catch (_) {}
         }
 
         if (logoPath) {
@@ -480,13 +486,14 @@ export class InvoiceService {
             doc.image(logoPath, pageMargin, logoStartY, { width: logoWidth });
             logoHeight = 45; // Height taken by the logo (+ small margin)
           } catch (error) {
-            this.logger.warn('Could not add logo to PDF:', error);
-            // Fallback to text if image adding fails
+            this.logger.error('Could not add logo image to PDF:', error);
+            // Fallback to text branding if image adding fails
             doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
             doc.text('Caterly', pageMargin, logoStartY);
             logoHeight = 35 + 5;
           }
         } else {
+          this.logger.warn('PDF logo not found in any of the potential paths. Fallback to text branding "Caterly".');
           // Fallback to text branding if logo file doesn't exist
           doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
           doc.text('Caterly', pageMargin, logoStartY);
