@@ -83,6 +83,10 @@ export class AdminOrdersService implements OnModuleInit {
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_start_date') THEN
             ALTER TABLE orders ADD COLUMN delivery_start_date VARCHAR(255);
           END IF;
+          -- is_deleted
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='is_deleted') THEN
+            ALTER TABLE orders ADD COLUMN is_deleted INT DEFAULT 0;
+          END IF;
 
           -- order_product columns
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='order_product_comment') THEN
@@ -198,6 +202,7 @@ export class AdminOrdersService implements OnModuleInit {
       -- Note: Status 1 (New) orders ARE included in the orders list, but quotes are excluded
       -- Standing orders (subscriptions) are included unless filtered by order_type
       AND o.order_status NOT IN (0, 10)
+      AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
     `;
 
     if (order_type) {
@@ -480,7 +485,7 @@ export class AdminOrdersService implements OnModuleInit {
       LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
-      WHERE o.order_id = $1
+      WHERE o.order_id = $1 AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
     `;
     const orderResult = await this.dataSource.query(orderQuery, [id]);
 
@@ -1265,15 +1270,12 @@ export class AdminOrdersService implements OnModuleInit {
       }
 
       await queryRunner.query(
-        `DELETE FROM order_product_option 
-         WHERE order_product_id IN (
-           SELECT order_product_id FROM order_product WHERE order_id = $1
-         )`,
+        `UPDATE orders 
+         SET is_deleted = 1,
+             date_modified = CURRENT_TIMESTAMP
+         WHERE order_id = $1`,
         [id],
       );
-
-      await queryRunner.query(`DELETE FROM order_product WHERE order_id = $1`, [id]);
-      await queryRunner.query(`DELETE FROM orders WHERE order_id = $1`, [id]);
 
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -1298,6 +1300,8 @@ export class AdminOrdersService implements OnModuleInit {
       WHERE order_status NOT IN (0, 8, 10)
       -- Exclude quotes (payment_status = 'quote')
       AND (payment_status IS NULL OR payment_status != 'quote')
+      -- Exclude deleted orders
+      AND (is_deleted = 0 OR is_deleted IS NULL)
       -- Note: Status 1 (New) orders ARE included, but quotes are excluded
     `;
 
@@ -1313,18 +1317,21 @@ export class AdminOrdersService implements OnModuleInit {
       AND (payment_status IS NULL OR payment_status != 'quote')
       AND delivery_date_time IS NOT NULL
       AND DATE(delivery_date_time) = CURRENT_DATE
+      AND (is_deleted = 0 OR is_deleted IS NULL)
     `);
 
     const productionResult = await this.dataSource.query(`
       SELECT COUNT(*) as production_orders
       FROM orders
       WHERE order_status = 7
+      AND (is_deleted = 0 OR is_deleted IS NULL)
     `);
 
     const revenueResult = await this.dataSource.query(`
       SELECT COALESCE(SUM(order_total), 0) as total_revenue
       FROM orders
       WHERE order_status IN (2, 7, 5)
+      AND (is_deleted = 0 OR is_deleted IS NULL)
     `);
 
     const todayResult = await this.dataSource.query(`
@@ -1334,6 +1341,7 @@ export class AdminOrdersService implements OnModuleInit {
       AND order_status NOT IN (0, 8, 10)
       -- Exclude quotes (payment_status = 'quote')
       AND (payment_status IS NULL OR payment_status != 'quote')
+      AND (is_deleted = 0 OR is_deleted IS NULL)
       -- Include status 1 (New) orders, but exclude quotes
     `);
 
@@ -1358,6 +1366,7 @@ export class AdminOrdersService implements OnModuleInit {
       WHERE o.order_status NOT IN (0, 8, 10)
       -- Exclude quotes (payment_status = 'quote')
       AND (o.payment_status IS NULL OR o.payment_status != 'quote')
+      AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
       -- Only show orders with delivery_date_time set to TODAY (not future dates)
       AND o.delivery_date_time IS NOT NULL
       AND DATE(o.delivery_date_time) = CURRENT_DATE
@@ -1403,6 +1412,7 @@ export class AdminOrdersService implements OnModuleInit {
       WHERE o.order_status NOT IN (0, 8, 10)
       -- Exclude quotes (payment_status = 'quote')
       AND (o.payment_status IS NULL OR o.payment_status != 'quote')
+      AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
       -- Only show orders scheduled for tomorrow
       AND o.delivery_date_time IS NOT NULL
       AND DATE(o.delivery_date_time) = CURRENT_DATE + 1
@@ -1456,6 +1466,7 @@ export class AdminOrdersService implements OnModuleInit {
       AND o.delivery_date_time IS NOT NULL
       AND DATE(o.delivery_date_time) >= $1
       AND DATE(o.delivery_date_time) <= $2
+      AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
       ORDER BY o.date_added DESC, o.delivery_date_time DESC
       LIMIT 100
     `;
@@ -1496,6 +1507,7 @@ export class AdminOrdersService implements OnModuleInit {
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       WHERE o.order_status NOT IN (0, 8, 10)
       -- Include status 1 (New) orders in recent orders
+      AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
       ORDER BY o.date_added DESC
       LIMIT 10
     `;
@@ -1593,6 +1605,7 @@ export class AdminOrdersService implements OnModuleInit {
         OR o.customer_company_name ILIKE '%St. Druex%'
         OR o.customer_company_name ILIKE '%StDruex%'
       )
+      AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
     `;
 
     // Filter by completion status
