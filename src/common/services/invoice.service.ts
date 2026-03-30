@@ -151,8 +151,8 @@ export class InvoiceService {
         ), 0) as amount_paid
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company comp ON c.company_id = comp.company_id
-      LEFT JOIN department d ON c.department_id = d.department_id
+      LEFT JOIN company comp ON COALESCE(o.company_id, c.company_id) = comp.company_id
+      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN locations loc ON o.location_id = loc.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.order_id = $1`,
@@ -511,13 +511,17 @@ export class InvoiceService {
         const companyABN = companySettings.companyAbn;
         const companyAddress = companySettings.companyAddress;
 
-        doc.fontSize(7).font('Helvetica').fillColor(darkGray);
+        doc.fontSize(8).font('Helvetica-Bold').fillColor(darkGray);
         const addressStartY = headerY + 1; // Start at same level as company name/logo
         const addressWidth = 170; // Width for right-aligned text
         const addressStartX = pageWidth - pageMargin - addressWidth; // Right-aligned
 
-        const companyAddressLines = companyAddress.split('\n');
         let addressY = addressStartY;
+        doc.text(companyName, addressStartX, addressY, { align: 'right', width: addressWidth });
+        addressY += 9; // Spacing after company name
+
+        doc.fontSize(7).font('Helvetica');
+        const companyAddressLines = companyAddress.split('\n');
 
         // Address lines - right aligned (tight spacing) - matching caterly format
         companyAddressLines.forEach((line: string) => {

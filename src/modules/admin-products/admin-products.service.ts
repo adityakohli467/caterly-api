@@ -74,7 +74,7 @@ export class AdminProductsService {
           WHERE pi.product_id = p.product_id
         ) as product_images
       FROM product p
-      WHERE 1=1
+      WHERE COALESCE(p.product_status, 1) != 2
     `;
     const params: any[] = [];
     let paramIndex = 1;
@@ -220,7 +220,7 @@ export class AdminProductsService {
     });
 
     // Get total count
-    let countQuery = 'SELECT COUNT(*) as count FROM product p WHERE 1=1';
+    let countQuery = 'SELECT COUNT(*) as count FROM product p WHERE COALESCE(p.product_status, 1) != 2';
     const countParams: any[] = [];
     let countParamIndex = 1;
 
@@ -1066,9 +1066,13 @@ export class AdminProductsService {
 
       const orderCount = parseInt(orderProductCheck[0].count);
       if (orderCount > 0) {
-        throw new BadRequestException(
-          `Cannot delete product "${productCheck[0].product_name}" because it is used in ${orderCount} order(s). Please remove it from all orders first.`,
+        // Soft-delete the product so it hides from storefronts and admin, but retains order history references
+        const result = await queryRunner.query(
+          'UPDATE product SET product_status = 2, product_date_modified = CURRENT_TIMESTAMP WHERE product_id = $1 RETURNING *',
+          [Number(id)],
         );
+        await queryRunner.commitTransaction();
+        return { message: 'Product successfully archived (it could not be hard-deleted because previous orders rely on it).' };
       }
 
       // Delete product options first (foreign key constraint)
