@@ -135,6 +135,9 @@ export class StoreQuotationService implements OnModuleInit {
 
     const logoAttachment = this.emailService.getLogoAttachment();
     const html = `
+      <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+        New Quotation Request #${inquiry.id} from ${inquiry.name} for ${inquiry.occasion || 'Inquiry'}.
+      </div>
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background-color: #fff;">
         <div style="background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E;">
           ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" style="max-width: 200px; height: auto;">' : `<h1 style="margin: 0; font-size: 24px;">${companyName}</h1>`}
@@ -187,6 +190,9 @@ export class StoreQuotationService implements OnModuleInit {
 
 
     const html = `
+      <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+        Hi ${inquiry.name}, we've received your quotation request #${inquiry.id} for ${inquiry.occasion || 'your upcoming event'}.
+      </div>
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background-color: #fff;">
         <div style="background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E;">
           ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" style="max-width: 200px; height: auto;">' : `<h1 style="margin: 0; font-size: 24px;">${companyName}</h1>`}

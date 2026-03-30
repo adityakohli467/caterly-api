@@ -1118,6 +1118,9 @@ export class StorePaymentService {
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    Thank you for your order! Your payment has been successfully processed for order #${orderId}.
+  </div>
   <div class="container">
     <div class="header">
       ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
@@ -1157,16 +1160,115 @@ export class StorePaymentService {
 
       await this.emailService.sendEmail({
         to: toEmail,
-        bcc: this.configService.get<string>('ADMIN_EMAIL') || [],
         subject: `Order Confirmation #${orderId} - ${companyName}`,
         html: emailHtml,
         attachments: attachments,
       });
 
+      // Send a separate, admin-specific notification email
+      await this.sendAdminOrderAlert(orderId, order);
+
       this.logger.log(`Order/Payment confirmation email sent to ${toEmail} for order #${orderId}`);
 
     } catch (emailError) {
       this.logger.error("Failed to send payment confirmation email:", emailError);
+    }
+  }
+
+  /**
+   * Send a dedicated notification to the admin about a new paid order
+   */
+  private async sendAdminOrderAlert(orderId: number, order: any): Promise<void> {
+    try {
+      const adminEmail = this.configService.get<string>('ADMIN_EMAIL');
+      if (!adminEmail) return;
+
+      const customerName = order.customer_order_name ||
+        `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
+        'Customer';
+
+      const orderTotal = parseFloat(order.order_total || 0);
+      const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
+      const adminUrl = this.configService.get<string>('ADMIN_PORTAL_URL') || 'https://admin.caterly.com.au';
+      const orderUrl = `${adminUrl}/orders/${orderId}`;
+
+      const logoAttachment = this.emailService.getLogoAttachment();
+
+      const adminEmailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #fce4e4; }
+    .container { max-width: 600px; margin: 20px auto; background-color: #fff; padding: 20px; border: 1px solid #e03a3e; border-radius: 8px; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 10px; text-align: center; border-bottom: 2px solid #E03A3E; }
+    .logo { max-width: 150px; height: auto; }
+    .content { padding: 20px; }
+    .alert-header { color: #E03A3E; font-size: 20px; font-weight: bold; margin-bottom: 20px; text-align: center; }
+    .details-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .details-table td { padding: 10px; border-bottom: 1px solid #eee; }
+    .details-table td.label { font-weight: bold; width: 150px; color: #666; }
+    .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white !important; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: bold; }
+    .footer { text-align: center; padding: 20px; color: #999; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
+    </div>
+    <div class="content">
+      <div class="alert-header">NEW ORDER RECEIVED</div>
+      <p>Hello Admin,</p>
+      <p>A new order has been successfully paid and placed on the storefront.</p>
+      
+      <table class="details-table">
+        <tr>
+          <td class="label">Order Number:</td>
+          <td><strong>#${orderId}</strong></td>
+        </tr>
+        <tr>
+          <td class="label">Customer:</td>
+          <td>${customerName}</td>
+        </tr>
+        <tr>
+          <td class="label">Amount Paid:</td>
+          <td>$${orderTotal.toFixed(2)}</td>
+        </tr>
+        <tr>
+          <td class="label">Delivery Date:</td>
+          <td>${order.delivery_date_time ? new Date(order.delivery_date_time).toLocaleDateString() : 'N/A'}</td>
+        </tr>
+        <tr>
+          <td class="label">Delivery Area:</td>
+          <td>${order.delivery_address || 'N/A'}</td>
+        </tr>
+      </table>
+
+      <div style="text-align: center;">
+        <a href="${orderUrl}" class="cta-button">View Order Details</a>
+      </div>
+
+    </div>
+    <div class="footer">
+      <p>This is an automated notification from ${companyName} Storefront.</p>
+    </div>
+  </div>
+</body>
+</html>
+      `;
+
+      await this.emailService.sendEmail({
+        to: adminEmail,
+        subject: `🚨 [NEW ORDER] #${orderId} - ${customerName}`,
+        html: adminEmailHtml,
+        attachments: logoAttachment ? [logoAttachment] : [],
+      });
+
+    } catch (adminEmailError) {
+      this.logger.error("Failed to send admin order alert email:", adminEmailError);
     }
   }
 }

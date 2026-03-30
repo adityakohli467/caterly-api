@@ -1202,6 +1202,9 @@ export class AdminOrdersService implements OnModuleInit {
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    Your order #${id} has been updated to ${statusMessage}.
+  </div>
   <div class="container">
     <div class="header">
       ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}

@@ -379,6 +379,9 @@ export class StoreAuthService implements OnModuleInit {
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    Welcome to ${companyNameVar}! Your retailer account has been successfully created.
+  </div>
   <div class="container">
     <div class="header">
       ${logoAttachment ? `<img src="cid:logo" alt="${companyNameVar}" style="max-width: 200px; height: auto;">` : `<h1>${companyNameVar}</h1>`}
@@ -414,31 +417,42 @@ export class StoreAuthService implements OnModuleInit {
             customer_email: email,
             telephone: telephone || 'N/A',
           },
+          attachments: logoAttachment ? [logoAttachment] : [],
           customSubject: `New Customer Registration: ${customerName}`,
           customBody: `
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }
-    .header { background-color: #E03A3E; color: white; padding: 20px; text-align: center; }
+    body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
     .content { padding: 20px; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    A new retailer has registered: ${customerName} (${email}).
+  </div>
   <div class="container">
     <div class="header">
-      <h2>New Retailer Registration Received</h2>
+      ${logoAttachment ? `<img src="cid:logo" alt="${companyNameVar}" style="max-width: 200px; height: auto;">` : `<h1>${companyNameVar}</h1>`}
+      <h2>New Retailer Registration</h2>
     </div>
     <div class="content">
       <p>A new retailer has registered on the storefront.</p>
-      <ul>
-        <li><strong>Name:</strong> ${customerName}</li>
-        <li><strong>Email:</strong> ${email}</li>
-        <li><strong>Phone:</strong> ${telephone || 'N/A'}</li>
-      </ul>
+      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <p><strong>Name:</strong> ${customerName}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${telephone || 'N/A'}</p>
+      </div>
       <p>They can now log in and browse products.</p>
+    </div>
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} ${companyNameVar}. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -589,6 +603,9 @@ export class StoreAuthService implements OnModuleInit {
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    A password reset has been requested for your account. If you did not request this, please ignore it.
+  </div>
   <div class="container">
     <div class="header">
       ${logoAttachment ? `<img src="cid:logo" alt="${companyName}" style="max-width: 200px; height: auto;">` : `<h1>Reset Your Password</h1>`}
