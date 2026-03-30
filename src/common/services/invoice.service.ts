@@ -141,6 +141,7 @@ export class InvoiceService {
         o.delivery_method,
         o.delivery_contact,
         o.delivery_details,
+        o.pickup_delivery_notes,
         o.standing_order,
         COALESCE((
           SELECT SUM(amount - refund_amount)
@@ -337,7 +338,7 @@ export class InvoiceService {
       location_phone: order.location_phone,
       delivery_address: order.delivery_address,
       delivery_contact: deliveryContactDisplay,
-      delivery_details: order.delivery_details,
+      delivery_details: order.pickup_delivery_notes || order.order_comments || order.delivery_details,
       items: itemsWithOptions,
       subtotal,
       wholesale_discount: 0, // Removed wholesale discount as per requirements
@@ -484,8 +485,8 @@ export class InvoiceService {
         if (logoPath) {
           try {
             const logoWidth = 120; // Fixed width for logo
-            doc.image(logoPath, pageMargin, logoStartY, { width: logoWidth });
-            logoHeight = 45; // Height taken by the logo (+ small margin)
+            doc.image(logoPath, pageMargin, logoStartY, { width: logoWidth, height: 80, fit: [120, 80] });
+            logoHeight = 85; // Height taken by the logo (+ small margin)
           } catch (error) {
             this.logger.error('Could not add logo image to PDF:', error);
             // Fallback to text branding if image adding fails
