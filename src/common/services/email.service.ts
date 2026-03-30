@@ -184,9 +184,10 @@ export class EmailService {
         path.join(__dirname, '..', '..', 'assets', 'logo.png'), // src/assets relative to src/common/services
         path.join(__dirname, '..', '..', '..', 'src', 'assets', 'logo.png'), // src/assets relative to compiled dist
         path.join(__dirname, '..', '..', '..', 'assets', 'logo.png'), // assets relative to dist
-        path.join(process.cwd(), 'assets', 'logo.png'),
-        path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
         path.join(process.cwd(), 'dist', 'src', 'assets', 'logo.png'),
+        path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
+        path.join(process.cwd(), 'dist', 'assets', 'assets', 'logo.png'), // Handle messy builds
+        path.join(process.cwd(), 'assets', 'logo.png'),
         'src/assets/logo.png',
         'assets/logo.png'
       ];
@@ -434,7 +435,7 @@ export class EmailService {
           return new Attachment(
             content,
             att.filename,
-            'attachment', // disposition
+            (att as any).cid ? 'inline' : 'attachment', // disposition
           );
         });
 
