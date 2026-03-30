@@ -1,0 +1,15 @@
+[
+  "abn",
+  "account_name",
+  "account_number",
+  "bsb",
+  "company_name",
+  "contact",
+  "date_created",
+  "location_id",
+  "location_name",
+  "location_status",
+  "pickup_address",
+  "post_codes",
+  "remittance_email"
+]
