@@ -680,8 +680,8 @@ export class StoreOrdersService implements OnModuleInit {
       `;
       const optionsResult = await this.dataSource.query(optionsQuery, [product.order_product_id]);
 
-      // Calculate item total
-      const itemTotal = parseFloat(product.total || product.price || '0') * parseInt(product.quantity || '1', 10);
+      // Calculate item total - product.total already includes quantity and options
+      const itemTotal = product.total ? parseFloat(product.total) : parseFloat(product.price || '0') * parseInt(product.quantity || '1', 10);
       subtotal += itemTotal;
 
       items.push({
@@ -780,8 +780,8 @@ export class StoreOrdersService implements OnModuleInit {
       `;
       const optionsResult = await this.dataSource.query(optionsQuery, [product.order_product_id]);
 
-      // Calculate item total
-      const itemTotal = parseFloat(product.total || product.price || '0') * parseInt(product.quantity || '1', 10);
+      // Calculate item total - product.total already includes quantity and options
+      const itemTotal = product.total ? parseFloat(product.total) : parseFloat(product.price || '0') * parseInt(product.quantity || '1', 10);
       subtotal += itemTotal;
 
       items.push({

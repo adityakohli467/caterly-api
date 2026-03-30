@@ -25,6 +25,10 @@ export interface InvoiceData {
   delivery_address?: string;
   delivery_contact?: string;
   delivery_details?: string;
+  location_company_name?: string;
+  location_abn?: string;
+  location_email?: string;
+  customer_company_address?: string;
   items: Array<{
     product_name: string;
     quantity: number;
@@ -126,8 +130,12 @@ export class InvoiceService {
         c.customer_type,
         comp.company_name,
         comp.company_abn,
+        comp.company_address as customer_company_address,
         d.department_name,
         loc.location_name,
+        loc.company_name as location_company_name,
+        loc.abn as location_abn,
+        loc.remittance_email as location_email,
         loc.pickup_address as location_address,
         loc.contact as location_phone,
         loc.account_name as bank_account_name,
@@ -205,16 +213,15 @@ export class InvoiceService {
     const itemsWithOptions = itemsResult.map((row: any) => {
       const productTotal = parseFloat(row.total) || 0;
       const productOptions = optionsResult.filter((opt: any) => opt.order_product_id === row.order_product_id);
-      const optionsTotal = productOptions.reduce((sum: number, opt: any) => {
-        return sum + parseFloat(opt.option_price || 0) * parseFloat(opt.option_quantity || 0);
-      }, 0);
-      subtotal += productTotal + optionsTotal;
+      
+      // Note: row.total (from order_product table) already includes options for Caterly
+      subtotal += productTotal;
 
       return {
         product_name: row.product_name,
         quantity: parseInt(row.quantity),
         price: parseFloat(row.price),
-        total: productTotal + optionsTotal,
+        total: productTotal,
         comment: row.order_product_comment || undefined,
         product_desc_1: row.product_desc_1 || undefined,
         product_desc_2: row.product_desc_2 || undefined,
@@ -334,8 +341,12 @@ export class InvoiceService {
       company_name: order.company_name,
       department_name: order.department_name,
       location_name: order.location_name,
+      location_company_name: order.location_company_name,
+      location_abn: order.location_abn,
+      location_email: order.location_email,
       location_address: order.location_address,
       location_phone: order.location_phone,
+      customer_company_address: order.customer_company_address,
       delivery_address: order.delivery_address,
       delivery_contact: deliveryContactDisplay,
       delivery_details: order.pickup_delivery_notes || order.order_comments || order.delivery_details,
@@ -418,15 +429,15 @@ export class InvoiceService {
         // Force ZENN branding - completely ignore database settings
         // Fetch company settings for address and contact info
         const companySettings = await this.getCompanySettings();
-        const companyName = 'Caterly'; // Always use Caterly for branding
-        this.logger.log(`Generating ${data.order_status === 0 ? 'Quote' : 'Invoice'} #${data.order_id} for company: ${companyName}`);
+        const brandingName = data.location_company_name || 'Caterly'; // Use location company name if available
+        this.logger.log(`Generating ${data.order_status === 0 ? 'Quote' : 'Invoice'} #${data.order_id} for company: ${brandingName}`);
 
         const doc = new PDFDocument({
           margin: 40,
           size: 'A4',
           info: {
             Title: data.is_quote ? `Quote #${data.order_id}` : `Invoice #${data.order_id}`,
-            Author: companyName,
+            Author: brandingName,
             Subject: data.is_quote ? 'Quote' : 'Invoice',
           },
         });
@@ -452,9 +463,13 @@ export class InvoiceService {
         const pageMargin = 40;
         const pageHeight = doc.page.height;
 
-        // Company Logo - Left aligned at top (matching caterly format)
-        let logoHeight = 40; // Default height for text fallback
-        const logoStartY = headerY;
+        // Branding Name - Top Left
+        doc.fontSize(16).font('Helvetica-Bold').fillColor(primaryColor);
+        doc.text(brandingName, pageMargin, headerY);
+
+        // Company Logo - below branding name
+        let logoHeight = 25; // Height for text branding
+        const logoStartY = headerY + 18;
 
         // Try multiple potential paths for the logo (exhaustive search)
         const potentialLogoPaths = [
@@ -484,32 +499,25 @@ export class InvoiceService {
 
         if (logoPath) {
           try {
-            const logoWidth = 120; // Fixed width for logo
-            doc.image(logoPath, pageMargin, logoStartY, { width: logoWidth, height: 80, fit: [120, 80] });
-            logoHeight = 85; // Height taken by the logo (+ small margin)
+            const logoWidth = 100; // Fixed width for logo
+            doc.image(logoPath, pageMargin, logoStartY, { width: logoWidth, fit: [100, 60] });
+            logoHeight = 18 + 65; // Branding + Logo
           } catch (error) {
             this.logger.error('Could not add logo image to PDF:', error);
-            // Fallback to text branding if image adding fails
-            doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
-            doc.text('Caterly', pageMargin, logoStartY);
-            logoHeight = 35 + 5;
+            logoHeight = 25;
           }
         } else {
-          this.logger.warn('PDF logo not found in any of the potential paths. Fallback to text branding "Caterly".');
-          // Fallback to text branding if logo file doesn't exist
-          doc.fontSize(28).font('Helvetica-Bold').fillColor(primaryColor);
-          doc.text('Caterly', pageMargin, logoStartY);
-          logoHeight = 35 + 5;
+          logoHeight = 25;
         }
 
         // Calculate total header height (company name + logo/text)
         const totalHeaderHeight = logoHeight;
 
         // Company Information - Address in top right corner (compact) - matching caterly format
-        const companyEmail = companySettings.companyEmail;
-        const companyPhone = companySettings.companyPhone;
-        const companyABN = companySettings.companyAbn;
-        const companyAddress = companySettings.companyAddress;
+        const companyEmail = data.location_email || companySettings.companyEmail;
+        const companyPhone = data.location_phone || companySettings.companyPhone;
+        const companyABN = data.location_abn || companySettings.companyAbn;
+        const companyAddress = data.location_address || companySettings.companyAddress;
 
         doc.fontSize(8).font('Helvetica-Bold').fillColor(darkGray);
         const addressStartY = headerY + 1; // Start at same level as company name/logo
@@ -517,7 +525,7 @@ export class InvoiceService {
         const addressStartX = pageWidth - pageMargin - addressWidth; // Right-aligned
 
         let addressY = addressStartY;
-        doc.text(companyName, addressStartX, addressY, { align: 'right', width: addressWidth });
+        doc.text(brandingName, addressStartX, addressY, { align: 'right', width: addressWidth });
         addressY += 9; // Spacing after company name
 
         doc.fontSize(7).font('Helvetica');
@@ -614,6 +622,11 @@ export class InvoiceService {
         if (data.company_name) {
           doc.text(data.company_name, 40, leftColY, { width: 230 });
           leftColY += 9;
+        }
+        if (data.customer_company_address) {
+          doc.text(data.customer_company_address, 40, leftColY, { width: 230 });
+          const compAddrHeight = doc.heightOfString(data.customer_company_address, { width: 230 });
+          leftColY += compAddrHeight + 2;
         }
         if (data.department_name) {
           doc.text(`Dept: ${data.department_name}`, 40, leftColY, { width: 230 });

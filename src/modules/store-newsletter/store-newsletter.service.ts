@@ -257,5 +257,110 @@ export class StoreNewsletterService implements OnModuleInit {
       // Don't throw - subscription should still succeed even if notification fails
     }
   }
+
+  /**
+   * Get all subscriptions (for admin)
+   */
+  async findAll(query: { limit?: number; offset?: number; status?: string; search?: string } = {}) {
+    const { limit = 20, offset = 0, status, search } = query;
+
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    let sql = `
+      SELECT 
+        subscription_id as id,
+        email,
+        status,
+        source,
+        subscribed_at as "subscribedAt",
+        unsubscribed_at as "unsubscribedAt"
+      FROM newsletter_subscriptions
+      WHERE 1=1
+    `;
+
+    if (status) {
+      if (status !== 'all') {
+        sql += ` AND status = $${paramIndex++}`;
+        params.push(status);
+      }
+    }
+
+    if (search) {
+      sql += ` AND email ILIKE $${paramIndex++}`;
+      params.push(`%${search}%`);
+    }
+
+    const countQuery = `SELECT COUNT(*) FROM (${sql}) as count_query`;
+    const countResult = await this.dataSource.query(countQuery, params);
+    const total = parseInt(countResult[0].count);
+
+    sql += ` ORDER BY subscribed_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+    params.push(parseInt(limit.toString()), parseInt(offset.toString()));
+
+    const results = await this.dataSource.query(sql, params);
+
+    return {
+      data: results,
+      total,
+      limit,
+      offset,
+    };
+  }
+
+  /**
+   * Unsubscribe by ID
+   */
+  async unsubscribe(id: number) {
+    const sql = `
+      UPDATE newsletter_subscriptions
+      SET status = 'unsubscribed',
+          unsubscribed_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE subscription_id = $1
+      RETURNING *
+    `;
+    const result = await this.dataSource.query(sql, [id]);
+
+    if (result.length === 0) {
+      throw new BadRequestException('Subscription not found');
+    }
+
+    return {
+      message: 'Unsubscribed successfully',
+      data: result[0],
+    };
+  }
+
+  /**
+   * Delete subscription
+   */
+  async delete(id: number) {
+    const sql = `DELETE FROM newsletter_subscriptions WHERE subscription_id = $1 RETURNING *`;
+    const result = await this.dataSource.query(sql, [id]);
+
+    if (result.length === 0) {
+      throw new BadRequestException('Subscription not found');
+    }
+
+    return {
+      message: 'Subscription deleted successfully',
+    };
+  }
+
+  /**
+   * Get subscription statistics
+   */
+  async getStats() {
+    const sql = `
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status = 'active') as active,
+        COUNT(*) FILTER (WHERE status = 'unsubscribed') as unsubscribed
+      FROM newsletter_subscriptions
+    `;
+    const result = await this.dataSource.query(sql);
+    return result[0];
+  }
 }
 

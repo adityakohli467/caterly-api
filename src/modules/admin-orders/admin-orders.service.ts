@@ -492,12 +492,8 @@ export class AdminOrdersService implements OnModuleInit {
     let subtotal = 0;
     if (Array.isArray(orderProducts) && orderProducts.length > 0) {
       for (const product of orderProducts) {
+        // product.total already includes options for Caterly
         subtotal += parseFloat(product.total || 0);
-        if (product.options && Array.isArray(product.options)) {
-          for (const option of product.options) {
-            subtotal += parseFloat(option.option_price || 0) * parseFloat(option.option_quantity || 0);
-          }
-        }
       }
     }
 
@@ -656,8 +652,16 @@ export class AdminOrdersService implements OnModuleInit {
       // Calculate totals
       let subtotal = 0;
       for (const product of products) {
-        const productTotal = (product.price || 0) * (product.quantity || 0);
-        subtotal += productTotal;
+        let productPriceWithAddons = product.price || 0;
+        if (product.add_ons && Array.isArray(product.add_ons)) {
+          for (const addon of product.add_ons) {
+            productPriceWithAddons += (parseFloat(addon.option_price || 0) * (addon.option_quantity || 1)) / (product.quantity || 1);
+          }
+        }
+        const itemTotal = productPriceWithAddons * (product.quantity || 0);
+        subtotal += itemTotal;
+        // Attach itemTotal to product object so we can use it when inserting order_product
+        product.combinedTotal = itemTotal;
       }
 
       let couponDiscount = 0;
@@ -813,7 +817,7 @@ export class AdminOrdersService implements OnModuleInit {
             product.product_id,
             product.quantity || 1,
             product.price || 0,
-            productTotal,
+            product.combinedTotal || (product.price || 0) * (product.quantity || 0),
             product.comment?.trim() || null,
             sortOrder,
             excludeGst
