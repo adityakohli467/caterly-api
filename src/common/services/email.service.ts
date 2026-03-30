@@ -508,6 +508,9 @@ export class EmailService {
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    Please find attached the invoice for order #${orderId}. Thank you for your business!
+  </div>
   <div class="container">
     <div class="header">
       ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
@@ -552,8 +555,13 @@ export class EmailService {
    * Convert HTML to plain text (basic implementation)
    */
   private htmlToText(html: string): string {
+    // Remove <style> and <script> content entirely
+    let text = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+
     // Remove HTML tags and decode entities
-    return html
+    return text
       .replace(/<[^>]*>/g, '')
       .replace(/&nbsp;/g, ' ')
       .replace(/&amp;/g, '&')

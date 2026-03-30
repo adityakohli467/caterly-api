@@ -109,39 +109,44 @@ export class StoreContactService implements OnModuleInit {
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    New contact inquiry from ${firstName} ${lastName} (${email}).
+  </div>
   <div class="container">
     <div class="header">
       ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
       <h2>New Contact Form Submission</h2>
     </div>
     <div class="content">
-      <p>You have received a new contact form submission:</p>
+      <p>You have received a new contact form submission from the storefront:</p>
       
-      <div class="field">
-        <div class="label">Name:</div>
-        <div class="value">${firstName} ${lastName}</div>
+      <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #eee; margin-top: 20px;">
+        <div class="field">
+          <div class="label" style="font-size: 11px; text-transform: uppercase; color: #999; letter-spacing: 1px;">Name</div>
+          <div class="value" style="font-size: 16px; font-weight: bold; color: #333;">${firstName} ${lastName}</div>
+        </div>
+        
+        <div class="field" style="margin-top: 15px;">
+          <div class="label" style="font-size: 11px; text-transform: uppercase; color: #999; letter-spacing: 1px;">Email</div>
+          <div class="value" style="font-size: 16px; color: #E03A3E; font-weight: 500;">${email}</div>
+        </div>
+        
+        ${phoneNumber ? `
+        <div class="field" style="margin-top: 15px;">
+          <div class="label" style="font-size: 11px; text-transform: uppercase; color: #999; letter-spacing: 1px;">Phone</div>
+          <div class="value" style="font-size: 16px; color: #333;">${phoneNumber}</div>
+        </div>
+        ` : ''}
+        
+        <div class="field" style="margin-top: 20px;">
+          <div class="label" style="font-size: 11px; text-transform: uppercase; color: #999; letter-spacing: 1px;">Message</div>
+          <div class="message-box" style="background-color: #fff; border-left: 4px solid #E03A3E; padding: 15px; margin-top: 10px; font-style: italic; color: #444; border-radius: 0 4px 4px 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">${message.replaceAll('\n', '<br>')}</div>
+        </div>
       </div>
       
-      <div class="field">
-        <div class="label">Email:</div>
-        <div class="value">${email}</div>
-      </div>
-      
-      ${phoneNumber ? `
-      <div class="field">
-        <div class="label">Phone:</div>
-        <div class="value">${phoneNumber}</div>
-      </div>
-      ` : ''}
-      
-      <div class="field">
-        <div class="label">Message:</div>
-        <div class="message-box">${message.replaceAll('\n', '<br>')}</div>
-      </div>
-      
-      <p style="margin-top: 20px; color: #666; font-size: 12px;">
-        Inquiry ID: #${inquiry.id || inquiry.contact_inquiry_id || 'N/A'}<br>
-        Submitted: ${inquiry.created_at ? new Date(inquiry.created_at).toLocaleString() : new Date().toLocaleString()}
+      <p style="margin-top: 30px; color: #888; font-size: 13px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
+        <strong>Inquiry ID:</strong> #${inquiry.id || inquiry.contact_inquiry_id || 'N/A'}<br>
+        <strong>Submitted:</strong> ${inquiry.created_at ? new Date(inquiry.created_at).toLocaleString() : new Date().toLocaleString()}
       </p>
     </div>
     <div class="footer">
@@ -156,13 +161,12 @@ export class StoreContactService implements OnModuleInit {
     try {
       await this.emailService.sendEmail({
         to: adminEmail,
-        subject: `New Contact Form Submission from ${firstName} ${lastName}`,
+        subject: `New Contact Form Submission: ${firstName} ${lastName}`,
         html: emailHtml,
         attachments: logoAttachment ? [logoAttachment] : [],
       });
     } catch (emailError) {
       this.logger.error('Failed to send contact form email:', emailError);
-      // Don't fail the request if email fails
     }
 
     // Send confirmation email to user
@@ -182,6 +186,9 @@ export class StoreContactService implements OnModuleInit {
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    Thank you for reaching out to ${companyName}! We have received your message.
+  </div>
   <div class="container">
     <div class="header">
       ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
@@ -189,11 +196,16 @@ export class StoreContactService implements OnModuleInit {
     </div>
     <div class="content">
       <p>Dear ${firstName},</p>
-      <p>Thank you for reaching out to ${companyName}. We have received your message and will get back to you as soon as possible.</p>
-      <p>Your inquiry reference: <strong>#${inquiry.id || inquiry.contact_inquiry_id || 'N/A'}</strong></p>
+      <p>Thank you for reaching out to <strong>${companyName}</strong>. We have received your inquiry and our team will get back to you as soon as possible.</p>
+      
+      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px dashed #ccc; margin: 20px 0; text-align: center;">
+        <p style="margin: 0; color: #666;">Your inquiry reference:</p>
+        <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: bold; color: #E03A3E;">#${inquiry.id || inquiry.contact_inquiry_id || 'N/A'}</p>
+      </div>
+
       <p>We typically respond within 24-48 hours during business days.</p>
-      <p>If you have any urgent questions, please feel free to call us at +61 246117229.</p>
-      <p>Best regards,<br>The ${companyName} Team</p>
+      <p>If your matter is urgent, please feel free to call our support team at <a href="tel:+61246117229" style="color: #E03A3E; text-decoration: none; font-weight: bold;">+61 246117229</a>.</p>
+      <p style="margin-top: 30px;">Best regards,<br>The <strong>${companyName}</strong> Team</p>
     </div>
     <div class="footer">
       <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>

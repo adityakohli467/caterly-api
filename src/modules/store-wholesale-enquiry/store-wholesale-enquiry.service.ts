@@ -151,6 +151,7 @@ export class StoreWholesaleEnquiryService implements OnModuleInit {
       'info@caterly.com.au';
     const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
 
+    const logoAttachment = this.emailService.getLogoAttachment();
     const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -160,26 +161,30 @@ export class StoreWholesaleEnquiryService implements OnModuleInit {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 700px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #2952E6; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
     .content { padding: 20px; }
     .section { margin-bottom: 25px; }
-    .section-title { font-weight: bold; color: #2952E6; font-size: 18px; margin-bottom: 10px; border-bottom: 2px solid #2952E6; padding-bottom: 5px; }
+    .section-title { font-weight: bold; color: #E03A3E; font-size: 18px; margin-bottom: 10px; border-bottom: 2px solid #E03A3E; padding-bottom: 5px; }
     .field { margin-bottom: 12px; }
     .label { font-weight: bold; color: #666; display: inline-block; min-width: 150px; }
     .value { color: #333; }
-    .message-box { background-color: #f9f9f9; border-left: 4px solid #2952E6; padding: 15px; margin-top: 10px; }
+    .message-box { background-color: #f9f9f9; border-left: 4px solid #E03A3E; padding: 15px; margin-top: 10px; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-    .priority-badge { display: inline-block; background-color: #2952E6; color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: bold; }
+    .priority-badge { display: inline-block; background-color: #E03A3E; color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: bold; }
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    New wholesale enquiry from ${businessName} (${firstName} ${lastName}).
+  </div>
   <div class="container">
     <div class="header">
-      <h1>New Wholesale Partnership Enquiry</h1>
-      <span class="priority-badge">HIGH PRIORITY</span>
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" style="max-width: 200px; height: auto;">' : `<h1>${companyName}</h1>`}
+      <h2>Wholesale Partnership Enquiry</h2>
+      <span class="priority-badge">NEW OPPORTUNITY</span>
     </div>
     <div class="content">
-      <p>A new wholesale partnership enquiry has been submitted:</p>
+      <p>A new wholesale partnership enquiry has been submitted through the storefront:</p>
       
       <div class="section">
         <div class="section-title">1. Contact Information</div>
@@ -193,7 +198,7 @@ export class StoreWholesaleEnquiryService implements OnModuleInit {
         </div>
         <div class="field">
           <span class="label">Email:</span>
-          <span class="value">${email}</span>
+          <span class="value" style="color: #E03A3E;">${email}</span>
         </div>
         ${phoneNumber ? `
         <div class="field">
@@ -204,22 +209,10 @@ export class StoreWholesaleEnquiryService implements OnModuleInit {
       </div>
       
       <div class="section">
-        <div class="section-title">2. Business Address</div>
+        <div class="section-title">2. Business Details</div>
         <div class="field">
           <span class="label">Address:</span>
-          <span class="value">${businessAddress}</span>
-        </div>
-        <div class="field">
-          <span class="label">Suburb:</span>
-          <span class="value">${suburb}</span>
-        </div>
-        <div class="field">
-          <span class="label">State:</span>
-          <span class="value">${state}</span>
-        </div>
-        <div class="field">
-          <span class="label">Postcode:</span>
-          <span class="value">${postcode}</span>
+          <span class="value">${businessAddress}, ${suburb}, ${state} ${postcode}</span>
         </div>
         ${businessLicense ? `
         <div class="field">
@@ -227,32 +220,27 @@ export class StoreWholesaleEnquiryService implements OnModuleInit {
           <span class="value">${businessLicense}</span>
         </div>
         ` : ''}
-      </div>
-      
-      ${businessWebsite ? `
-      <div class="section">
-        <div class="section-title">3. Business Website</div>
+        ${businessWebsite ? `
         <div class="field">
           <span class="label">Website:</span>
-          <span class="value"><a href="${businessWebsite}" target="_blank">${businessWebsite}</a></span>
+          <span class="value"><a href="${businessWebsite}" target="_blank" style="color: #E03A3E;">${businessWebsite}</a></span>
         </div>
-      </div>
-      ` : ''}
-      
-      <div class="section">
-        <div class="section-title">4. Expected Weekly Coffee Volume</div>
-        <div class="message-box">${weeklyVolume.replaceAll('\n', '<br>')}</div>
+        ` : ''}
       </div>
       
-      <div class="section">
-        <div class="section-title">5. Preferred Start Date</div>
+      <div class="section" style="background-color: #fff9f9; padding: 15px; border-radius: 8px; border: 1px solid #fee;">
+        <div class="section-title" style="border-bottom-color: #ffcccc;">3. Partnership Details</div>
         <div class="field">
-          <span class="label">Start Date:</span>
-          <span class="value">${startMonth} ${startYear}</span>
+          <span class="label">Weekly Volume:</span>
+          <div class="message-box">${weeklyVolume.replaceAll('\n', '<br>')}</div>
+        </div>
+        <div class="field" style="margin-top: 15px;">
+          <span class="label">Expected Start:</span>
+          <span class="value" style="font-weight: bold;">${startMonth} ${startYear}</span>
         </div>
       </div>
       
-      <p style="margin-top: 30px; color: #666; font-size: 12px; border-top: 1px solid #ddd; padding-top: 15px;">
+      <p style="margin-top: 30px; color: #888; font-size: 12px; border-top: 1px solid #eee; padding-top: 20px; text-align: center;">
         <strong>Enquiry ID:</strong> #${enquiry.id}<br>
         <strong>Submitted:</strong> ${new Date(enquiry.created_at).toLocaleString()}
       </p>
@@ -269,12 +257,12 @@ export class StoreWholesaleEnquiryService implements OnModuleInit {
     try {
       await this.emailService.sendEmail({
         to: adminEmail,
-        subject: `New Wholesale Partnership Enquiry from ${businessName}`,
+        subject: `New Wholesale Enquiry: ${businessName}`,
         html: emailHtml,
+        attachments: logoAttachment ? [logoAttachment] : [],
       });
     } catch (emailError) {
       this.logger.error('Failed to send wholesale enquiry email:', emailError);
-      // Don't fail the request if email fails
     }
 
     // Send confirmation email to user
@@ -287,24 +275,33 @@ export class StoreWholesaleEnquiryService implements OnModuleInit {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #2952E6; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
     .content { padding: 20px; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+    Thank you for your wholesale enquiry! Our team will review your application.
+  </div>
   <div class="container">
     <div class="header">
-      <h1>Thank You for Your Interest!</h1>
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" style="max-width: 200px; height: auto;">' : `<h1>${companyName}</h1>`}
+      <h2>Thank You for Your Interest!</h2>
     </div>
     <div class="content">
       <p>Dear ${firstName},</p>
-      <p>Thank you for your interest in becoming a wholesale partner with ${companyName}. We have received your enquiry and are excited about the possibility of working together.</p>
-      <p><strong>Your enquiry reference:</strong> #${enquiry.id}</p>
+      <p>Thank you for your interest in becoming a wholesale partner with <strong>${companyName}</strong>. We have received your enquiry and our wholesale team is excited about the possibility of working together.</p>
+      
+      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px dashed #ccc; margin: 20px 0; text-align: center;">
+        <p style="margin: 0; color: #666;">Your enquiry reference:</p>
+        <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: bold; color: #E03A3E;">#${enquiry.id}</p>
+      </div>
+
       <p>Our team will review your submission and get back to you within 2-3 business days. We'll contact you at ${email}${phoneNumber ? ` or ${phoneNumber}` : ''}.</p>
-      <p>In the meantime, if you have any urgent questions, please feel free to call us at +61 246117229.</p>
-      <p>We look forward to potentially partnering with ${businessName}!</p>
-      <p>Best regards,<br>The ${companyName} Wholesale Team</p>
+      <p>In the meantime, if you have any urgent questions, please feel free to call us at <a href="tel:+61246117229" style="color: #E03A3E; text-decoration: none; font-weight: bold;">+61 246117229</a>.</p>
+      <p>We look forward to potentially partnering with <strong>${businessName}</strong>!</p>
+      <p style="margin-top: 30px;">Best regards,<br>The <strong>${companyName}</strong> Wholesale Team</p>
     </div>
     <div class="footer">
       <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>

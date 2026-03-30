@@ -1518,115 +1518,119 @@ export class AdminQuotesService {
         <!DOCTYPE html>
         <html>
         <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
             body { font-family: Arial, sans-serif; line-height: 1.6; color: #333333 !important; margin: 0; padding: 0; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px; background-color: #fff; }
             .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
             .logo { max-width: 200px; height: auto; }
-            .content { padding: 20px; background-color: #f9f9f9; color: #333333 !important; }
+            .content { padding: 20px; background-color: #f4f4f4; color: #333333 !important; }
             .content p { color: #333333 !important; }
-            .quote-details { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; color: #333333 !important; }
-            .quote-details h2 { color: #E03A3E !important; margin-top: 0; }
-            .quote-details p { color: #333333 !important; }
-            .quote-details strong { color: #333333 !important; }
-            .product-item { padding: 10px; border-bottom: 1px solid #eee; color: #333333 !important; }
-            .product-item strong { color: #333333 !important; }
-            .total { font-weight: bold; font-size: 18px; color: #E03A3E !important; }
-            .footer { text-align: center; padding: 20px; color: #666666 !important; font-size: 12px; }
-            .footer p { color: #666666 !important; }
-            .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: #ffffff !important; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: 500; }
+            .quote-details { background-color: white; padding: 20px; margin: 15px 0; border-radius: 8px; color: #333333 !important; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+            .quote-details h2 { color: #E03A3E !important; margin-top: 0; font-size: 18px; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+            .quote-details p { color: #333333 !important; margin: 8px 0; }
+            .quote-details strong { color: #333333 !important; font-weight: 600; }
+            .product-item { padding: 12px 10px; border-bottom: 1px solid #f0f0f0; color: #333333 !important; }
+            .product-item:last-child { border-bottom: none; }
+            .total-row { display: flex; justify-content: space-between; padding: 5px 0; }
+            .total { font-weight: bold; font-size: 20px; color: #E03A3E !important; border-top: 2px solid #E03A3E; padding-top: 10px; margin-top: 10px; }
+            .footer { text-align: center; padding: 30px 20px; color: #666666 !important; font-size: 12px; }
+            .cta-button { display: inline-block; padding: 14px 28px; background-color: #E03A3E; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 25px 0; font-weight: bold; font-size: 16px; }
           </style>
         </head>
         <body>
+          <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">
+            Quote #${quote.order_id} for ${customerName}. Total: $${Number(quote.calculated_total || quote.order_total || 0).toFixed(2)}.
+          </div>
           <div class="container">
             <div class="header">
               ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
-              <h2>Quote #${quote.order_id}</h2>
+              <h2 style="margin: 10px 0 0 0; font-size: 24px;">Quote #${quote.order_id}</h2>
             </div>
             <div class="content">
               <p style="color: #333333 !important;">Dear ${customerName},</p>
-              <p style="color: #333333 !important;">Please review the quote details below and provide your feedback.</p>
+              <p style="color: #333333 !important;">Thank you for your interest. Please review the quote details below for your upcoming order.</p>
               
               <div class="quote-details">
-                <h2 style="color: #E03A3E !important; margin-top: 0;">Customer Details</h2>
-                ${quote.company_name ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Company Name:</strong> ${quote.company_name}</p>` : ''}
+                <h2 style="color: #E03A3E !important;">Customer Details</h2>
+                ${quote.company_name ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Company:</strong> ${quote.company_name}</p>` : ''}
                 ${quote.department_name ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Department:</strong> ${quote.department_name}</p>` : ''}
-                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Customer Name:</strong> ${customerName}</p>
-                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Customer Email:</strong> ${quote.customer_email || quote.email || 'N/A'}</p>
-                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Customer Phone:</strong> ${quote.telephone || 'N/A'}</p>
+                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Contact:</strong> ${customerName}</p>
+                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Email:</strong> ${quote.customer_email || quote.email || 'N/A'}</p>
+                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Phone:</strong> ${quote.telephone || 'N/A'}</p>
                 ${quote.location_name ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Order Location:</strong> ${quote.location_name}</p>` : ''}
               </div>
-
+ 
               <div class="quote-details">
-                <h2 style="color: #E03A3E !important; margin-top: 0;">Delivery/Pick Up Details</h2>
+                <h2 style="color: #E03A3E !important;">Event Details</h2>
                 ${quote.delivery_date_time ? (() => {
           const date = new Date(quote.delivery_date_time);
-          const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-          return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Date:</strong> ${formattedDate}</p>`;
+          const formattedDate = date.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+          return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Date:</strong> ${formattedDate}</p>`;
         })() : ''}
                 ${quote.delivery_date_time ? (() => {
           const date = new Date(quote.delivery_date_time);
-          const hours = date.getHours();
-          const minutes = date.getMinutes();
-          const hour12 = hours % 12 || 12;
-          const ampm = hours >= 12 ? 'PM' : 'AM';
-          const timeStr = quote.delivery_time || `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-          const [h, m] = timeStr.split(':').map(Number);
-          const h12 = h % 12 || 12;
-          const ap = h >= 12 ? 'PM' : 'AM';
-          return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Time:</strong> ${h12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ap}</p>`;
+          const timeStr = quote.delivery_time || date.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true });
+          return `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Time:</strong> ${timeStr}</p>`;
         })() : ''}
-                ${quote.delivery_address ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Address:</strong> ${quote.delivery_address}</p>` : ''}
+                ${quote.delivery_address ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Address:</strong> ${quote.delivery_address}</p>` : ''}
                 ${quote.delivery_contact ? (() => {
           const parts = quote.delivery_contact.split('|');
           const contactName = parts[0]?.trim() || '';
           const contactNumber = parts[1]?.trim() || '';
           return `
-                    ${contactName ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Contact:</strong> ${contactName}</p>` : ''}
-                    ${contactNumber ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Contact Number:</strong> ${contactNumber}</p>` : ''}
+                    ${contactName ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">On-site Contact:</strong> ${contactName}</p>` : ''}
+                    ${contactNumber ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Contact Phone:</strong> ${contactNumber}</p>` : ''}
                   `;
         })() : ''}
-                ${quote.delivery_details ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Notes:</strong> ${quote.delivery_details.replace(/\n/g, '<br>')}</p>` : ''}
+                ${quote.delivery_details ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Special Instructions:</strong><br>${quote.delivery_details.replace(/\n/g, '<br>')}</p>` : ''}
               </div>
-
+ 
               <div class="quote-details">
-                <h2 style="color: #E03A3E !important; margin-top: 0;">Quote Items</h2>
+                <h2 style="color: #E03A3E !important;">Quote Summary</h2>
                 ${quoteProducts
           .map(
             (product: any) => `
                   <div class="product-item" style="color: #333333 !important;">
-                    <strong style="color: #333333 !important;">${product.product_name}</strong> - Qty: ${product.quantity} × $${Number(product.price).toFixed(2)} = $${Number(product.total).toFixed(2)}
-                    ${product.order_product_comment ? `<div style="margin-left: 20px; margin-top: 5px; font-size: 0.9em; color: #666666 !important; font-style: italic;">Note: ${product.order_product_comment}</div>` : ''}
+                    <strong style="color: #333333 !important;">${product.product_name}</strong> × ${product.quantity}
+                    <div style="float: right;">$${Number(product.total).toFixed(2)}</div>
+                    ${product.order_product_comment ? `<div style="margin-top: 4px; font-size: 13px; color: #777 !important; font-style: italic;">Note: ${product.order_product_comment}</div>` : ''}
                     ${product.options && product.options.length > 0 ? `
-                      <div style="margin-left: 20px; margin-top: 5px; font-size: 0.9em; color: #666666 !important;">
-                        Options: ${product.options.map((opt: any) => `${opt.option_name}: ${opt.option_value} (${opt.option_quantity} × $${Number(opt.option_price).toFixed(2)})`).join(', ')}
+                      <div style="margin-top: 4px; font-size: 13px; color: #888 !important;">
+                        Options: ${product.options.map((opt: any) => `${opt.option_name}: ${opt.option_value}`).join(', ')}
                       </div>
                     ` : ''}
                   </div>
                 `,
           )
           .join('')}
-                <hr>
-                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">Subtotal:</strong> $${Number(quote.subtotal || 0).toFixed(2)}</p>
-                ${quote.coupon_code && quote.coupon_discount ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Coupon Discount (${quote.coupon_code}):</strong> -$${Number(quote.coupon_discount).toFixed(2)}</p>` : ''}
-                <p style="color: #333333 !important;"><strong style="color: #333333 !important;">GST (Included):</strong> $${Number(quote.gst || 0).toFixed(2)}</p>
-                ${quote.delivery_fee ? `<p style="color: #333333 !important;"><strong style="color: #333333 !important;">Delivery Fee:</strong> $${Number(quote.delivery_fee).toFixed(2)}</p>` : ''}
-                <p class="total" style="color: #E03A3E !important; font-weight: bold; font-size: 18px;">Total: $${Number(quote.calculated_total || quote.order_total || 0).toFixed(2)}</p>
+                <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #f0f0f0;">
+                  <p style="color: #333333 !important; margin: 5px 0;">Subtotal: <span style="float: right;">$${Number(quote.subtotal || 0).toFixed(2)}</span></p>
+                  ${quote.coupon_code && quote.coupon_discount ? `<p style="color: #E03A3E !important; margin: 5px 0;">Discount (${quote.coupon_code}): <span style="float: right;">-$${Number(quote.coupon_discount).toFixed(2)}</span></p>` : ''}
+                  ${quote.delivery_fee ? `<p style="color: #333333 !important; margin: 5px 0;">Delivery Fee: <span style="float: right;">$${Number(quote.delivery_fee).toFixed(2)}</span></p>` : ''}
+                  <p style="color: #888 !important; margin: 5px 0; font-size: 12px;">GST (Included): <span style="float: right;">$${Number(quote.gst || 0).toFixed(2)}</span></p>
+                  <p class="total" style="color: #E03A3E !important; font-weight: bold; font-size: 20px; margin: 10px 0 0 0;">Total: <span style="float: right;">$${Number(quote.calculated_total || quote.order_total || 0).toFixed(2)}</span></p>
+                </div>
               </div>
-
-              ${customMessage ? `<div class="quote-details"><p style="color: #333333 !important;">${customMessage}</p></div>` : ''}
-
+ 
+              ${customMessage ? `
+              <div class="quote-details" style="background-color: #fff9f9; border: 1px solid #fee;">
+                <h2 style="color: #E03A3E !important;">Message from ${companyName}</h2>
+                <p style="color: #333333 !important; font-style: italic;">"${customMessage}"</p>
+              </div>` : ''}
+ 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${publicQuoteUrl}" class="cta-button" style="color: #ffffff !important; background-color: #E03A3E; text-decoration: none; padding: 12px 24px; border-radius: 5px; display: inline-block; font-weight: 500;">Review & Approve Quote</a>
+                <a href="${publicQuoteUrl}" class="cta-button" style="color: #ffffff !important; background-color: #E03A3E; text-decoration: none; padding: 14px 28px; border-radius: 6px; display: inline-block; font-weight: bold;">Review & Approve Quote</a>
               </div>
               
-              <p style="font-size: 0.9em; color: #666666 !important;">
-                Click the button above to review the quote, add comments, and approve, request modifications, or reject the quote.
+              <p style="font-size: 13px; color: #888 !important; text-align: center;">
+                Alternatively, you can request modifications or reject the quote by clicking the button above.
               </p>
             </div>
             <div class="footer">
-              <p style="color: #666666 !important;">If you have any questions, please contact us.</p>
-              <p style="color: #666666 !important;">&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+              <p style="color: #666666 !important;">If you have any questions, please reply to this email or contact us directly.</p>
+              <p style="color: #666666 !important; font-weight: bold;">&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -1636,14 +1640,35 @@ export class AdminQuotesService {
       // Send email (non-blocking - don't fail if email fails)
       let emailResult;
       try {
+        // 1. Send to Customer
         emailResult = await this.emailService.sendEmail({
           to: recipientEmailFinal,
           subject: emailSubject,
           html: emailBody,
           attachments: logoAttachment ? [logoAttachment] : [],
         });
+
+        // 2. Send Admin Copy
+        const adminEmail = this.configService.get<string>('ADMIN_EMAIL') || this.configService.get<string>('FROM_EMAIL');
+        if (adminEmail && adminEmail !== recipientEmailFinal) {
+          try {
+            await this.emailService.sendEmail({
+              to: adminEmail,
+              subject: `[ADMIN COPY] Quote #${quote.order_id} sent to ${customerName}`,
+              html: `
+                <div style="background-color: #fff4f4; padding: 15px; border: 1px solid #e03a3e; margin-bottom: 20px; border-radius: 8px; color: #333;">
+                  <strong style="color: #e03a3e;">ADMIN NOTIFICATION:</strong> Below is a copy of the quote sent to <strong>${customerName}</strong> (${recipientEmailFinal}).
+                </div>
+                ${emailBody}
+              `,
+              attachments: logoAttachment ? [logoAttachment] : [],
+            });
+          } catch (adminEmailError) {
+            this.logger.error('Failed to send admin copy of quote (non-blocking):', adminEmailError);
+          }
+        }
       } catch (emailError: any) {
-        this.logger.error('Email sending failed (non-blocking):', emailError);
+        this.logger.error('Email sending to customer failed (non-blocking):', emailError);
         emailResult = {
           success: false,
           error: emailError?.message || 'Email sending failed',
