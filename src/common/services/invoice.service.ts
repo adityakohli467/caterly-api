@@ -462,9 +462,10 @@ export class InvoiceService {
           path.join(__dirname, '..', '..', 'assets', 'logo.png'), // src/assets relative to src/common/services
           path.join(__dirname, '..', '..', '..', 'src', 'assets', 'logo.png'), // src/assets relative to compiled dist
           path.join(__dirname, '..', '..', '..', 'assets', 'logo.png'), // assets relative to dist
-          path.join(process.cwd(), 'assets', 'logo.png'),
-          path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
           path.join(process.cwd(), 'dist', 'src', 'assets', 'logo.png'),
+          path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
+          path.join(process.cwd(), 'dist', 'assets', 'assets', 'logo.png'), // Handle messy builds
+          path.join(process.cwd(), 'assets', 'logo.png'),
           'src/assets/logo.png',
           'assets/logo.png',
         ];
@@ -636,6 +637,21 @@ export class InvoiceService {
           rightColY += 9;
         }
 
+        // Add explicit Delivery Date & Time in the Delivery section
+        if (data.delivery_date) {
+          const deliveryDate = new Date(data.delivery_date);
+          const auDeliveryDateStr = deliveryDate.toLocaleDateString('en-AU', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            timeZone: 'Australia/Sydney',
+          });
+          const timeStr = data.delivery_time ? ` at ${data.delivery_time}` : '';
+          doc.font('Helvetica-Bold').text('Date & Time: ', 320, rightColY, { continued: true });
+          doc.font('Helvetica').text(`${auDeliveryDateStr}${timeStr}`);
+          rightColY += 9;
+        }
+
         if (data.delivery_address) {
           doc.text(`Address: ${data.delivery_address}`, 320, rightColY, { width: 230 });
           const addressHeight = doc.heightOfString(`Address: ${data.delivery_address}`, { width: 230 });
@@ -648,8 +664,9 @@ export class InvoiceService {
         }
 
         if (data.delivery_details) {
-          doc.text(`Notes: ${data.delivery_details}`, 320, rightColY, { width: 230 });
-          const detailsHeight = doc.heightOfString(`Notes: ${data.delivery_details}`, { width: 230 });
+          doc.font('Helvetica-Bold').text('Delivery Notes: ', 320, rightColY, { continued: true });
+          doc.font('Helvetica').text(`${data.delivery_details}`, { width: 230 });
+          const detailsHeight = doc.heightOfString(`Delivery Notes: ${data.delivery_details}`, { width: 230 });
           rightColY += detailsHeight + 2;
         }
 
@@ -848,6 +865,14 @@ export class InvoiceService {
           doc.text(data.delivery_details, 40, currentY + 8, { width: 520 });
           currentY += doc.heightOfString(data.delivery_details, { width: 520 }) + 15;
         }
+
+        // Payment Terms Section
+        doc.fontSize(7).font('Helvetica-Bold');
+        doc.text('Payment Terms:', 40, currentY);
+        doc.font('Helvetica').fontSize(6);
+        const paymentTerms = 'Full payment is required within 7 days of invoice date unless otherwise agreed. Please include the invoice number as your payment reference.';
+        doc.text(paymentTerms, 40, currentY + 8, { width: 520 });
+        currentY += doc.heightOfString(paymentTerms, { width: 520 }) + 15;
 
         // Order Comments Section
         if (data.order_comments) {

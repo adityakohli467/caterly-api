@@ -372,7 +372,7 @@ export class StoreAuthService implements OnModuleInit {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #ffffff; color: white; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
     .content { padding: 20px; }
     .button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
@@ -582,7 +582,7 @@ export class StoreAuthService implements OnModuleInit {
   <style>
     body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #ffffff; color: white; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
     .content { padding: 20px; }
     .button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
