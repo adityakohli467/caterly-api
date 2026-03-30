@@ -206,14 +206,24 @@ export class NotificationService {
       if (result.success) {
         for (const email of recipientEmails) {
           await this.dataSource.query(
-            `UPDATE email_logs SET status = 'sent', sent_at = CURRENT_TIMESTAMP WHERE template_key = $1 AND recipient_email = $2 AND status = 'pending' ORDER BY created_at DESC LIMIT 1`,
+            `UPDATE email_logs SET status = 'sent', sent_at = CURRENT_TIMESTAMP 
+             WHERE log_id = (
+               SELECT log_id FROM email_logs 
+               WHERE template_key = $1 AND recipient_email = $2 AND status = 'pending' 
+               ORDER BY created_at DESC LIMIT 1
+             )`,
             [templateKey, email],
           );
         }
       } else {
         for (const email of recipientEmails) {
           await this.dataSource.query(
-            `UPDATE email_logs SET status = 'failed', error_message = $1 WHERE template_key = $2 AND recipient_email = $3 AND status = 'pending' ORDER BY created_at DESC LIMIT 1`,
+            `UPDATE email_logs SET status = 'failed', error_message = $1 
+             WHERE log_id = (
+               SELECT log_id FROM email_logs 
+               WHERE template_key = $2 AND recipient_email = $3 AND status = 'pending' 
+               ORDER BY created_at DESC LIMIT 1
+             )`,
             [result.error || 'Unknown error', templateKey, email],
           );
         }
