@@ -1,0 +1,162 @@
+[
+  {
+    "setting_id": 15,
+    "setting_key": "language",
+    "setting_value": "en",
+    "setting_category": "appearance",
+    "setting_type": "string",
+    "description": "Application language",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 14,
+    "setting_key": "primary_color",
+    "setting_value": "#e60000",
+    "setting_category": "appearance",
+    "setting_type": "string",
+    "description": "Primary color",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 13,
+    "setting_key": "theme",
+    "setting_value": "light",
+    "setting_category": "appearance",
+    "setting_type": "string",
+    "description": "Application theme",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 4,
+    "setting_key": "company_abn",
+    "setting_value": "ABN:  22 624 108 989",
+    "setting_category": "general",
+    "setting_type": "string",
+    "description": "Company ABN",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 2,
+    "setting_key": "company_email",
+    "setting_value": "kaushika@aaria.com.au",
+    "setting_category": "general",
+    "setting_type": "string",
+    "description": "Company email address",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 1,
+    "setting_key": "company_name",
+    "setting_value": "Caterly",
+    "setting_category": "general",
+    "setting_type": "string",
+    "description": "Company name",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 3,
+    "setting_key": "company_phone",
+    "setting_value": "1300827286",
+    "setting_category": "general",
+    "setting_type": "string",
+    "description": "Company phone number",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 5,
+    "setting_key": "currency",
+    "setting_value": "AUD",
+    "setting_category": "general",
+    "setting_type": "string",
+    "description": "Default currency",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 9,
+    "setting_key": "customer_notifications",
+    "setting_value": "true",
+    "setting_category": "notifications",
+    "setting_type": "boolean",
+    "description": "Enable customer notifications",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 6,
+    "setting_key": "email_notifications",
+    "setting_value": "true",
+    "setting_category": "notifications",
+    "setting_type": "boolean",
+    "description": "Enable email notifications",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 8,
+    "setting_key": "order_notifications",
+    "setting_value": "true",
+    "setting_category": "notifications",
+    "setting_type": "boolean",
+    "description": "Enable order notifications",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 7,
+    "setting_key": "push_notifications",
+    "setting_value": "false",
+    "setting_category": "notifications",
+    "setting_type": "boolean",
+    "description": "Enable push notifications",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 12,
+    "setting_key": "password_expiry",
+    "setting_value": "90",
+    "setting_category": "security",
+    "setting_type": "number",
+    "description": "Password expiry in days",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 11,
+    "setting_key": "session_timeout",
+    "setting_value": "30",
+    "setting_category": "security",
+    "setting_type": "number",
+    "description": "Session timeout in minutes",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 10,
+    "setting_key": "two_factor_auth",
+    "setting_value": "false",
+    "setting_category": "security",
+    "setting_type": "boolean",
+    "description": "Enable two-factor authentication",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  },
+  {
+    "setting_id": 16,
+    "setting_key": "maintenance_mode",
+    "setting_value": "false",
+    "setting_category": "system",
+    "setting_type": "boolean",
+    "description": "Maintenance mode status",
+    "created_at": "2026-01-23T05:12:17.384Z",
+    "updated_at": "2026-03-18T07:08:36.091Z"
+  }
+]

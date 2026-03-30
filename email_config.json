@@ -1,0 +1,74 @@
+[
+  {
+    "config_id": 1,
+    "config_key": "smtp_host",
+    "config_value": "smtp.gmail.com",
+    "description": "SMTP server hostname",
+    "is_active": false,
+    "created_at": "2025-12-22T15:46:29.492Z",
+    "updated_at": "2025-12-22T15:46:29.492Z"
+  },
+  {
+    "config_id": 2,
+    "config_key": "smtp_port",
+    "config_value": "587",
+    "description": "SMTP server port",
+    "is_active": false,
+    "created_at": "2025-12-22T15:46:29.492Z",
+    "updated_at": "2025-12-22T15:46:29.492Z"
+  },
+  {
+    "config_id": 3,
+    "config_key": "smtp_secure",
+    "config_value": "true",
+    "description": "Use TLS/SSL (true/false)",
+    "is_active": false,
+    "created_at": "2025-12-22T15:46:29.492Z",
+    "updated_at": "2025-12-22T15:46:29.492Z"
+  },
+  {
+    "config_id": 4,
+    "config_key": "smtp_user",
+    "config_value": "",
+    "description": "SMTP username/email",
+    "is_active": false,
+    "created_at": "2025-12-22T15:46:29.492Z",
+    "updated_at": "2025-12-22T15:46:29.492Z"
+  },
+  {
+    "config_id": 5,
+    "config_key": "smtp_password",
+    "config_value": "",
+    "description": "SMTP password",
+    "is_active": false,
+    "created_at": "2025-12-22T15:46:29.492Z",
+    "updated_at": "2025-12-22T15:46:29.492Z"
+  },
+  {
+    "config_id": 6,
+    "config_key": "from_email",
+    "config_value": "",
+    "description": "Default sender email address",
+    "is_active": false,
+    "created_at": "2025-12-22T15:46:29.492Z",
+    "updated_at": "2025-12-22T15:46:29.492Z"
+  },
+  {
+    "config_id": 8,
+    "config_key": "reply_to",
+    "config_value": "",
+    "description": "Default reply-to email address",
+    "is_active": false,
+    "created_at": "2025-12-22T15:46:29.492Z",
+    "updated_at": "2025-12-22T15:46:29.492Z"
+  },
+  {
+    "config_id": 7,
+    "config_key": "from_name",
+    "config_value": "Caterly",
+    "description": "Default sender name",
+    "is_active": false,
+    "created_at": "2025-12-22T15:46:29.492Z",
+    "updated_at": "2025-12-22T15:46:29.492Z"
+  }
+]

@@ -463,13 +463,9 @@ export class InvoiceService {
         const pageMargin = 40;
         const pageHeight = doc.page.height;
 
-        // Branding Name - Top Left
-        doc.fontSize(16).font('Helvetica-Bold').fillColor(primaryColor);
-        doc.text(brandingName, pageMargin, headerY);
-
-        // Company Logo - below branding name
-        let logoHeight = 25; // Height for text branding
-        const logoStartY = headerY + 18;
+        // Company Logo - Top Left (removed red branding name as requested)
+        let logoHeight = 65; // Reset height to just logo
+        const logoStartY = headerY;
 
         // Try multiple potential paths for the logo (exhaustive search)
         const potentialLogoPaths = [
@@ -501,16 +497,16 @@ export class InvoiceService {
           try {
             const logoWidth = 100; // Fixed width for logo
             doc.image(logoPath, pageMargin, logoStartY, { width: logoWidth, fit: [100, 60] });
-            logoHeight = 18 + 65; // Branding + Logo
+            logoHeight = 65; // Logo height
           } catch (error) {
             this.logger.error('Could not add logo image to PDF:', error);
-            logoHeight = 25;
+            logoHeight = 0;
           }
         } else {
-          logoHeight = 25;
+          logoHeight = 0;
         }
 
-        // Calculate total header height (company name + logo/text)
+        // Calculate total header height (just logo since text is removed)
         const totalHeaderHeight = logoHeight;
 
         // Company Information - Address in top right corner (compact) - matching caterly format
