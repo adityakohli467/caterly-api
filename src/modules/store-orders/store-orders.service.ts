@@ -579,14 +579,21 @@ export class StoreOrdersService implements OnModuleInit {
         o.delivery_start_date,
         co.company_name,
         d.department_name,
+        loc.location_name,
+        loc.company_name as location_company_name,
+        loc.abn as location_abn,
+        loc.remittance_email as location_email,
+        loc.pickup_address as location_address,
+        loc.contact as location_phone,
         COALESCE(COUNT(op.order_product_id), 0)::integer as item_count
       FROM orders o
       LEFT JOIN order_product op ON o.order_id = op.order_id
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
       LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
+      LEFT JOIN locations loc ON o.location_id = loc.location_id
       WHERE o.customer_id = $1
-      GROUP BY o.order_id, o.order_total, o.order_status, o.date_added, o.delivery_date_time, o.delivery_address, co.company_name, d.department_name
+      GROUP BY o.order_id, o.order_total, o.order_status, o.date_added, o.delivery_date_time, o.delivery_address, co.company_name, d.department_name, loc.location_name, loc.company_name, loc.abn, loc.remittance_email, loc.pickup_address, loc.contact
       ORDER BY o.date_added DESC
       LIMIT $2 OFFSET $3
     `;
@@ -635,12 +642,19 @@ export class StoreOrdersService implements OnModuleInit {
         cp.coupon_code,
         cp.type as coupon_type,
         co.company_name,
-        d.department_name
+        d.department_name,
+        loc.location_name,
+        loc.company_name as location_company_name,
+        loc.abn as location_abn,
+        loc.remittance_email as location_email,
+        loc.pickup_address as location_address,
+        loc.contact as location_phone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
       LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
+      LEFT JOIN locations loc ON o.location_id = loc.location_id
       WHERE o.order_id = $1
     `;
 
@@ -718,12 +732,19 @@ export class StoreOrdersService implements OnModuleInit {
         cp.coupon_code,
         cp.type as coupon_type,
         co.company_name,
-        d.department_name
+        d.department_name,
+        loc.location_name,
+        loc.company_name as location_company_name,
+        loc.abn as location_abn,
+        loc.remittance_email as location_email,
+        loc.pickup_address as location_address,
+        loc.contact as location_phone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
       LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
+      LEFT JOIN locations loc ON o.location_id = loc.location_id
       WHERE o.order_id = $1
     `;
 
