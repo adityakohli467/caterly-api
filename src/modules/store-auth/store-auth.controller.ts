@@ -38,6 +38,22 @@ export class StoreAuthController {
     return this.storeAuthService.login(username, password);
   }
 
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        refreshToken: { type: 'string' },
+      },
+      required: ['refreshToken'],
+    },
+  })
+  async refresh(@Body('refreshToken') refreshToken: string) {
+    return this.storeAuthService.refreshToken(refreshToken);
+  }
+
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Customer registration' })

@@ -25,7 +25,7 @@ import { PermissionGuard } from './guards/permission.guard';
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET') || 'supersecret',
         signOptions: {
-          expiresIn: '4h', // 4 hours
+          expiresIn: '30m', // 30 minutes
         },
       }),
       inject: [ConfigService],

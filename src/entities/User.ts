@@ -51,6 +51,9 @@ export class User {
   @UpdateDateColumn({ name: "date_modified" })
   date_modified!: Date
 
+  @Column({ type: "varchar", length: 255, nullable: true })
+  refresh_token!: string | null;
+
   // Relations
   @ManyToOne(() => Role, { nullable: true })
   @JoinColumn({ name: "role_id" })

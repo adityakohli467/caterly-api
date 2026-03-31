@@ -40,6 +40,16 @@ export class AuthService implements OnModuleInit {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      // Add refresh_token column to "user" table if it doesn't exist
+      await this.dataSource.query(`
+        DO $$ 
+        BEGIN 
+            IF NOT EXISTS (SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='refresh_token') THEN 
+                ALTER TABLE "user" ADD COLUMN refresh_token VARCHAR(255); 
+            END IF; 
+        END $$;
+      `);
     } catch (error) {
       console.error('Error creating password_reset_tokens table (AuthService):', error);
     }
@@ -82,23 +92,36 @@ export class AuthService implements OnModuleInit {
       customer = customerResult[0] || null;
     }
 
-    // Generate JWT token
+    // Generate JWT token (30 min access token)
     const token = this.jwtService.sign({
       user_id: userData.user_id,
       email: userData.email,
       auth_level: userData.auth_level,
       username: userData.username,
       customer_id: (customer as any)?.customer_id,
-    });
+    }, { expiresIn: '30m' });
+
+    // Generate refresh token (7 days)
+    const refreshToken = this.jwtService.sign({
+      user_id: userData.user_id,
+    }, { expiresIn: '7d' });
+
+    // Store refresh token (hashed)
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.dataSource.query(
+      `UPDATE "user" SET refresh_token = $1 WHERE user_id = $2`,
+      [hashedRefreshToken, userData.user_id],
+    );
 
     // Remove password from response
     const { password: _, ...userWithoutPassword } = userData;
 
     return {
       token,
+      refreshToken,
       user: userWithoutPassword,
       customer,
-      expiresIn: 14400, // 4 hours in seconds
+      expiresIn: 1800, // 30 minutes in seconds
     };
   }
 
@@ -210,26 +233,39 @@ export class AuthService implements OnModuleInit {
       customer = customerResult[0];
     }
 
-    // Generate JWT token
+    // Generate JWT token (30 min access token)
     const token = this.jwtService.sign({
       user_id: user.user_id,
       email: user.email,
       auth_level: user.auth_level,
       username: user.username,
       customer_id: (customer as any)?.customer_id,
-    });
+    }, { expiresIn: '30m' });
+
+    // Generate refresh token (7 days)
+    const refreshToken = this.jwtService.sign({
+      user_id: user.user_id,
+    }, { expiresIn: '7d' });
+
+    // Store refresh token (hashed)
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.dataSource.query(
+      `UPDATE "user" SET refresh_token = $1 WHERE user_id = $2`,
+      [hashedRefreshToken, user.user_id],
+    );
 
     // Remove password from response
     const { password: _, ...userWithoutPassword } = user;
 
     return {
       token,
+      refreshToken,
       user: userWithoutPassword,
       customer,
       message: company_name
         ? 'Registration successful. Your account is pending approval.'
         : 'Registration successful',
-      expiresIn: 604800,
+      expiresIn: 1800, // 30 minutes
     };
   }
 
@@ -443,6 +479,82 @@ export class AuthService implements OnModuleInit {
     return {
       message: 'Password reset successfully',
     };
+  }
+
+  async refreshToken(refreshToken: string): Promise<any> {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token is required');
+    }
+
+    try {
+      // Verify refresh token
+      const payload = this.jwtService.verify(refreshToken);
+      const userId = payload.user_id;
+
+      // Find user
+      const userResult = await this.dataSource.query(
+        `SELECT * FROM "user" WHERE user_id = $1 LIMIT 1`,
+        [userId],
+      );
+
+      if (!userResult || userResult.length === 0) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      const userData = userResult[0];
+
+      // Check if refresh token matches
+      if (!userData.refresh_token) {
+        throw new UnauthorizedException('Refresh token is invalid');
+      }
+
+      const isMatch = await bcrypt.compare(refreshToken, userData.refresh_token);
+      if (!isMatch) {
+         throw new UnauthorizedException('Refresh token is invalid');
+      }
+
+      // Get customer details if user is a customer
+      let customer = null;
+      if (userData.is_customer === 1 || userData.auth_level >= 3) {
+        const customerResult = await this.dataSource.query(
+          `SELECT c.*, co.company_name, d.department_name
+           FROM customer c
+           LEFT JOIN company co ON c.company_id = co.company_id
+           LEFT JOIN department d ON c.department_id = d.department_id
+           WHERE c.user_id = $1`,
+          [userData.user_id],
+        );
+        customer = customerResult[0] || null;
+      }
+
+      // Generate new access token
+      const newToken = this.jwtService.sign({
+        user_id: userData.user_id,
+        email: userData.email,
+        auth_level: userData.auth_level,
+        username: userData.username,
+        customer_id: (customer as any)?.customer_id,
+      }, { expiresIn: '30m' });
+
+      // Optionally generate new refresh token (token rotation)
+      const newRefreshToken = this.jwtService.sign({
+        user_id: userData.user_id,
+      }, { expiresIn: '7d' });
+
+      const newHashedRefreshToken = await bcrypt.hash(newRefreshToken, 10);
+      await this.dataSource.query(
+        `UPDATE "user" SET refresh_token = $1 WHERE user_id = $2`,
+        [newHashedRefreshToken, userData.user_id],
+      );
+
+      return {
+        token: newToken,
+        refreshToken: newRefreshToken,
+        expiresIn: 1800,
+      };
+    } catch (error) {
+       throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 }
 
