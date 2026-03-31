@@ -1165,8 +1165,8 @@ export class StorePaymentService {
         attachments: attachments,
       });
 
-      // Send a separate, admin-specific notification email
-      await this.sendAdminOrderAlert(orderId, order);
+      // Send a separate, admin-specific notification email with the same PDF attachment and direct download link
+      await this.sendAdminOrderAlert(orderId, order, pdfBuffer, invoiceUrl);
 
       this.logger.log(`Order/Payment confirmation email sent to ${toEmail} for order #${orderId}`);
 
@@ -1178,7 +1178,7 @@ export class StorePaymentService {
   /**
    * Send a dedicated notification to the admin about a new paid order
    */
-  private async sendAdminOrderAlert(orderId: number, order: any): Promise<void> {
+  private async sendAdminOrderAlert(orderId: number, order: any, pdfBuffer?: Buffer | null, invoiceUrl?: string): Promise<void> {
     try {
       const adminEmail = this.configService.get<string>('ADMIN_EMAIL');
       if (!adminEmail) return;
@@ -1211,6 +1211,7 @@ export class StorePaymentService {
     .details-table td { padding: 10px; border-bottom: 1px solid #eee; }
     .details-table td.label { font-weight: bold; width: 150px; color: #666; }
     .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white !important; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: bold; }
+    .secondary-button { display: inline-block; padding: 10px 20px; background-color: #f1f1f1; color: #333 !important; text-decoration: none; border-radius: 5px; margin: 10px 0; font-size: 14px; border: 1px solid #ccc; }
     .footer { text-align: center; padding: 20px; color: #999; font-size: 11px; }
   </style>
 </head>
@@ -1248,7 +1249,7 @@ export class StorePaymentService {
       </table>
 
       <div style="text-align: center;">
-        <a href="${orderUrl}" class="cta-button">View Order Details</a>
+        <a href="${invoiceUrl || orderUrl}" class="cta-button">View Order Details</a>
       </div>
 
     </div>
@@ -1260,11 +1261,21 @@ export class StorePaymentService {
 </html>
       `;
 
+      const attachments: any[] = logoAttachment ? [logoAttachment] : [];
+      
+      if (pdfBuffer) {
+        attachments.push({
+          filename: `invoice-${orderId}.pdf`,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        });
+      }
+
       await this.emailService.sendEmail({
         to: adminEmail,
         subject: `🚨 [NEW ORDER] #${orderId} - ${customerName}`,
         html: adminEmailHtml,
-        attachments: logoAttachment ? [logoAttachment] : [],
+        attachments: attachments,
       });
 
     } catch (adminEmailError) {
