@@ -113,22 +113,7 @@ export class StorePaymentService {
       }
 
       // Calculate total (matching old PHP logic)
-      let discount = 0;
-      if (order.coupon_id) {
-        if (order.coupon_type === 'F') {
-          discount = parseFloat(order.coupon_discount || 0);
-        } else {
-          const subtotal = parseFloat(order.order_total || 0) +
-            parseFloat(order.late_fee || 0) +
-            parseFloat(order.delivery_fee || 0);
-          discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
-        }
-      }
-
-      const total = parseFloat(order.order_total || 0) +
-        parseFloat(order.late_fee || 0) +
-        parseFloat(order.delivery_fee || 0) -
-        discount;
+      const total = parseFloat(order.order_total || 0) + parseFloat(order.late_fee || 0);
 
       // Convert to cents (as required by SecurePay)
       const totalCents = Math.round(total * 100);
@@ -218,22 +203,7 @@ export class StorePaymentService {
       }
 
       // Calculate total
-      let discount = 0;
-      if (order.coupon_id) {
-        if (order.coupon_type === 'F') {
-          discount = parseFloat(order.coupon_discount || 0);
-        } else {
-          const subtotal = parseFloat(order.order_total || 0) +
-            parseFloat(order.late_fee || 0) +
-            parseFloat(order.delivery_fee || 0);
-          discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
-        }
-      }
-
-      const total = parseFloat(order.order_total || 0) +
-        parseFloat(order.late_fee || 0) +
-        parseFloat(order.delivery_fee || 0) -
-        discount;
+      const total = parseFloat(order.order_total || 0) + parseFloat(order.late_fee || 0);
 
       const totalCents = Math.round(total * 100);
       const username = this.configService.get<string>('FATZEBRA_USERNAME');
@@ -352,21 +322,7 @@ export class StorePaymentService {
 
       // SECURITY: Validate amount matches order total
       if (amount) {
-        let discount = 0;
-        if (order.coupon_id) {
-          if (order.coupon_type === 'F') {
-            discount = parseFloat(order.coupon_discount || 0);
-          } else {
-            const subtotal = parseFloat(order.order_total || 0) +
-              parseFloat(order.late_fee || 0) +
-              parseFloat(order.delivery_fee || 0);
-            discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
-          }
-        }
-        const expectedTotal = parseFloat(order.order_total || 0) +
-          parseFloat(order.late_fee || 0) +
-          parseFloat(order.delivery_fee || 0) -
-          discount;
+        const expectedTotal = parseFloat(order.order_total || 0) + parseFloat(order.late_fee || 0);
         const expectedAmountCents = Math.round(expectedTotal * 100);
 
         if (parseInt(amount as string) !== expectedAmountCents) {
@@ -733,22 +689,7 @@ export class StorePaymentService {
       }
 
       // Calculate total
-      let discount = 0;
-      if (order.coupon_id) {
-        if (order.coupon_type === 'F') {
-          discount = parseFloat(order.coupon_discount || 0);
-        } else {
-          const subtotal = parseFloat(order.order_total || 0) +
-            parseFloat(order.late_fee || 0) +
-            parseFloat(order.delivery_fee || 0);
-          discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
-        }
-      }
-
-      const total = parseFloat(order.order_total || 0) +
-        parseFloat(order.late_fee || 0) +
-        parseFloat(order.delivery_fee || 0) -
-        discount;
+      const total = parseFloat(order.order_total || 0) + parseFloat(order.late_fee || 0);
 
       // Convert to cents (Pin Payments uses cents)
       const totalCents = Math.round(total * 100);
@@ -908,22 +849,7 @@ export class StorePaymentService {
       }
 
       // Calculate total
-      let discount = 0;
-      if (order.coupon_id) {
-        if (order.coupon_type === 'F') {
-          discount = parseFloat(order.coupon_discount || 0);
-        } else {
-          const subtotal = parseFloat(order.order_total || 0) +
-            parseFloat(order.late_fee || 0) +
-            parseFloat(order.delivery_fee || 0);
-          discount = subtotal * (parseFloat(order.coupon_discount || 0) / 100);
-        }
-      }
-
-      const total = parseFloat(order.order_total || 0) +
-        parseFloat(order.late_fee || 0) +
-        parseFloat(order.delivery_fee || 0) -
-        discount;
+      const total = parseFloat(order.order_total || 0) + parseFloat(order.late_fee || 0);
 
       // Convert to cents
       const totalCents = Math.round(total * 100);
