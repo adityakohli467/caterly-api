@@ -47,7 +47,7 @@ export class FatZebraService {
         this.isTestMode = this.configService.get<string>('NODE_ENV') !== 'production';
 
         const baseURL = this.isTestMode
-            ? 'https://gateway.fatzebra.com.au/v1.0'
+            ? 'https://gateway.sandbox.fatzebra.com.au/v1.0'
             : 'https://gateway.fatzebra.com.au/v1.0';
 
         this.apiClient = axios.create({
