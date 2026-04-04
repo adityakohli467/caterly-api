@@ -1,3 +1,6 @@
+// Set default timezone to Australia/Sydney for the entire application
+process.env.TZ = 'Australia/Sydney';
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, HttpException, HttpStatus } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';

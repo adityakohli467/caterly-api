@@ -8,6 +8,20 @@ export class SubscriptionCronService {
 
   constructor(private schedulerService: SubscriptionSchedulerService) {}
 
+  // /**
+  //  * TEMP TEST: Remove after verifying timezone is correct
+  //  * Runs every minute to log current Sydney time
+  //  */
+  // @Cron('* * * * *', {
+  //   name: 'test-timezone',
+  //   timeZone: 'Australia/Sydney',
+  // })
+  // async handleTestTimezone() {
+  //   const sydneyTime = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' });
+  //   const utcTime = new Date().toUTCString();
+  //   this.logger.log(`[TIMEZONE TEST] Sydney: ${sydneyTime} | UTC: ${utcTime}`);
+  // }
+
   /**
    * Generate future orders for all active subscriptions
    * Runs daily at 2:00 AM
