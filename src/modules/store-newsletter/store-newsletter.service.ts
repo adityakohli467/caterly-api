@@ -144,6 +144,8 @@ export class StoreNewsletterService implements OnModuleInit {
         this.configService.get<string>('FRONTEND_URL') ||
         'http://localhost:3006';
 
+      const logoAttachment = this.emailService.getLogoAttachment();
+
       const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -154,22 +156,20 @@ export class StoreNewsletterService implements OnModuleInit {
     body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
     .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .logo { max-width: 200px; height: auto; }
     .content { padding: 20px; }
-    .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white !important; text-decoration: none; border-radius: 5px; margin: 10px 5px; font-weight: bold; }
     .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-    .welcome-badge { display: inline-block; padding: 5px 15px; background-color: #E03A3E; color: white; border-radius: 20px; font-weight: bold; margin-bottom: 10px; }
+    .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white !important; text-decoration: none; border-radius: 5px; margin: 10px 5px; font-weight: bold; }
   </style>
 </head>
 <body>
-  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">Welcome to ${companyName} — thank you for subscribing!</div>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">Welcome to ${companyName} Newsletter! Thank you for subscribing.</div>
   <div class="container">
     <div class="header">
-      <h1>${companyName}</h1>
-      <h2>Welcome to Our Community</h2>
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
     </div>
     <div class="content">
       <p>Hello,</p>
-      <div class="welcome-badge">You're Subscribed</div>
       <p>Welcome to ${companyName}, and thank you for subscribing.</p>
       <p>We're excited to have you join our community where food meets experience. At ${companyName}, we believe every gathering deserves to feel special, whether it's a corporate meeting, a celebration, or a simple morning catch-up.</p>
       <p>As a subscriber, you'll be the first to discover our latest catering menus, seasonal creations, exclusive offers, and event inspiration designed to make hosting effortless and memorable.</p>
@@ -181,9 +181,10 @@ export class StoreNewsletterService implements OnModuleInit {
       <p>Stay inspired,<br><strong>The ${companyName} Team</strong></p>
     </div>
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+      <p>${companyName}</p>
       <p>If you did not subscribe to this newsletter, please ignore this email.</p>
       <p><a href="${frontendUrl}/unsubscribe?email=${encodeURIComponent(email)}" style="color: #666;">Unsubscribe</a></p>
+      <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -192,8 +193,9 @@ export class StoreNewsletterService implements OnModuleInit {
 
       await this.emailService.sendEmail({
         to: email,
-        subject: `Welcome to ${companyName}!`,
+        subject: `Welcome to ${companyName} Newsletter!`,
         html: emailHtml,
+        attachments: logoAttachment ? [logoAttachment] : [],
       });
     } catch (error) {
       this.logger.error('Failed to send welcome email:', error);
@@ -211,6 +213,7 @@ export class StoreNewsletterService implements OnModuleInit {
         this.configService.get<string>('FROM_EMAIL') ||
         'info@caterly.com.au';
       const companyName = this.configService.get<string>('COMPANY_NAME') || 'Caterly';
+      const logoAttachment = this.emailService.getLogoAttachment();
 
       const emailHtml = `
 <!DOCTYPE html>
@@ -219,30 +222,33 @@ export class StoreNewsletterService implements OnModuleInit {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
-    .header { background-color: #2952E6; color: white; padding: 20px; text-align: center; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .logo { max-width: 200px; height: auto; }
     .content { padding: 20px; }
-    .field { margin-bottom: 15px; }
-    .label { font-weight: bold; color: #666; }
-    .value { color: #333; margin-top: 5px; }
+    .order-details { background-color: #f9f9f9; padding: 15px; margin: 15px 0; border-radius: 5px; }
+    .order-info { margin: 10px 0; }
+    .order-info strong { display: inline-block; width: 150px; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">New Newsletter Subscription: ${email}</div>
   <div class="container">
     <div class="header">
-      <h1>New Newsletter Subscription</h1>
+      ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h2>${companyName}</h2>`}
+      <h2>New Newsletter Subscription</h2>
     </div>
     <div class="content">
       <p>A new subscriber has joined the ${companyName} newsletter:</p>
-      <div class="field">
-        <div class="label">Email:</div>
-        <div class="value">${email}</div>
+      <div class="order-details">
+        <div class="order-info"><strong>Email:</strong> ${email}</div>
+        <div class="order-info"><strong>Subscribed At:</strong> ${new Date().toLocaleString()}</div>
       </div>
-      <div class="field">
-        <div class="label">Subscribed At:</div>
-        <div class="value">${new Date().toLocaleString()}</div>
-      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -253,6 +259,7 @@ export class StoreNewsletterService implements OnModuleInit {
         to: adminEmail,
         subject: `New Newsletter Subscription: ${email}`,
         html: emailHtml,
+        attachments: logoAttachment ? [logoAttachment] : [],
       });
     } catch (error) {
       this.logger.error('Failed to send admin notification:', error);
