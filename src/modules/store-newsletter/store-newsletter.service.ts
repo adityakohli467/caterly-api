@@ -176,7 +176,7 @@ export class StoreNewsletterService implements OnModuleInit {
       <p>From beautifully curated All day packages to premium breakfast, lunch, and canapé selections, everything we create is crafted with fresh ingredients and attention to detail, ensuring excellence every time.</p>
       <p>If you're planning an upcoming event or simply exploring options, we'd love to be part of your experience.</p>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${frontendUrl}" class="cta-button">Explore Our Menus</a>
+        <a href="${frontendUrl}/shop" class="cta-button">Explore Our Menus</a>
       </div>
       <p>Stay inspired,<br><strong>The ${companyName} Team</strong></p>
     </div>
