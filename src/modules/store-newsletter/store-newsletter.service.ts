@@ -151,35 +151,37 @@ export class StoreNewsletterService implements OnModuleInit {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
-    .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 0; }
-    .header { background-color: #2952E6; color: white; padding: 30px 20px; text-align: center; }
-    .content { padding: 30px 20px; }
-    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; background-color: #f9f9f9; }
-    .button { display: inline-block; padding: 12px 30px; background-color: #2952E6; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; }
+    .header { background-color: #ffffff; color: #E03A3E; padding: 20px; text-align: center; border-bottom: 3px solid #E03A3E; }
+    .content { padding: 20px; }
+    .cta-button { display: inline-block; padding: 12px 24px; background-color: #E03A3E; color: white !important; text-decoration: none; border-radius: 5px; margin: 10px 5px; font-weight: bold; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+    .welcome-badge { display: inline-block; padding: 5px 15px; background-color: #E03A3E; color: white; border-radius: 20px; font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 <body>
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;" aria-hidden="true">Welcome to ${companyName} — thank you for subscribing!</div>
   <div class="container">
     <div class="header">
-      <h1>Welcome to ${companyName} Newsletter!</h1>
+      <h1>${companyName}</h1>
+      <h2>Welcome to Our Community</h2>
     </div>
     <div class="content">
-      <p>Thank you for subscribing to our newsletter!</p>
-      <p>You'll now receive updates about:</p>
-      <ul>
-        <li>New coffee blends and products</li>
-        <li>Special offers and promotions</li>
-        <li>Brewing tips and recipes</li>
-        <li>Company news and events</li>
-      </ul>
-      <p>We're excited to share our passion for great coffee with you!</p>
-      <p style="margin-top: 30px;">
-        <a href="${frontendUrl}" class="button">Visit Our Shop</a>
-      </p>
+      <p>Hello,</p>
+      <div class="welcome-badge">You're Subscribed</div>
+      <p>Welcome to ${companyName}, and thank you for subscribing.</p>
+      <p>We're excited to have you join our community where food meets experience. At ${companyName}, we believe every gathering deserves to feel special, whether it's a corporate meeting, a celebration, or a simple morning catch-up.</p>
+      <p>As a subscriber, you'll be the first to discover our latest catering menus, seasonal creations, exclusive offers, and event inspiration designed to make hosting effortless and memorable.</p>
+      <p>From beautifully curated All day packages to premium breakfast, lunch, and canapé selections, everything we create is crafted with fresh ingredients and attention to detail, ensuring excellence every time.</p>
+      <p>If you're planning an upcoming event or simply exploring options, we'd love to be part of your experience.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${frontendUrl}" class="cta-button">Explore Our Menus</a>
+      </div>
+      <p>Stay inspired,<br><strong>The ${companyName} Team</strong></p>
     </div>
     <div class="footer">
-      <p>${companyName}</p>
+      <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
       <p>If you did not subscribe to this newsletter, please ignore this email.</p>
       <p><a href="${frontendUrl}/unsubscribe?email=${encodeURIComponent(email)}" style="color: #666;">Unsubscribe</a></p>
     </div>
@@ -190,7 +192,7 @@ export class StoreNewsletterService implements OnModuleInit {
 
       await this.emailService.sendEmail({
         to: email,
-        subject: `Welcome to ${companyName} Newsletter!`,
+        subject: `Welcome to ${companyName}!`,
         html: emailHtml,
       });
     } catch (error) {
