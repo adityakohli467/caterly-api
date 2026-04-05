@@ -113,7 +113,7 @@ export class StorePaymentService {
       }
 
       // Calculate total (matching old PHP logic)
-      const total = parseFloat(order.order_total || 0) + parseFloat(order.late_fee || 0);
+      const total = parseFloat(order.order_total || 0); // + parseFloat(order.late_fee || 0); // late_fee disabled
 
       // Convert to cents (as required by SecurePay)
       const totalCents = Math.round(total * 100);
