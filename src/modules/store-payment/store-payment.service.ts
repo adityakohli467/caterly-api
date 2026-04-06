@@ -1074,6 +1074,14 @@ export class StorePaymentService {
       <p>If you have any questions about your order, please don't hesitate to contact us at ${contactNumber}.</p>
       
       <p>Thank you for choosing ${companyName}!</p>
+
+      <br>
+      <p>Hi,</p>
+      <p>We hope you're doing well. Please find your invoice attached for the recent order with Caterly.</p>
+      <p>We kindly request you to review the details and process the payment at your earliest convenience.</p>
+      <p>If you have any questions or require any clarification, please feel free to reach out. We're always happy to assist.</p>
+      <p>Thank you for choosing Caterly. We truly appreciate your support and look forward to serving you again.</p>
+      <p>Warm regards,<br>The Caterly Team</p>
     </div>
     <div class="footer">
       <p>If you have any questions, please contact us.</p>
