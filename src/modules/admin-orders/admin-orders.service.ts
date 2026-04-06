@@ -1841,7 +1841,7 @@ export class AdminOrdersService implements OnModuleInit {
   }
 
   /**
-   * Send payment link email to customer (SecurePay - matching caterly)
+   * Send payment link email to customer (matching caterly format)
    */
   async sendPaymentLink(id: number, emailPayment?: string): Promise<any> {
     const orderData = await this.findOne(id);
@@ -1893,7 +1893,7 @@ export class AdminOrdersService implements OnModuleInit {
       .update(`${customerName}|${customerName}|${id}|${orderTotalValue}`)
       .digest('hex');
 
-    // Generate payment link (SecurePay route)
+    // Generate payment link
     const backendUrl = this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000';
     const paymentLink = `${backendUrl}/store/payment/${id}/process?auth=${authToken}`;
 
