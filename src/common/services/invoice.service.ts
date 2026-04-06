@@ -272,7 +272,7 @@ export class InvoiceService {
     const storedGst = order.stored_gst !== null ? parseFloat(order.stored_gst) : null;
 
     const total = storedTotal > 0 ? storedTotal : Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
-    const gst = storedGst !== null ? storedGst : Math.round((afterDiscount * 0.1) * 100) / 100;
+    const gst = storedGst !== null ? storedGst : Math.round((total / 11) * 100) / 100;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);
@@ -457,26 +457,22 @@ export class InvoiceService {
         const borderGray = '#e0e0e0';
         const bgGray = '#f8f9fa';
 
-        // Header Section - Logo centered at top, address top right (matching caterly format)
+        // Header Section - Logo left, company info right (matching invoice format)
         const headerY = 15;
         const pageWidth = doc.page.width;
         const pageMargin = 40;
         const pageHeight = doc.page.height;
 
-        // Company Logo - Top Left (removed red branding name as requested)
-        let logoHeight = 65; // Reset height to just logo
-        const logoStartY = headerY;
-
         // Try multiple potential paths for the logo (exhaustive search)
         const potentialLogoPaths = [
           path.join(process.cwd(), 'src', 'assets', 'logo.png'),
           path.resolve(process.cwd(), 'src/assets/logo.png'),
-          path.join(__dirname, '..', '..', 'assets', 'logo.png'), // src/assets relative to src/common/services
-          path.join(__dirname, '..', '..', '..', 'src', 'assets', 'logo.png'), // src/assets relative to compiled dist
-          path.join(__dirname, '..', '..', '..', 'assets', 'logo.png'), // assets relative to dist
+          path.join(__dirname, '..', '..', 'assets', 'logo.png'),
+          path.join(__dirname, '..', '..', '..', 'src', 'assets', 'logo.png'),
+          path.join(__dirname, '..', '..', '..', 'assets', 'logo.png'),
           path.join(process.cwd(), 'dist', 'src', 'assets', 'logo.png'),
           path.join(process.cwd(), 'dist', 'assets', 'logo.png'),
-          path.join(process.cwd(), 'dist', 'assets', 'assets', 'logo.png'), // Handle messy builds
+          path.join(process.cwd(), 'dist', 'assets', 'assets', 'logo.png'),
           path.join(process.cwd(), 'assets', 'logo.png'),
           'src/assets/logo.png',
           'assets/logo.png',
@@ -493,57 +489,64 @@ export class InvoiceService {
           } catch (_) {}
         }
 
+        // Logo - left side, larger to match invoice header style
+        let logoBottomY = headerY;
         if (logoPath) {
           try {
-            const logoWidth = 100; // Fixed width for logo
-            doc.image(logoPath, pageMargin, logoStartY, { width: logoWidth, fit: [100, 60] });
-            logoHeight = 65; // Logo height
+            doc.image(logoPath, pageMargin, headerY, { fit: [140, 85] });
+            logoBottomY = headerY + 85;
           } catch (error) {
             this.logger.error('Could not add logo image to PDF:', error);
-            logoHeight = 0;
+            logoBottomY = headerY;
           }
-        } else {
-          logoHeight = 0;
         }
 
-        // Calculate total header height (just logo since text is removed)
-        const totalHeaderHeight = logoHeight;
-
-        // Company Information - Address in top right corner (compact) - matching caterly format
+        // Company Information - right side, matching invoice header layout
         const companyEmail = data.location_email || companySettings.companyEmail;
         const companyPhone = data.location_phone || companySettings.companyPhone;
         const companyABN = data.location_abn || companySettings.companyAbn;
         const companyAddress = data.location_address || companySettings.companyAddress;
 
-        doc.fontSize(8).font('Helvetica-Bold').fillColor(darkGray);
-        const addressStartY = headerY + 1; // Start at same level as company name/logo
-        const addressWidth = 170; // Width for right-aligned text
-        const addressStartX = pageWidth - pageMargin - addressWidth; // Right-aligned
+        const addressWidth = 220;
+        const addressStartX = pageWidth - pageMargin - addressWidth;
+        let addressY = headerY;
 
-        let addressY = addressStartY;
-        doc.text(brandingName, addressStartX, addressY, { align: 'right', width: addressWidth });
-        addressY += 9; // Spacing after company name
+        // Company name - bold, larger
+        doc.fontSize(10).font('Helvetica-Bold').fillColor(darkGray);
+        doc.text(brandingName.toUpperCase(), addressStartX, addressY, { align: 'right', width: addressWidth });
+        addressY += 13;
 
-        doc.fontSize(7).font('Helvetica');
+        // Location name (e.g. "Tarator Cafe") if different from company name
+        if (data.location_name && data.location_name !== brandingName) {
+          doc.fontSize(8).font('Helvetica').fillColor(darkGray);
+          doc.text(data.location_name, addressStartX, addressY, { align: 'right', width: addressWidth });
+          addressY += 10;
+        }
+
+        // Address lines
+        doc.fontSize(7.5).font('Helvetica').fillColor(darkGray);
         const companyAddressLines = companyAddress.split('\n');
-
-        // Address lines - right aligned (tight spacing) - matching caterly format
         companyAddressLines.forEach((line: string) => {
           if (line.trim()) {
             doc.text(line.trim(), addressStartX, addressY, { align: 'right', width: addressWidth });
-            addressY += 7; // Very tight spacing
+            addressY += 9;
           }
         });
 
-        // Add spacing before contact information
-        addressY += 1;
-
-        // Contact information - right aligned (tight) - matching caterly format
+        // Phone, Email, ABN
         doc.text(`Phone: ${companyPhone}`, addressStartX, addressY, { align: 'right', width: addressWidth });
-        addressY += 7;
+        addressY += 9;
         doc.text(`Email: ${companyEmail}`, addressStartX, addressY, { align: 'right', width: addressWidth });
-        addressY += 7;
+        addressY += 9;
         doc.text(companyABN, addressStartX, addressY, { align: 'right', width: addressWidth });
+        addressY += 9;
+
+        // Horizontal divider line below header
+        const headerBottomY = Math.max(logoBottomY, addressY) + 6;
+        doc.moveTo(pageMargin, headerBottomY).lineTo(pageWidth - pageMargin, headerBottomY)
+          .strokeColor(borderGray).lineWidth(1).stroke();
+
+        const totalHeaderHeight = headerBottomY - headerY + 6;
 
         doc.fillColor(darkGray);
 
@@ -552,7 +555,7 @@ export class InvoiceService {
         const documentNumberLabel = data.is_quote ? 'Quote Number:' : 'Invoice Number:';
         const documentDateLabel = data.is_quote ? 'Quote Date:' : 'Invoice Date:';
 
-        const titleY = Math.max(headerY + totalHeaderHeight + 8, addressY + 5);
+        const titleY = headerY + totalHeaderHeight + 4;
         doc.rect(40, titleY, 520, 25).fillColor(primaryColor).fill().fillColor('#ffffff');
 
         doc.fontSize(18).font('Helvetica-Bold').fillColor('#ffffff');
@@ -646,29 +649,9 @@ export class InvoiceService {
         doc.fontSize(7).font('Helvetica').fillColor(darkGray);
         let rightColY = deliveryDetailsY + 16;
 
-        if (data.location_name) {
-          doc.text(`Location: ${data.location_name}`, 320, rightColY, { width: 230 });
-          rightColY += 9;
-        }
-
-        // Add explicit Delivery Date & Time in the Delivery section
-        if (data.delivery_date) {
-          const deliveryDate = new Date(data.delivery_date);
-          const auDeliveryDateStr = deliveryDate.toLocaleDateString('en-AU', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            timeZone: 'Australia/Sydney',
-          });
-          const timeStr = data.delivery_time ? ` at ${data.delivery_time}` : '';
-          doc.font('Helvetica-Bold').text('Date & Time: ', 320, rightColY, { continued: true });
-          doc.font('Helvetica').text(`${auDeliveryDateStr}${timeStr}`);
-          rightColY += 9;
-        }
-
         if (data.delivery_address) {
-          doc.text(`Address: ${data.delivery_address}`, 320, rightColY, { width: 230 });
-          const addressHeight = doc.heightOfString(`Address: ${data.delivery_address}`, { width: 230 });
+          doc.text(`Delivery Address: ${data.delivery_address}`, 320, rightColY, { width: 230 });
+          const addressHeight = doc.heightOfString(`Delivery Address: ${data.delivery_address}`, { width: 230 });
           rightColY += addressHeight + 2;
         }
 
