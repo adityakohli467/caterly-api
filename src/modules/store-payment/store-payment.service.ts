@@ -85,7 +85,7 @@ export class StorePaymentService {
       const returnUrl = `${baseUrl}/store/payment/callback`;
 
       const fatZebraUrl = this.configService.get<string>('NODE_ENV') === 'production'
-        ? 'https://pay.pmnts.io/'
+        ? 'https://pay.fatzebra.com.au/'
         : 'https://pay.pmnts-sandbox.io/';
 
       return this.generateFatZebraForm({
