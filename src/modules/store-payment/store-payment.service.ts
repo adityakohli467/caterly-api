@@ -9,7 +9,6 @@ import { DataSource } from 'typeorm';
 import * as crypto from 'crypto';
 import { EmailService } from '../../common/services/email.service';
 import { ConfigService } from '@nestjs/config';
-import { PinPaymentsService } from '../../common/services/pinpayments.service';
 import { FatZebraService } from '../../common/services/fatzebra.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { InvoiceService } from '../../common/services/invoice.service';
@@ -23,13 +22,11 @@ export class StorePaymentService {
     private dataSource: DataSource,
     private emailService: EmailService,
     private configService: ConfigService,
-    private pinPaymentsService: PinPaymentsService,
     private fatZebraService: FatZebraService,
     private notificationService: NotificationService,
     private invoiceService: InvoiceService,
     private adminNotificationsService: AdminNotificationsService,
   ) { }
-
 
   /**
    * Process Fat Zebra HPP payment (generate payment form)
@@ -215,6 +212,8 @@ export class StorePaymentService {
   }
 
 
+
+
   /**
    * Generate Fat Zebra HPP form HTML
    */
@@ -298,165 +297,7 @@ export class StorePaymentService {
     `;
   }
 
-  /**
-   * Process Pin Payments charge
-   * POST /store/payment/:orderId/charge
-   */
-  async processPinPayment(orderId: number, cardToken: string, ipAddress: string): Promise<any> {
-    // SECURITY: Validate order_id is numeric
-    if (!orderId || isNaN(orderId) || orderId <= 0) {
-      throw new BadRequestException('Valid order ID is required');
-    }
 
-    if (!cardToken) {
-      throw new BadRequestException('Card token is required');
-    }
-
-    if (!ipAddress) {
-      throw new BadRequestException('IP address is required');
-    }
-
-    // Check if Pin Payments is configured
-    if (!this.pinPaymentsService.isConfigured()) {
-      throw new InternalServerErrorException('Pin Payments is not configured');
-    }
-
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      // Get order details
-      const orderQuery = `
-        SELECT 
-          o.*,
-          c.firstname,
-          c.lastname,
-          c.email,
-          c.company_id,
-          co.company_name,
-          l.location_name
-        FROM orders o
-        LEFT JOIN customer c ON o.customer_id = c.customer_id
-        LEFT JOIN company co ON c.company_id = co.company_id
-        LEFT JOIN locations l ON o.location_id = l.location_id
-        WHERE o.order_id = $1
-      `;
-      const orderResult = await queryRunner.query(orderQuery, [orderId]);
-
-      if (orderResult.length === 0) {
-        throw new NotFoundException('Order not found');
-      }
-
-      const order = orderResult[0];
-
-      // SECURITY: Check if order is already paid
-      if (order.payment_status === 'paid' || order.payment_date) {
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-          this.configService.get<string>('ADMIN_PORTAL_URL') ||
-          'http://localhost:3000';
-        const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-        await queryRunner.commitTransaction();
-        return this.generateRedirectHtml(alreadyPaidUrl, 'Order Already Paid');
-      }
-
-      // Calculate total
-      const total = parseFloat(order.order_total || 0) + parseFloat(order.late_fee || 0);
-
-      // Convert to cents (Pin Payments uses cents)
-      const totalCents = Math.round(total * 100);
-
-      // Get customer email
-      const customerEmail = order.customer_order_email || order.email || 'customer@example.com';
-      const customerName = order.customer_order_name ||
-        `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
-        'Customer';
-
-      // Create charge with Pin Payments
-      const chargeResponse = await this.pinPaymentsService.createCharge({
-        amount: totalCents,
-        currency: 'AUD',
-        description: `Order #${orderId} - ${customerName}`,
-        email: customerEmail,
-        ip_address: ipAddress,
-        card_token: cardToken,
-      });
-
-      if (chargeResponse.response.success) {
-        // Double-check order hasn't been paid (race condition protection)
-        const checkQuery = await queryRunner.query(
-          `SELECT order_status, payment_status, payment_date FROM orders WHERE order_id = $1 FOR UPDATE`,
-          [orderId]
-        );
-
-        if (checkQuery[0]?.order_status === 2 ||
-          checkQuery[0]?.payment_status === 'paid' ||
-          checkQuery[0]?.payment_date) {
-          await queryRunner.rollbackTransaction();
-          this.logger.warn(`Order ${orderId} was already paid (race condition detected)`);
-          const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-            this.configService.get<string>('ADMIN_PORTAL_URL') ||
-            'http://localhost:3000';
-          const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-          return this.generateRedirectHtml(redirectUrl, 'Payment Already Processed');
-        }
-
-        // Mark order as paid
-        await queryRunner.query(
-          `UPDATE orders 
-           SET order_status = 2,
-               payment_status = 'paid', 
-               payment_date = NOW(),
-               mark_paid_comment = 'Paid via Pin Payments - Charge: ${chargeResponse.response.token}',
-               date_modified = NOW()
-           WHERE order_id = $1`,
-          [orderId]
-        );
-
-        await queryRunner.commitTransaction();
-
-        // Send payment/order confirmation email
-        await this.sendPaymentConfirmationEmail(orderId, order);
-        
-        // Notify admin
-        await this.adminNotificationsService.createNotification({
-          type: 'order',
-          message: `New order #${orderId} placed by ${customerName} for $${(totalCents / 100).toFixed(2)}`,
-          order_id: orderId,
-        }).catch(err => this.logger.error('Failed to notify admin of new paid order:', err));
-
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-          this.configService.get<string>('ADMIN_PORTAL_URL') ||
-          'http://localhost:3000';
-        const redirectUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
-        return { success: true, message: 'Payment Successful', transaction_id: chargeResponse.response.token, redirect_url: redirectUrl };
-
-      } else {
-        // Payment failed
-        await queryRunner.rollbackTransaction();
-        this.logger.error("Pin Payments charge failed:", chargeResponse.response.error_message);
-        return {
-          success: false,
-          message: chargeResponse.response.error_message || "Payment failed. Please try again or contact support."
-        };
-      }
-
-    } catch (error: any) {
-      await queryRunner.rollbackTransaction();
-      this.logger.error('Pin Payments processing error:', error);
-
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-
-      return {
-        success: false,
-        message: error.response?.data?.message || error.message || "An error occurred processing your payment. Please try again."
-      };
-    } finally {
-      await queryRunner.release();
-    }
-  }
 
   /**
    * Process Fat Zebra payment charge
@@ -517,7 +358,7 @@ export class StorePaymentService {
           'http://localhost:3000';
         const alreadyPaidUrl = `${frontendUrl}/payment/success?order_id=${orderId}`;
         await queryRunner.commitTransaction();
-        return this.generateRedirectHtml(alreadyPaidUrl, 'Order Already Paid');
+        return { success: true, message: 'Order Already Paid', already_paid: true, redirect_url: alreadyPaidUrl };
       }
 
       // Calculate total
