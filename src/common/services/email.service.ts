@@ -517,10 +517,16 @@ export class EmailService {
       <h2>Invoice for Order #${orderId}</h2>
     </div>
     <div class="content">
-      <p>Dear ${name},</p>
-      <p>Please find attached the invoice for your order #${orderId}.</p>
-      ${customMessage ? `<p>${customMessage}</p>` : ''}
-      <p>Thank you for your business!</p>
+      <p>Hi, ${name}</p>
+      <p>We hope you're doing well. Please find your invoice attached for the recent order with Caterly.</p>
+      <p>We kindly request you to review the details and process the payment at your earliest convenience.</p>
+      <p>If you have any questions or require any clarification, please feel free to reach out. We're always happy to assist.</p>
+      <p>Thank you for choosing Caterly. We truly appreciate your support and look forward to serving you again.</p>
+      <p>Warm regards,<br>The ${companyName} Team</p>
+      <!-- <p>Dear ${name},</p> -->
+      <!-- <p>Please find attached the invoice for your order #${orderId}.</p> -->
+      <!-- ${customMessage ? `<p>${customMessage}</p>` : ''} -->
+      <!-- <p>Thank you for your business!</p> -->
     </div>
     <div class="footer">
       <p>If you have any questions, please contact us.</p>
