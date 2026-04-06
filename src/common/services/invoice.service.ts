@@ -272,7 +272,7 @@ export class InvoiceService {
     const storedGst = order.stored_gst !== null ? parseFloat(order.stored_gst) : null;
 
     const total = storedTotal > 0 ? storedTotal : Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
-    const gst = storedGst !== null ? storedGst : Math.round((afterDiscount * 0.1) * 100) / 100;
+    const gst = storedGst !== null ? storedGst : Math.round((total / 11) * 100) / 100;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);
@@ -646,29 +646,9 @@ export class InvoiceService {
         doc.fontSize(7).font('Helvetica').fillColor(darkGray);
         let rightColY = deliveryDetailsY + 16;
 
-        if (data.location_name) {
-          doc.text(`Location: ${data.location_name}`, 320, rightColY, { width: 230 });
-          rightColY += 9;
-        }
-
-        // Add explicit Delivery Date & Time in the Delivery section
-        if (data.delivery_date) {
-          const deliveryDate = new Date(data.delivery_date);
-          const auDeliveryDateStr = deliveryDate.toLocaleDateString('en-AU', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            timeZone: 'Australia/Sydney',
-          });
-          const timeStr = data.delivery_time ? ` at ${data.delivery_time}` : '';
-          doc.font('Helvetica-Bold').text('Date & Time: ', 320, rightColY, { continued: true });
-          doc.font('Helvetica').text(`${auDeliveryDateStr}${timeStr}`);
-          rightColY += 9;
-        }
-
         if (data.delivery_address) {
-          doc.text(`Address: ${data.delivery_address}`, 320, rightColY, { width: 230 });
-          const addressHeight = doc.heightOfString(`Address: ${data.delivery_address}`, { width: 230 });
+          doc.text(`Delivery Address: ${data.delivery_address}`, 320, rightColY, { width: 230 });
+          const addressHeight = doc.heightOfString(`Delivery Address: ${data.delivery_address}`, { width: 230 });
           rightColY += addressHeight + 2;
         }
 
