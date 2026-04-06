@@ -361,7 +361,7 @@ export class AdminOrdersService implements OnModuleInit {
           const tempAfterDiscount = subtotal;
           const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
           const tempTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100; // Total is inclusive of GST
-          const tempGst = Math.round((tempTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
+          const tempGst = Math.round((tempTotal * 0.11) * 100) / 100; // Calculate GST as 11%
           // The difference is the coupon discount
           const storedTotal = parseFloat(row.order_total || 0);
           if (storedTotal < tempTotal) {
@@ -374,8 +374,9 @@ export class AdminOrdersService implements OnModuleInit {
       const afterDiscount = subtotal - couponDiscount;
       const deliveryFee = parseFloat(row.delivery_fee || 0);
       const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-      // Use stored GST if available, otherwise calculate 10% of subtotal as informational
-      const gst = row.gst ? parseFloat(row.gst) : Math.round(afterDiscount * 0.1 * 100) / 100;
+      // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+      // Use stored GST if available, otherwise calculate 11% of subtotal
+      const gst = row.gst ? parseFloat(row.gst) : Math.round(afterDiscount * 0.11 * 100) / 100;
 
       return {
         order_id: row.order_id,
@@ -537,7 +538,7 @@ export class AdminOrdersService implements OnModuleInit {
         const tempAfterDiscount = subtotal;
         const tempDeliveryFee = parseFloat(order.delivery_fee || 0);
         const tempTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100; // Total is inclusive of GST
-        const tempGst = Math.round((tempTotal * (11 / 111)) * 100) / 100; // Calculate GST as 11% but display as 10%
+        const tempGst = Math.round((tempTotal * 0.11) * 100) / 100; // Calculate GST as 11%
         // The difference is the coupon discount
         const storedTotal = parseFloat(order.order_total || 0);
         if (storedTotal < tempTotal) {
@@ -548,7 +549,8 @@ export class AdminOrdersService implements OnModuleInit {
     }
 
     const afterDiscount = subtotal - couponDiscount;
-    const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
+    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+    const gst = Math.round((afterDiscount * 0.11) * 100) / 100;
     const deliveryFee = parseFloat(order.delivery_fee || 0);
     const lateFee = parseFloat(order.late_fee || 0);
     // GST is not added to total for Caterly
@@ -719,7 +721,8 @@ export class AdminOrdersService implements OnModuleInit {
       const deliveryFeeAmount = parseFloat(delivery_fee || 0);
       // GST is not added to total for Caterly
       const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100;
-      const gst = Math.round((afterDiscount * 0.1) * 100) / 100;
+      // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+      const gst = Math.round((afterDiscount * 0.11) * 100) / 100;
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
