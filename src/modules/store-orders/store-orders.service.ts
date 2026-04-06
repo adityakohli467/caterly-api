@@ -252,7 +252,8 @@ export class StoreOrdersService implements OnModuleInit {
       const deliveryFee = parseFloat((delivery_fee || 0).toString());
       const gstStatus = Number(gst_status || 0);
       const baseTotal = afterDiscount + deliveryFee;
-      const gst = gstStatus ? Math.round(afterDiscount * 0.10 * 100) / 100 : 0;
+      // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+      const gst = gstStatus ? Math.round(afterDiscount * 0.11 * 100) / 100 : 0;
       // GST is not added to total for Caterly
       const total = Math.round(baseTotal * 100) / 100;
 
@@ -706,7 +707,8 @@ export class StoreOrdersService implements OnModuleInit {
     }
 
     const afterDiscount = subtotal; // Assuming no discounts for guest order for now as per code
-    const gstValue = order.gst ? parseFloat(order.gst) : Math.round(afterDiscount * 0.1 * 100) / 100;
+    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+    const gstValue = order.gst ? parseFloat(order.gst) : Math.round(afterDiscount * 0.11 * 100) / 100;
 
     // Ensure frontend gets total consistently
     order.total = order.order_total;
@@ -863,7 +865,8 @@ export class StoreOrdersService implements OnModuleInit {
     const afterDiscount = afterWholesaleDiscount - couponDiscount;
     const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
     // Use stored GST if available, otherwise calculate 10% of subtotal as informational
-    const gstValue = order.gst ? parseFloat(order.gst) : Math.round(afterDiscount * 0.1 * 100) / 100;
+    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+    const gstValue = order.gst ? parseFloat(order.gst) : Math.round(afterDiscount * 0.11 * 100) / 100;
 
     return {
       order: {

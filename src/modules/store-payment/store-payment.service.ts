@@ -574,6 +574,7 @@ export class StorePaymentService {
         <h3>Order Details</h3>
         <div class="order-info"><strong>Order Number:</strong> #${orderId}</div>
         <div class="order-info"><strong>Order Total:</strong> $${orderTotal.toFixed(2)}</div>
+        <div class="order-info"><strong>GST (11%):</strong> Included in total</div>
         ${order.delivery_date_time ? `<div class="order-info"><strong>Delivery Date:</strong> ${new Date(order.delivery_date_time).toLocaleDateString()}</div>` : ''}
         ${order.delivery_address ? `<div class="order-info"><strong>Delivery Address:</strong> ${order.delivery_address}</div>` : ''}
       </div>
@@ -684,6 +685,10 @@ export class StorePaymentService {
         <tr>
           <td class="label">Amount Paid:</td>
           <td>$${orderTotal.toFixed(2)}</td>
+        </tr>
+        <tr>
+          <td class="label">GST (11%):</td>
+          <td>Included in total</td>
         </tr>
         <tr>
           <td class="label">Delivery Date:</td>

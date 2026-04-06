@@ -255,7 +255,7 @@ export class InvoiceService {
         // Coupon was deleted - calculate from stored order_total (GST is inclusive)
         const tempAfterDiscount = subtotal;
         const tempTotal = tempAfterDiscount + deliveryFee; // Total is inclusive of GST
-        const tempGst = tempTotal * (11 / 111); // Calculate GST as 11% but display as 10%
+        const tempGst = tempTotal * (11 / 100); // Calculate GST as 11%
         const storedTotal = parseFloat(order.order_total || 0);
         if (storedTotal < tempTotal) {
           couponDiscount = tempTotal - storedTotal;
@@ -272,7 +272,7 @@ export class InvoiceService {
     const storedGst = order.stored_gst !== null ? parseFloat(order.stored_gst) : null;
 
     const total = storedTotal > 0 ? storedTotal : Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
-    const gst = storedGst !== null ? storedGst : Math.round((total / 11) * 100) / 100;
+    const gst = storedGst !== null ? storedGst : Math.round((total * 11 / 100) * 100) / 100;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);
@@ -533,13 +533,17 @@ export class InvoiceService {
           }
         });
 
-        // Phone, Email, ABN
+        // Phone, Email
         doc.text(`Phone: ${companyPhone}`, addressStartX, addressY, { align: 'right', width: addressWidth });
         addressY += 9;
         doc.text(`Email: ${companyEmail}`, addressStartX, addressY, { align: 'right', width: addressWidth });
         addressY += 9;
-        doc.text(companyABN, addressStartX, addressY, { align: 'right', width: addressWidth });
-        addressY += 9;
+        // Show ABN only once in header, not in Bill To
+        if (companyABN) {
+          const abnText = companyABN.toString().toUpperCase().startsWith('ABN') ? companyABN : `ABN: ${companyABN}`;
+          doc.text(abnText, addressStartX, addressY, { align: 'right', width: addressWidth });
+          addressY += 9;
+        }
 
         // Horizontal divider line below header
         const headerBottomY = Math.max(logoBottomY, addressY) + 6;
@@ -618,10 +622,7 @@ export class InvoiceService {
         leftColY += 10;
         doc.font('Helvetica');
 
-        if (data.company_name) {
-          doc.text(data.company_name, 40, leftColY, { width: 230 });
-          leftColY += 9;
-        }
+        // Do not show company name or ABN again in Bill To section
         if (data.customer_company_address) {
           doc.text(data.customer_company_address, 40, leftColY, { width: 230 });
           const compAddrHeight = doc.heightOfString(data.customer_company_address, { width: 230 });
@@ -814,7 +815,8 @@ export class InvoiceService {
           currentY += 9;
         }
 
-        const gstLabel = data.is_quote ? 'GST (10%):' : 'GST (10%) (Included):';
+        // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+        const gstLabel = data.is_quote ? 'GST (11%):' : 'GST (11%) (Included):';
         doc.text(gstLabel, totalsX, currentY, { width: 120, align: 'right' });
         doc.text(`$${data.gst.toFixed(2)}`, totalsX + 130, currentY, { width: 90, align: 'right' });
         currentY += 10;
