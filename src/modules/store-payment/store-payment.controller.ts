@@ -140,9 +140,9 @@ export class StorePaymentController {
   }
 
 
-  // Legacy SecurePay endpoints (deprecated - kept for backward compatibility)
+  // Legacy endpoints (kept for backward compatibility with external integrations)
   @Post('callback')
-  @ApiOperation({ summary: 'Handle SecurePay payment callback (deprecated)' })
+  @ApiOperation({ summary: 'Handle payment callback' })
   async handleCallback(
     @Body() body: any,
     @Query() query: any,
@@ -154,7 +154,7 @@ export class StorePaymentController {
   }
 
   @Get('callback')
-  @ApiOperation({ summary: 'Handle SecurePay payment callback GET (deprecated)' })
+  @ApiOperation({ summary: 'Handle payment callback GET' })
   async handleCallbackGet(
     @Query() query: any,
     @Res() res: Response,
