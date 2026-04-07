@@ -280,8 +280,8 @@ export class InvoiceService {
 
     const total = storedTotal > 0 ? storedTotal : Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
     // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    // Recalculate 11% of subtotal (after discount) consistently
-    const gst = Math.round(afterDiscount * 0.11 * 100) / 100;
+    // Calculate GST based on the original subtotal (before coupons) for consistency
+    const gst = Math.round(subtotal * 0.11 * 100) / 100;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);

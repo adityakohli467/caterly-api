@@ -554,8 +554,8 @@ export class AdminOrdersService implements OnModuleInit {
 
     const afterDiscount = subtotal - couponDiscount;
     // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    // Recalculate 11% of subtotal consistently
-    const gst = Math.round(afterDiscount * 0.11 * 100) / 100;
+    // Calculate GST based on the original subtotal (before coupons) for consistency
+    const gst = Math.round(subtotal * 0.11 * 100) / 100;
     const deliveryFee = parseFloat(order.delivery_fee || 0);
     const lateFee = parseFloat(order.late_fee || 0);
     // GST is not added to total for Caterly
@@ -731,7 +731,8 @@ export class AdminOrdersService implements OnModuleInit {
       // GST is not added to total for Caterly
       const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100;
       // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      const gst = Math.round((afterDiscount * 0.11) * 100) / 100;
+      // Calculate GST based on the original subtotal (before coupons) for consistency
+      const gst = Math.round((subtotal * 0.11) * 100) / 100;
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
