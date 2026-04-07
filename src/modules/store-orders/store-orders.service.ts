@@ -253,7 +253,8 @@ export class StoreOrdersService implements OnModuleInit {
       const gstStatus = Number(gst_status || 0);
       const baseTotal = afterDiscount + deliveryFee;
       // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      const gst = gstStatus ? Math.round(afterDiscount * 0.11 * 100) / 100 : 0;
+      // Use original subtotal for GST calculation to match storefront display
+      const gst = gstStatus ? Math.round(subtotal * 0.11 * 100) / 100 : 0;
       // GST is not added to total for Caterly
       const total = Math.round(baseTotal * 100) / 100;
 
