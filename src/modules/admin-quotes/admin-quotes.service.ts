@@ -302,10 +302,8 @@ export class AdminQuotesService {
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
       const deliveryFee = parseFloat(row.delivery_fee || 0);
-      const preGstTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-      // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      const gst = Math.round((preGstTotal * 0.11) * 100) / 100;
-      const calculatedTotal = Math.round((preGstTotal + gst) * 100) / 100;
+      const gst = Math.round((afterDiscount * 0.11) * 100) / 100;
+      const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
 
       return {
         ...row,
@@ -502,10 +500,8 @@ export class AdminQuotesService {
 
     const finalCouponDiscount = couponDiscount;
     const afterDiscount = subtotal - finalCouponDiscount;
-    const preGstTotal = Math.round((afterDiscount + parseFloat(quote.delivery_fee || 0)) * 100) / 100;
-    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    const gst = Math.round((preGstTotal * 0.11) * 100) / 100;
-    const calculatedTotal = Math.round((preGstTotal + gst) * 100) / 100;
+    const gst = Math.round((afterDiscount * 0.11) * 100) / 100;
+    const calculatedTotal = Math.round((afterDiscount + parseFloat(quote.delivery_fee || 0)) * 100) / 100;
 
     quote.subtotal = subtotal;
     quote.coupon_discount = finalCouponDiscount;
@@ -596,26 +592,30 @@ export class AdminQuotesService {
         const productQuantity = parseInt(product.quantity || 1);
         let productSubtotal = productPrice * productQuantity;
 
-        // Check if product has add-ons (options)
-        const hasAddOns = product.add_ons && Array.isArray(product.add_ons) && product.add_ons.length > 0;
+        // Check for both 'options' and 'add_ons'
+        const optionsList = product.options || product.add_ons;
+        const hasAddOns = optionsList && Array.isArray(optionsList) && optionsList.length > 0;
 
         if (hasAddOns) {
           // Product has options - apply option-level discounts
           let addOnsTotal = 0;
-          for (const addon of product.add_ons) {
-            if (addon.option_value_id) {
-              const discountKey = `${product.product_id}_${addon.option_value_id}`;
+          for (const addon of optionsList) {
+            const optPrice = parseFloat((addon.option_price || addon.price || 0).toString());
+            const optQty = addon.option_quantity || addon.quantity || 1;
+            const optValueId = addon.option_value_id;
+
+            if (optValueId) {
+              const discountKey = `${product.product_id}_${optValueId}`;
               const discountPercentage = optionDiscountsMap.get(discountKey) || 0;
 
-              if (discountPercentage > 0 && addon.price) {
-                const optionPrice = parseFloat(addon.price.toString());
-                const discountAmount = optionPrice * (discountPercentage / 100);
-                addOnsTotal += (optionPrice - discountAmount) * (addon.quantity || 1);
-              } else if (addon.price) {
-                addOnsTotal += parseFloat(addon.price.toString()) * (addon.quantity || 1);
+              if (discountPercentage > 0) {
+                const discountAmount = optPrice * (discountPercentage / 100);
+                addOnsTotal += (optPrice - discountAmount) * optQty;
+              } else {
+                addOnsTotal += optPrice * optQty;
               }
-            } else if (addon.price) {
-              addOnsTotal += parseFloat(addon.price.toString()) * (addon.quantity || 1);
+            } else {
+              addOnsTotal += optPrice * optQty;
             }
           }
           subtotal += productSubtotal + addOnsTotal;
@@ -719,9 +719,10 @@ export class AdminQuotesService {
           company_id,
           department_id,
           gst,
+          delivery_time,
           date_added,
           date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING order_id`,
         [
           customer_id,
@@ -748,6 +749,7 @@ export class AdminQuotesService {
           company_id || null,
           department_id || null,
           gst,
+          delivery_time || null,
         ],
       );
 
@@ -781,16 +783,19 @@ export class AdminQuotesService {
         const orderProductId = productResult[0].order_product_id;
 
         // Insert product options
-        if (product.add_ons && product.add_ons.length > 0) {
-          for (const addon of product.add_ons) {
-            const nameParts = (addon.name || 'Add-on').split(':').map((s: string) => s.trim());
+        // Robust check for both 'options' and 'add_ons' keys to support various frontend payloads
+        const optionsList = product.options || product.add_ons;
+        if (optionsList && Array.isArray(optionsList) && optionsList.length > 0) {
+          for (const addon of optionsList) {
+            const nameValue = addon.option_name || addon.name || 'Add-on';
+            const nameParts = nameValue.split(':').map((s: string) => s.trim());
             const optionName = nameParts[0] || 'Add-on';
-            const optionValue = nameParts.length > 1 ? nameParts.slice(1).join(':') : addon.name || 'Add-on';
-            const optionQuantity = addon.quantity || 1;
-            const optionPrice = parseFloat((addon.price || 0).toString());
+            const optionValue = nameParts.length > 1 ? nameParts.slice(1).join(':') : nameValue;
+            const optionQuantity = addon.option_quantity || addon.quantity || 1;
+            const optionPrice = parseFloat((addon.option_price || addon.price || 0).toString());
             const optionTotal = optionPrice * optionQuantity;
 
-            let productOptionId = addon.product_option_id;
+            let productOptionId = addon.product_option_id || addon.option_id;
             if (!productOptionId && addon.option_value_id) {
               const optionQuery = await manager.query(
                 `SELECT product_option_id FROM product_option 
@@ -901,26 +906,30 @@ export class AdminQuotesService {
         const productQuantity = parseInt(product.quantity || 1);
         let productSubtotal = productPrice * productQuantity;
 
-        // Check if product has add-ons (options)
-        const hasAddOns = product.add_ons && Array.isArray(product.add_ons) && product.add_ons.length > 0;
+        // Check for both 'options' and 'add_ons'
+        const optionsList = product.options || product.add_ons;
+        const hasAddOns = optionsList && Array.isArray(optionsList) && optionsList.length > 0;
 
         if (hasAddOns) {
           // Product has options - apply option-level discounts
           let addOnsTotal = 0;
-          for (const addon of product.add_ons) {
-            if (addon.option_value_id) {
-              const discountKey = `${product.product_id}_${addon.option_value_id}`;
+          for (const addon of optionsList) {
+            const optPrice = parseFloat((addon.option_price || addon.price || 0).toString());
+            const optQty = addon.option_quantity || addon.quantity || 1;
+            const optValueId = addon.option_value_id;
+
+            if (optValueId) {
+              const discountKey = `${product.product_id}_${optValueId}`;
               const discountPercentage = optionDiscountsMap.get(discountKey) || 0;
 
-              if (discountPercentage > 0 && addon.price) {
-                const optionPrice = parseFloat(addon.price.toString());
-                const discountAmount = optionPrice * (discountPercentage / 100);
-                addOnsTotal += (optionPrice - discountAmount) * (addon.quantity || 1);
-              } else if (addon.price) {
-                addOnsTotal += parseFloat(addon.price.toString()) * (addon.quantity || 1);
+              if (discountPercentage > 0) {
+                const discountAmount = optPrice * (discountPercentage / 100);
+                addOnsTotal += (optPrice - discountAmount) * optQty;
+              } else {
+                addOnsTotal += optPrice * optQty;
               }
-            } else if (addon.price) {
-              addOnsTotal += parseFloat(addon.price.toString()) * (addon.quantity || 1);
+            } else {
+              addOnsTotal += optPrice * optQty;
             }
           }
           subtotal += productSubtotal + addOnsTotal;
@@ -1046,8 +1055,9 @@ export class AdminQuotesService {
              company_id = $17,
              department_id = $18,
              gst = $19,
+             delivery_time = $20,
              date_modified = CURRENT_TIMESTAMP
-         WHERE order_id = $20 AND standing_order = 0
+         WHERE order_id = $21 AND standing_order = 0
          RETURNING *`,
         [
           customer_id,
@@ -1069,6 +1079,7 @@ export class AdminQuotesService {
           company_id || null,
           department_id || null,
           gst,
+          delivery_time || null,
           id,
         ],
       );
@@ -1173,17 +1184,20 @@ export class AdminQuotesService {
             continue;
           }
 
-          // Insert product options (only if add_ons array exists and is not empty)
-          if (product.add_ons && Array.isArray(product.add_ons) && product.add_ons.length > 0) {
-            for (const addon of product.add_ons) {
-              const nameParts = (addon.name || 'Add-on').split(':').map((s: string) => s.trim());
+          // Insert product options (only if options array exists and is not empty)
+          // Robust check for both 'options' and 'add_ons' keys
+          const optionsList = product.options || product.add_ons;
+          if (optionsList && Array.isArray(optionsList) && optionsList.length > 0) {
+            for (const addon of optionsList) {
+              const nameValue = addon.option_name || addon.name || 'Add-on';
+              const nameParts = nameValue.split(':').map((s: string) => s.trim());
               const optionName = nameParts[0] || 'Add-on';
-              const optionValue = nameParts.length > 1 ? nameParts.slice(1).join(':') : addon.name || 'Add-on';
-              const optionQuantity = addon.quantity || 1;
-              const optionPrice = parseFloat((addon.price || 0).toString());
+              const optionValue = nameParts.length > 1 ? nameParts.slice(1).join(':') : nameValue;
+              const optionQuantity = addon.option_quantity || addon.quantity || 1;
+              const optionPrice = parseFloat((addon.option_price || addon.price || 0).toString());
               const optionTotal = optionPrice * optionQuantity;
 
-              let productOptionId = addon.product_option_id;
+              let productOptionId = addon.product_option_id || addon.option_id;
               if (!productOptionId && addon.option_value_id) {
                 const optionQuery = await manager.query(
                   `SELECT product_option_id FROM product_option 
@@ -1477,9 +1491,9 @@ export class AdminQuotesService {
       const afterDiscount = subtotal - finalCouponDiscount;
       const deliveryFee = parseFloat(quote.delivery_fee || 0);
       const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-      // GST is inclusive: calculate as 11% of the total but it conceptually represents the 10% tax component
+      // GST is inclusive: calculate as 11% of the after-discount amount (product price only)
       // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      const gst = Math.round((calculatedTotal * 0.11) * 100) / 100;
+      const gst = Math.round((afterDiscount * 0.11) * 100) / 100;
 
       // Set calculated fields on quote object for email template
       quote.subtotal = subtotal;

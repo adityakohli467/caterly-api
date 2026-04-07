@@ -211,10 +211,17 @@ export class InvoiceService {
     // Calculate subtotal
     let subtotal = 0;
     const itemsWithOptions = itemsResult.map((row: any) => {
-      const productTotal = parseFloat(row.total) || 0;
       const productOptions = optionsResult.filter((opt: any) => opt.order_product_id === row.order_product_id);
       
-      // Note: row.total (from order_product table) already includes options for Caterly
+      // Calculate total manually: (price * quantity) + (sum of options prices * quantities)
+      const basePrice = parseFloat(row.price || 0);
+      const quantity = parseInt(row.quantity || 1);
+      let optionsSum = 0;
+      productOptions.forEach((opt: any) => {
+        optionsSum += parseFloat(opt.option_price || 0) * parseInt(opt.option_quantity || 1);
+      });
+      
+      const productTotal = (basePrice * quantity) + optionsSum;
       subtotal += productTotal;
 
       return {
@@ -272,7 +279,9 @@ export class InvoiceService {
     const storedGst = order.stored_gst !== null ? parseFloat(order.stored_gst) : null;
 
     const total = storedTotal > 0 ? storedTotal : Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
-    const gst = storedGst !== null ? storedGst : Math.round((total * 11 / 100) * 100) / 100;
+    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+    // Recalculate 11% of subtotal (after discount) consistently
+    const gst = Math.round(afterDiscount * 0.11 * 100) / 100;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);

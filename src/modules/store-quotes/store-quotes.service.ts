@@ -262,7 +262,7 @@ export class StoreQuotesService {
     // Total = afterDiscount + deliveryFee (inclusive of GST)
     const calculatedTotal = afterDiscount + parseFloat(quote.delivery_fee || 0);
     // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    const gst = calculatedTotal * 0.11; // Calculate GST as 11%
+    const gst = afterDiscount * 0.11; // Calculate GST as 11% (product price only)
 
     // Add calculated fields
     quote.subtotal = subtotal;
