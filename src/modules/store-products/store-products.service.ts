@@ -158,24 +158,20 @@ export class StoreProductsService {
           FROM product_header ph 
           JOIN heading_product hp ON ph.heading_id = hp.heading_id 
           WHERE hp.product_id = p.product_id 
+          ORDER BY ph.heading_id ASC
           LIMIT 1
         ) as header_name,
-        (
-          SELECT c.category_name 
-          FROM category c 
-          WHERE c.category_id = p.subcategory_id
+        COALESCE(
+          (SELECT c.category_name FROM category c WHERE c.category_id = p.subcategory_id),
+          (SELECT c.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id WHERE pc.product_id = p.product_id LIMIT 1)
         ) as subcategory_name,
-        (
-          SELECT cp.category_name 
-          FROM category c 
-          JOIN category cp ON c.parent_category_id = cp.category_id 
-          WHERE c.category_id = p.subcategory_id
+        COALESCE(
+          (SELECT cp.category_name FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
         ) as parent_category_name,
-        (
-          SELECT cp.category_id 
-          FROM category c 
-          JOIN category cp ON c.parent_category_id = cp.category_id 
-          WHERE c.category_id = p.subcategory_id
+        COALESCE(
+          (SELECT cp.category_id FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_id FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
         ) as parent_category_id,
         (
           SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
@@ -391,7 +387,7 @@ export class StoreProductsService {
       const retailDiscountPercentage = product.retail_discount_percentage ? parseFloat(product.retail_discount_percentage) : null;
 
       // Get product-level discount (prioritize customer_product_discount over general discount)
-      const productDiscount = productDiscountsMap.get(product.product_id) || 0;
+      const productDiscount = productDiscountsMap.get(product.product_id) || discountPercentage;
 
       // Use pricing service for consistent calculations
       const pricing = this.pricingService.calculateProductPrice(
@@ -461,9 +457,18 @@ export class StoreProductsService {
         p.*,
         ph.heading as header_name,
         ph.image as header_image,
-        c_sub.category_name as subcategory_name,
-        c_parent.category_name as parent_category_name,
-        c_parent.category_id as parent_category_id,
+        COALESCE(
+          (SELECT c.category_name FROM category c WHERE c.category_id = p.subcategory_id),
+          (SELECT c.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id WHERE pc.product_id = p.product_id LIMIT 1)
+        ) as subcategory_name,
+        COALESCE(
+          (SELECT cp.category_name FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
+        ) as parent_category_name,
+        COALESCE(
+          (SELECT cp.category_id FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_id FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
+        ) as parent_category_id,
         (
           SELECT json_agg(
             json_build_object(
@@ -478,22 +483,20 @@ export class StoreProductsService {
       FROM product p
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
-      LEFT JOIN category c_sub ON p.subcategory_id = c_sub.category_id
-      LEFT JOIN category c_parent ON c_sub.parent_category_id = c_parent.category_id
       WHERE p.product_id = $1 AND p.product_status = 1 AND p.show_in_storefront = true
     `;
 
     // Filter by customer type visibility
     if (userId && customerType) {
       if (isRetailer) {
-        productQuery += ` AND(COALESCE(p.customer_type_visibility, 'all') = 'all' OR COALESCE(p.customer_type_visibility, 'all') = 'retailers')`;
+        productQuery += ` AND (LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'retailers')`;
       } else if (isWholesaler) {
-        productQuery += ` AND(LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
+        productQuery += ` AND (LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
       } else {
-        productQuery += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
+        productQuery += ` AND LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all'`;
       }
     } else {
-      productQuery += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
+      productQuery += ` AND LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all'`;
     }
 
     const productResult = await this.dataSource.query(productQuery, [id]);
@@ -633,7 +636,7 @@ export class StoreProductsService {
       wholesalePrice,
       retailDiscountPercentage,
       isWholesaler,
-      productDiscount,
+      productDiscount || discountPercentage,
     );
 
     // Apply option discounts using pricing service
@@ -787,22 +790,17 @@ export class StoreProductsService {
           WHERE hp.product_id = p.product_id 
           LIMIT 1
         ) as header_name,
-        (
-          SELECT c.category_name 
-          FROM category c 
-          WHERE c.category_id = p.subcategory_id
+        COALESCE(
+          (SELECT c.category_name FROM category c WHERE c.category_id = p.subcategory_id),
+          (SELECT c.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id WHERE pc.product_id = p.product_id LIMIT 1)
         ) as subcategory_name,
-        (
-          SELECT cp.category_name 
-          FROM category c 
-          JOIN category cp ON c.parent_category_id = cp.category_id 
-          WHERE c.category_id = p.subcategory_id
+        COALESCE(
+          (SELECT cp.category_name FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
         ) as parent_category_name,
-        (
-          SELECT cp.category_id 
-          FROM category c 
-          JOIN category cp ON c.parent_category_id = cp.category_id 
-          WHERE c.category_id = p.subcategory_id
+        COALESCE(
+          (SELECT cp.category_id FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_id FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
         ) as parent_category_id,
         (
           SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
@@ -828,14 +826,14 @@ export class StoreProductsService {
     // Filter by customer type visibility
     if (userId && customerType) {
       if (isRetailer) {
-        query += ` AND(COALESCE(p.customer_type_visibility, 'all') = 'all' OR COALESCE(p.customer_type_visibility, 'all') = 'retailers')`;
+        query += ` AND (LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'retailers')`;
       } else if (isWholesaler) {
-        query += ` AND(LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
+        query += ` AND (LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
       } else {
-        query += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
+        query += ` AND LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all'`;
       }
     } else {
-      query += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
+      query += ` AND LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all'`;
     }
 
     query += `
@@ -849,92 +847,61 @@ export class StoreProductsService {
     let productDiscountsMap = new Map<number, number>();
     if (userId) {
       try {
-        const productDiscountQuery = `
-          SELECT DISTINCT product_id, MAX(discount_percentage) as max_discount
-          FROM customer_product_option_discount
-          WHERE customer_id = (
-      SELECT customer_id FROM customer WHERE user_id = $1
-          )
-          GROUP BY product_id
-        `;
-        const productDiscountResult = await this.dataSource.query(productDiscountQuery, [userId]);
-        productDiscountResult.forEach((row: any) => {
-          if (row.max_discount > 0) {
-            productDiscountsMap.set(row.product_id, row.max_discount);
-          }
-        });
+        // Get customer_id
+        const customerQuery = await this.dataSource.query(
+          `SELECT customer_id FROM customer WHERE user_id = $1`,
+          [userId],
+        );
+        
+        if (customerQuery.length > 0) {
+          const customerId = customerQuery[0].customer_id;
+          
+          // Get product-level discounts from customer_product_discount table
+          const productDiscountQuery = `
+            SELECT product_id, discount_percentage
+            FROM customer_product_discount
+            WHERE customer_id = $1
+          `;
+          const productDiscountResult = await this.dataSource.query(productDiscountQuery, [customerId]);
+          productDiscountResult.forEach((row: any) => {
+            if (row.discount_percentage > 0) {
+              productDiscountsMap.set(row.product_id, parseFloat(row.discount_percentage));
+            }
+          });
+        }
       } catch (error) {
-        this.logger.error('Error fetching product-specific discounts:', error);
+        this.logger.error('Error fetching customer discounts:', error);
       }
     }
 
     // Apply pricing
     const productsWithDiscount = result.map((product: any) => {
       const retailPrice = parseFloat(product.product_price || 0);
-      let wholesalePrice: number;
-      if (product.retail_price) {
-        wholesalePrice = parseFloat(product.retail_price || 0);
-      } else {
-        wholesalePrice = retailPrice * 0.6; // 40% discount
-      }
+      const wholesalePrice = product.retail_price ? parseFloat(product.retail_price || 0) : null;
+      const retailDiscountPercentage = product.retail_discount_percentage ? parseFloat(product.retail_discount_percentage) : null;
 
-      const productSpecificDiscount = productDiscountsMap.get(product.product_id) || 0;
-      const effectiveDiscount = productSpecificDiscount > 0 ? productSpecificDiscount : discountPercentage;
+      const productDiscount = productDiscountsMap.get(product.product_id) || discountPercentage;
 
-      if (isRetailer) {
-        if (effectiveDiscount > 0 && retailPrice > 0) {
-          const discountAmount = retailPrice * (effectiveDiscount / 100);
-          const finalPrice = retailPrice - discountAmount;
-          return {
-            ...product,
-            product_price: finalPrice.toFixed(2),
-            original_price: retailPrice,
-            discounted_price: parseFloat(finalPrice.toFixed(2)),
-            discount_percentage: effectiveDiscount,
-            has_discount: true,
-          };
-        } else {
-          return {
-            ...product,
-            product_price: retailPrice.toFixed(2),
-            original_price: retailPrice,
-            discounted_price: retailPrice,
-            discount_percentage: 0,
-            has_discount: false,
-          };
-        }
-      } else if (isWholesaler) {
-        if (effectiveDiscount > 0 && wholesalePrice > 0) {
-          const discountAmount = wholesalePrice * (effectiveDiscount / 100);
-          const finalPrice = wholesalePrice - discountAmount;
-          return {
-            ...product,
-            product_price: finalPrice.toFixed(2),
-            original_price: wholesalePrice,
-            discounted_price: parseFloat(finalPrice.toFixed(2)),
-            discount_percentage: effectiveDiscount,
-            has_discount: true,
-          };
-        } else {
-          return {
-            ...product,
-            product_price: wholesalePrice.toFixed(2),
-            original_price: wholesalePrice,
-            discounted_price: wholesalePrice,
-            discount_percentage: 0,
-            has_discount: false,
-          };
-        }
-      } else {
-        return {
-          ...product,
-          product_price: retailPrice.toFixed(2),
-          original_price: retailPrice,
-          discounted_price: retailPrice,
-          discount_percentage: 0,
-          has_discount: false,
-        };
-      }
+      // Use pricing service for consistent calculations
+      const pricing = this.pricingService.calculateProductPrice(
+        retailPrice,
+        wholesalePrice,
+        retailDiscountPercentage,
+        isWholesaler,
+        productDiscount,
+      );
+
+      return {
+        ...product,
+        product_price: pricing.finalPrice.toFixed(2),
+        original_price: pricing.originalPrice,
+        discounted_price: pricing.finalPrice,
+        discount_percentage: pricing.discountPercentage,
+        has_discount: pricing.hasDiscount,
+        wholesale_price: pricing.wholesalePrice,
+        base_price: pricing.basePrice,
+        is_wholesale: pricing.isWholesale,
+      };
     });
 
     return { products: productsWithDiscount };
@@ -1007,22 +974,17 @@ export class StoreProductsService {
           WHERE hp.product_id = p.product_id 
           LIMIT 1
         ) as header_name,
-        (
-          SELECT c.category_name 
-          FROM category c 
-          WHERE c.category_id = p.subcategory_id
+        COALESCE(
+          (SELECT c.category_name FROM category c WHERE c.category_id = p.subcategory_id),
+          (SELECT c.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id WHERE pc.product_id = p.product_id LIMIT 1)
         ) as subcategory_name,
-        (
-          SELECT cp.category_name 
-          FROM category c 
-          JOIN category cp ON c.parent_category_id = cp.category_id 
-          WHERE c.category_id = p.subcategory_id
+        COALESCE(
+          (SELECT cp.category_name FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
         ) as parent_category_name,
-        (
-          SELECT cp.category_id 
-          FROM category c 
-          JOIN category cp ON c.parent_category_id = cp.category_id 
-          WHERE c.category_id = p.subcategory_id
+        COALESCE(
+          (SELECT cp.category_id FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_id FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
         ) as parent_category_id,
         (
           SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
@@ -1049,14 +1011,14 @@ export class StoreProductsService {
     // Filter by customer type visibility
     if (userId && customerType) {
       if (isRetailer) {
-        query += ` AND(COALESCE(p.customer_type_visibility, 'all') = 'all' OR COALESCE(p.customer_type_visibility, 'all') = 'retailers')`;
+        query += ` AND (LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'retailers')`;
       } else if (isWholesaler) {
-        query += ` AND(LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
+        query += ` AND (LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all' OR LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'wholesalers')`;
       } else {
-        query += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
+        query += ` AND LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all'`;
       }
     } else {
-      query += ` AND COALESCE(p.customer_type_visibility, 'all') = 'all'`;
+      query += ` AND LOWER(COALESCE(p.customer_type_visibility, 'all')) = 'all'`;
     }
 
     query += `
@@ -1070,92 +1032,61 @@ export class StoreProductsService {
     let productDiscountsMap = new Map<number, number>();
     if (userId) {
       try {
-        const productDiscountQuery = `
-          SELECT DISTINCT product_id, MAX(discount_percentage) as max_discount
-          FROM customer_product_option_discount
-          WHERE customer_id = (
-      SELECT customer_id FROM customer WHERE user_id = $1
-          )
-          GROUP BY product_id
-      `;
-        const productDiscountResult = await this.dataSource.query(productDiscountQuery, [userId]);
-        productDiscountResult.forEach((row: any) => {
-          if (row.max_discount > 0) {
-            productDiscountsMap.set(row.product_id, row.max_discount);
-          }
-        });
+        // Get customer_id
+        const customerQuery = await this.dataSource.query(
+          `SELECT customer_id FROM customer WHERE user_id = $1`,
+          [userId],
+        );
+        
+        if (customerQuery.length > 0) {
+          const customerId = customerQuery[0].customer_id;
+          
+          // Get product-level discounts from customer_product_discount table
+          const productDiscountQuery = `
+            SELECT product_id, discount_percentage
+            FROM customer_product_discount
+            WHERE customer_id = $1
+          `;
+          const productDiscountResult = await this.dataSource.query(productDiscountQuery, [customerId]);
+          productDiscountResult.forEach((row: any) => {
+            if (row.discount_percentage > 0) {
+              productDiscountsMap.set(row.product_id, parseFloat(row.discount_percentage));
+            }
+          });
+        }
       } catch (error) {
-        this.logger.error('Error fetching product-specific discounts:', error);
+        this.logger.error('Error fetching customer discounts:', error);
       }
     }
 
     // Apply pricing (same logic as getFeaturedProducts)
     const productsWithDiscount = result.map((product: any) => {
       const retailPrice = parseFloat(product.product_price || 0);
-      let wholesalePrice: number;
-      if (product.retail_price) {
-        wholesalePrice = parseFloat(product.retail_price || 0);
-      } else {
-        wholesalePrice = retailPrice * 0.6; // 40% discount
-      }
+      const wholesalePrice = product.retail_price ? parseFloat(product.retail_price || 0) : null;
+      const retailDiscountPercentage = product.retail_discount_percentage ? parseFloat(product.retail_discount_percentage) : null;
 
-      const productSpecificDiscount = productDiscountsMap.get(product.product_id) || 0;
-      const effectiveDiscount = productSpecificDiscount > 0 ? productSpecificDiscount : discountPercentage;
+      const productDiscount = productDiscountsMap.get(product.product_id) || discountPercentage;
 
-      if (isRetailer) {
-        if (effectiveDiscount > 0 && retailPrice > 0) {
-          const discountAmount = retailPrice * (effectiveDiscount / 100);
-          const finalPrice = retailPrice - discountAmount;
-          return {
-            ...product,
-            product_price: finalPrice.toFixed(2),
-            original_price: retailPrice,
-            discounted_price: parseFloat(finalPrice.toFixed(2)),
-            discount_percentage: effectiveDiscount,
-            has_discount: true,
-          };
-        } else {
-          return {
-            ...product,
-            product_price: retailPrice.toFixed(2),
-            original_price: retailPrice,
-            discounted_price: retailPrice,
-            discount_percentage: 0,
-            has_discount: false,
-          };
-        }
-      } else if (isWholesaler) {
-        if (effectiveDiscount > 0 && wholesalePrice > 0) {
-          const discountAmount = wholesalePrice * (effectiveDiscount / 100);
-          const finalPrice = wholesalePrice - discountAmount;
-          return {
-            ...product,
-            product_price: finalPrice.toFixed(2),
-            original_price: wholesalePrice,
-            discounted_price: parseFloat(finalPrice.toFixed(2)),
-            discount_percentage: effectiveDiscount,
-            has_discount: true,
-          };
-        } else {
-          return {
-            ...product,
-            product_price: wholesalePrice.toFixed(2),
-            original_price: wholesalePrice,
-            discounted_price: wholesalePrice,
-            discount_percentage: 0,
-            has_discount: false,
-          };
-        }
-      } else {
-        return {
-          ...product,
-          product_price: retailPrice.toFixed(2),
-          original_price: retailPrice,
-          discounted_price: retailPrice,
-          discount_percentage: 0,
-          has_discount: false,
-        };
-      }
+      // Use pricing service for consistent calculations
+      const pricing = this.pricingService.calculateProductPrice(
+        retailPrice,
+        wholesalePrice,
+        retailDiscountPercentage,
+        isWholesaler,
+        productDiscount,
+      );
+
+      return {
+        ...product,
+        product_price: pricing.finalPrice.toFixed(2),
+        original_price: pricing.originalPrice,
+        discounted_price: pricing.finalPrice,
+        discount_percentage: pricing.discountPercentage,
+        has_discount: pricing.hasDiscount,
+        wholesale_price: pricing.wholesalePrice,
+        base_price: pricing.basePrice,
+        is_wholesale: pricing.isWholesale,
+      };
     });
 
     return { products: productsWithDiscount };
