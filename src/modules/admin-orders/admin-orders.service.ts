@@ -87,6 +87,10 @@ export class AdminOrdersService implements OnModuleInit {
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='is_deleted') THEN
             ALTER TABLE orders ADD COLUMN is_deleted INT DEFAULT 0;
           END IF;
+          -- delivery_time
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_time') THEN
+            ALTER TABLE orders ADD COLUMN delivery_time VARCHAR(50);
+          END IF;
 
           -- order_product columns
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='order_product_comment') THEN
@@ -375,8 +379,8 @@ export class AdminOrdersService implements OnModuleInit {
       const deliveryFee = parseFloat(row.delivery_fee || 0);
       const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
       // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      // Use stored GST if available, otherwise calculate 11% of subtotal
-      const gst = row.gst ? parseFloat(row.gst) : Math.round(afterDiscount * 0.11 * 100) / 100;
+      // Recalculate 11% of subtotal (after discount) consistently
+      const gst = Math.round(afterDiscount * 0.11 * 100) / 100;
 
       return {
         order_id: row.order_id,
@@ -430,7 +434,7 @@ export class AdminOrdersService implements OnModuleInit {
         COALESCE(o.firstname, c.firstname) as firstname,
         COALESCE(o.lastname, c.lastname) as lastname,
         COALESCE(o.email, c.email) as email,
-        COALESCE(o.telephone, c.telephone) as telephone,
+        COALESCE(o.telephone, COALESCE(o.telephone, c.telephone) as telephone) as telephone,
         c.customer_type,
         COALESCE(o.company_id, c.company_id) as company_id,
         COALESCE(o.department_id, d.department_id) as department_id,
@@ -550,7 +554,8 @@ export class AdminOrdersService implements OnModuleInit {
 
     const afterDiscount = subtotal - couponDiscount;
     // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    const gst = Math.round((afterDiscount * 0.11) * 100) / 100;
+    // Recalculate 11% of subtotal consistently
+    const gst = Math.round(afterDiscount * 0.11 * 100) / 100;
     const deliveryFee = parseFloat(order.delivery_fee || 0);
     const lateFee = parseFloat(order.late_fee || 0);
     // GST is not added to total for Caterly
@@ -675,9 +680,13 @@ export class AdminOrdersService implements OnModuleInit {
       let subtotal = 0;
       for (const product of products) {
         let productPriceWithAddons = product.price || 0;
-        if (product.add_ons && Array.isArray(product.add_ons)) {
-          for (const addon of product.add_ons) {
-            productPriceWithAddons += (parseFloat(addon.option_price || 0) * (addon.option_quantity || 1)) / (product.quantity || 1);
+        // Check for both 'options' and 'add_ons' to support various frontend payloads
+        const optionsList = product.options || product.add_ons;
+        if (optionsList && Array.isArray(optionsList)) {
+          for (const addon of optionsList) {
+            const optPrice = parseFloat((addon.option_price || addon.price || 0).toString());
+            const optQty = addon.option_quantity || addon.quantity || 1;
+            productPriceWithAddons += (optPrice * optQty) / (product.quantity || 1);
           }
         }
         const itemTotal = productPriceWithAddons * (product.quantity || 0);
@@ -788,8 +797,8 @@ export class AdminOrdersService implements OnModuleInit {
           customer_id, location_id, branch_id, shipping_method, delivery_date_time, delivery_fee, order_total,
           order_status, order_comments, coupon_id, coupon_discount, delivery_address, delivery_method,
           account_email, cost_center, delivery_contact, delivery_details, standing_order, user_id, payment_status,
-          firstname, lastname, email, telephone, gst, company_id, department_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+          firstname, lastname, email, telephone, gst, company_id, department_id, delivery_time
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
         RETURNING *`,
         [
           customer_id || null,
@@ -819,6 +828,7 @@ export class AdminOrdersService implements OnModuleInit {
           gst,
           company_id || null,
           department_id || null,
+          delivery_time || null,
         ],
       );
 
@@ -850,11 +860,15 @@ export class AdminOrdersService implements OnModuleInit {
         const orderProductId = orderProductResult[0].order_product_id;
 
         // Create order product options
-        if (product.add_ons && Array.isArray(product.add_ons)) {
-          for (const addon of product.add_ons) {
-            const optionQuantity = addon.option_quantity || 1;
-            const optionPrice = parseFloat(addon.option_price || 0);
+        // Robust check for both 'options' and 'add_ons' keys to support various frontend payloads
+        const optionsList = product.options || product.add_ons;
+        if (optionsList && Array.isArray(optionsList)) {
+          for (const addon of optionsList) {
+            const optionQuantity = addon.option_quantity || addon.quantity || 1;
+            const optionPrice = parseFloat((addon.option_price || addon.price || 0).toString());
             const optionTotal = optionQuantity * optionPrice;
+            const optionName = addon.option_name || addon.name || 'Add-on';
+            const optionValue = addon.option_value || addon.value || '';
 
             await queryRunner.query(
               `INSERT INTO order_product_option (
@@ -862,14 +876,14 @@ export class AdminOrdersService implements OnModuleInit {
                 option_quantity, option_price, option_total
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
               [
-                order.order_id, // Add order_id
+                order.order_id,
                 orderProductId,
-                addon.product_option_id || 0, // product_option_id is NOT NULL, use 0 as default
-                addon.option_name || '',
-                addon.option_value || '',
+                addon.product_option_id || addon.option_id || 0,
+                optionName,
+                optionValue,
                 optionQuantity,
                 optionPrice,
-                optionTotal, // Add option_total
+                optionTotal,
               ],
             );
           }
@@ -986,8 +1000,20 @@ export class AdminOrdersService implements OnModuleInit {
       if (products && Array.isArray(products) && products.length > 0) {
         let subtotal = 0;
         for (const product of products) {
-          const productTotal = (product.price || 0) * (product.quantity || 0);
-          subtotal += productTotal;
+          let productPriceWithAddons = parseFloat((product.price || 0).toString());
+          // Robust check for both 'options' and 'add_ons'
+          const optionsList = product.options || product.add_ons;
+          if (optionsList && Array.isArray(optionsList)) {
+            for (const addon of optionsList) {
+              const optPrice = parseFloat((addon.option_price || addon.price || 0).toString());
+              const optQty = addon.option_quantity || addon.quantity || 1;
+              productPriceWithAddons += (optPrice * optQty) / (product.quantity || 1);
+            }
+          }
+          const itemTotal = productPriceWithAddons * (product.quantity || 0);
+          subtotal += itemTotal;
+          // Store combinedTotal on product for later use in INSERT
+          product.combinedTotal = itemTotal;
         }
 
         let couponDiscount = 0;
@@ -1017,7 +1043,7 @@ export class AdminOrdersService implements OnModuleInit {
         const afterDiscount = subtotal - couponDiscount;
         const deliveryFeeAmountCalc = parseFloat(finalDeliveryFee || 0);
         resolvedOrderTotal = Math.round((afterDiscount + deliveryFeeAmountCalc) * 100) / 100;
-        resolvedGst = Math.round((resolvedOrderTotal * (11 / 111)) * 100) / 100;
+        resolvedGst = Math.round((afterDiscount * 0.11) * 100) / 100;
         resolvedCouponDiscount = couponDiscount;
         resolvedCouponId = couponIdValue;
       }
@@ -1055,8 +1081,9 @@ export class AdminOrdersService implements OnModuleInit {
              gst = $25,
              company_id = $26,
              department_id = $27,
+             delivery_time = $28,
              date_modified = CURRENT_TIMESTAMP
-         WHERE order_id = $28
+         WHERE order_id = $29
          RETURNING *`,
         [
           finalCustomerId,
@@ -1086,6 +1113,7 @@ export class AdminOrdersService implements OnModuleInit {
           resolvedGst,
           finalCompanyId,
           finalDepartmentId,
+          delivery_time || null,
           id,
         ],
       );
@@ -1106,20 +1134,52 @@ export class AdminOrdersService implements OnModuleInit {
           const sortOrder = product.sort_order !== undefined ? product.sort_order : index + 1;
           const excludeGst = product.exclude_gst !== undefined ? product.exclude_gst : 0;
 
-          await queryRunner.query(
+          const orderProductResult = await queryRunner.query(
             `INSERT INTO order_product (order_id, product_id, quantity, price, total, order_product_comment, sort_order, exclude_gst)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING order_product_id`,
             [
               id,
               product.product_id,
               product.quantity,
               product.price,
-              productTotal,
+              product.combinedTotal || productTotal,
               product.comment || null,
               sortOrder,
               excludeGst,
             ],
           );
+
+          const orderProductId = orderProductResult[0].order_product_id;
+
+          // Create updated order product options
+          const optionsList = product.options || product.add_ons;
+          if (optionsList && Array.isArray(optionsList)) {
+            for (const addon of optionsList) {
+              const optionQuantity = addon.option_quantity || addon.quantity || 1;
+              const optionPrice = parseFloat((addon.option_price || addon.price || 0).toString());
+              const optionTotal = optionQuantity * optionPrice;
+              const optionName = addon.option_name || addon.name || 'Add-on';
+              const optionValue = addon.option_value || addon.value || '';
+
+              await queryRunner.query(
+                `INSERT INTO order_product_option (
+                  order_id, order_product_id, product_option_id, option_name, option_value,
+                  option_quantity, option_price, option_total
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [
+                  id,
+                  orderProductId,
+                  addon.product_option_id || addon.option_id || 0,
+                  optionName,
+                  optionValue,
+                  optionQuantity,
+                  optionPrice,
+                  optionTotal,
+                ],
+              );
+            }
+          }
         }
       }
 
@@ -1360,10 +1420,10 @@ export class AdminOrdersService implements OnModuleInit {
         o.is_completed,
         o.customer_order_name,
         o.customer_from as order_made_from,
-        c.firstname,
-        c.lastname,
-        c.email,
-        c.telephone
+        COALESCE(o.firstname, c.firstname) as firstname,
+        COALESCE(o.lastname, c.lastname) as lastname,
+        COALESCE(o.email, c.email) as email,
+        COALESCE(o.telephone, c.telephone) as telephone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       WHERE o.order_status NOT IN (0, 8, 10)
@@ -1406,10 +1466,10 @@ export class AdminOrdersService implements OnModuleInit {
         o.is_completed,
         o.customer_order_name,
         o.customer_from as order_made_from,
-        c.firstname,
-        c.lastname,
-        c.email,
-        c.telephone
+        COALESCE(o.firstname, c.firstname) as firstname,
+        COALESCE(o.lastname, c.lastname) as lastname,
+        COALESCE(o.email, c.email) as email,
+        COALESCE(o.telephone, c.telephone) as telephone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       WHERE o.order_status NOT IN (0, 8, 10)
@@ -1458,10 +1518,10 @@ export class AdminOrdersService implements OnModuleInit {
         o.is_completed,
         o.customer_order_name,
         o.customer_from as order_made_from,
-        c.firstname,
-        c.lastname,
-        c.email,
-        c.telephone
+        COALESCE(o.firstname, c.firstname) as firstname,
+        COALESCE(o.lastname, c.lastname) as lastname,
+        COALESCE(o.email, c.email) as email,
+        COALESCE(o.telephone, c.telephone) as telephone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       WHERE o.order_status NOT IN (0, 8, 10)
@@ -1502,10 +1562,10 @@ export class AdminOrdersService implements OnModuleInit {
         o.is_completed,
         o.customer_order_name,
         o.customer_from as order_made_from,
-        c.firstname,
-        c.lastname,
-        c.email,
-        c.telephone
+        COALESCE(o.firstname, c.firstname) as firstname,
+        COALESCE(o.lastname, c.lastname) as lastname,
+        COALESCE(o.email, c.email) as email,
+        COALESCE(o.telephone, c.telephone) as telephone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
       WHERE o.order_status NOT IN (0, 8, 10)
@@ -1575,10 +1635,10 @@ export class AdminOrdersService implements OnModuleInit {
         o.order_comments,
         o.shipping_address_1,
         o.is_completed,
-        c.firstname,
-        c.lastname,
-        c.email,
-        c.telephone,
+        COALESCE(o.firstname, c.firstname) as firstname,
+        COALESCE(o.lastname, c.lastname) as lastname,
+        COALESCE(o.email, c.email) as email,
+        COALESCE(o.telephone, c.telephone) as telephone,
         co.company_name,
         l.location_name,
         COALESCE((
@@ -1632,7 +1692,7 @@ export class AdminOrdersService implements OnModuleInit {
         CAST(o.order_id AS TEXT) ILIKE $${paramIndex} OR
         c.firstname ILIKE $${paramIndex} OR
         c.lastname ILIKE $${paramIndex} OR
-        CONCAT(c.firstname, ' ', c.lastname) ILIKE $${paramIndex}
+        CONCAT(COALESCE(o.firstname, c.firstname) as firstname, ' ', c.lastname) ILIKE $${paramIndex}
       )`;
       params.push(`%${search}%`);
       paramIndex++;

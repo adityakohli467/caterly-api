@@ -332,8 +332,9 @@ export class StoreOrdersService implements OnModuleInit {
           location_id,
           gst,
           delivery_frequency,
-          delivery_start_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+          delivery_start_date,
+          delivery_time
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
         RETURNING order_id
       `;
 
@@ -368,7 +369,8 @@ export class StoreOrdersService implements OnModuleInit {
         location_id || 1,
         gst,
         delivery_frequency || null,
-        delivery_start_date || null
+        delivery_start_date || null,
+        delivery_time || null
       ]);
 
       const orderId = orderResult[0].order_id;
@@ -708,7 +710,8 @@ export class StoreOrdersService implements OnModuleInit {
 
     const afterDiscount = subtotal; // Assuming no discounts for guest order for now as per code
     // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    const gstValue = order.gst ? parseFloat(order.gst) : Math.round(afterDiscount * 0.11 * 100) / 100;
+    // Recalculate 11% of subtotal (after discount) consistently
+    const gstValue = Math.round(afterDiscount * 0.11 * 100) / 100;
 
     // Ensure frontend gets total consistently
     order.total = order.order_total;
@@ -864,9 +867,9 @@ export class StoreOrdersService implements OnModuleInit {
 
     const afterDiscount = afterWholesaleDiscount - couponDiscount;
     const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-    // Use stored GST if available, otherwise calculate 10% of subtotal as informational
     // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    const gstValue = order.gst ? parseFloat(order.gst) : Math.round(afterDiscount * 0.11 * 100) / 100;
+    // Recalculate 11% of subtotal (after discount) consistently
+    const gstValue = Math.round(afterDiscount * 0.11 * 100) / 100;
 
     return {
       order: {
