@@ -1,0 +1,87 @@
+name: 🚀 Deploy caterly-api (PAT)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚀 Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            echo "🚀 Starting Deployment..."
+            cd ~/name: 🚀 Deploy stdreux_api (PAT)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚀 Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            echo "🚀 Starting Deployment..."
+            cd ~/caterly_backend
+            echo "🔐 Setting Git with PAT"
+            git config --global credential.helper store
+            echo "https://${{ secrets.GH_USERNAME }}:${{ secrets.GH_PAT }}@github.com" > ~/.git-credentials
+            echo "📥 Pull latest code"
+            git fetch --all
+            git reset --hard origin/main
+            echo "🧹 Cleaning old build"
+            rm -rf .next
+            echo "📦 Installing dependencies"
+            npm install --legacy-peer-deps
+            echo "🏗 Building project"
+            npm run build
+            echo "🔄 Restarting PM2"
+            pm2 describe stduerex-admin > /dev/null
+            if [ $? -eq 0 ]; then
+              pm2 reload stdreux_api
+            else
+              PORT=3101 pm2 start npm --name "stdreux_api" -- run start
+            fi
+            pm2 save
+            pm2 list
+            echo "✅ Deployment Completed!"
+            echo "🔐 Setting Git with PAT"
+            git config --global credential.helper store
+            echo "https://${{ secrets.GH_USERNAME }}:${{ secrets.GH_PAT }}@github.com" > ~/.git-credentials
+            echo "📥 Pull latest code"
+            git fetch --all
+            git reset --hard origin/main
+            echo "🧹 Cleaning old build"
+            rm -rf .next
+            echo "📦 Installing dependencies"
+            npm install --legacy-peer-deps
+            echo "🏗 Building project"
+            npm run build
+            echo "🔄 Restarting PM2"
+            pm2 describe stduerex-admin > /dev/null
+            if [ $? -eq 0 ]; then
+              pm2 reload caterly-backend 
+            else
+              PORT=9000 pm2 start npm --name "caterly-backend " -- run start
+            fi
+            pm2 save
+            pm2 list
+            echo "✅ Deployment Completed!"
