@@ -20,7 +20,7 @@ jobs:
           script: |
             echo "🚀 Starting Deployment..."
 
-            cd ~/caterly_backend
+            cd ~/public_html/test/caterly_backend
 
             echo "🔐 Setting Git with PAT"
             git config --global credential.helper store
