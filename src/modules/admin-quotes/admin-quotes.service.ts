@@ -499,8 +499,10 @@ export class AdminQuotesService {
     }
 
     const finalCouponDiscount = couponDiscount;
-    const afterDiscount = subtotal - finalCouponDiscount;
-    const gst = Math.round((subtotal * 0.11) * 100) / 100;
+    // afterDiscount should never go below 0
+    const afterDiscount = Math.max(0, subtotal - finalCouponDiscount);
+    // GST is inclusive: calculate as 1/11 of the after-discount amount (coupon applied before GST)
+    const gst = Math.round((afterDiscount / 11) * 100) / 100;
     const calculatedTotal = Math.round((afterDiscount + parseFloat(quote.delivery_fee || 0)) * 100) / 100;
 
     quote.subtotal = subtotal;
@@ -1473,7 +1475,7 @@ export class AdminQuotesService {
       if (quote.coupon_id) {
         // First, try to use stored coupon_discount from orders table (for historical accuracy)
         if (quote.coupon_discount && parseFloat(quote.coupon_discount.toString()) > 0) {
-          couponDiscount = parseFloat(quote.coupon_discount.toString());
+          couponDiscount = Math.min(parseFloat(quote.coupon_discount.toString()), subtotal);
           couponCode = quote.coupon_code || 'DELETED';
         } else if (quote.coupon_code && quote.coupon_discount) {
           // Coupon information available from JOIN - recalculate to ensure accuracy
@@ -1488,12 +1490,13 @@ export class AdminQuotesService {
       }
 
       const finalCouponDiscount = couponDiscount;
-      const afterDiscount = subtotal - finalCouponDiscount;
+      // afterDiscount should never go below 0
+      const afterDiscount = Math.max(0, subtotal - finalCouponDiscount);
       const deliveryFee = parseFloat(quote.delivery_fee || 0);
       const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-      // GST is inclusive: calculate as 11% of the after-discount amount (product price only)
+      // GST is inclusive: calculate as 1/11 of the after-discount amount (coupon applied before GST)
       // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      const gst = Math.round((subtotal * 0.11) * 100) / 100;
+      const gst = Math.round((afterDiscount / 11) * 100) / 100;
 
       // Set calculated fields on quote object for email template
       quote.subtotal = subtotal;
