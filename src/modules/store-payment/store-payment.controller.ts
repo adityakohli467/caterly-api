@@ -108,16 +108,4 @@ export class StorePaymentController {
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   }
-
-  @Post('3ds-callback')
-  @ApiOperation({ summary: 'Handle Fat Zebra 3DS callback (TermUrl)' })
-  async handle3dsCallback(
-    @Body() body: any,
-    @Res() res: Response,
-  ) {
-    // PaRes and MD are posted by the ACS (bank)
-    const html = await this.storePaymentService.handle3dsCallback(body);
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
-  }
 }

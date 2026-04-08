@@ -125,6 +125,9 @@ export class Order {
   @Column({ type: "text", nullable: true })
   order_comments!: string
 
+  @Column({ type: "text", nullable: true })
+  cancel_comment!: string
+
   @Column({ type: "int", nullable: true })
   company_id!: number
 

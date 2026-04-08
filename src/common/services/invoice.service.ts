@@ -825,7 +825,7 @@ export class InvoiceService {
         }
 
         // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-        const gstLabel = data.is_quote ? 'GST (11%):' : 'GST (11%) (Included):';
+        const gstLabel = data.is_quote ? 'GST:' : 'GST (Included):';
         doc.text(gstLabel, totalsX, currentY, { width: 120, align: 'right' });
         doc.text(`$${data.gst.toFixed(2)}`, totalsX + 130, currentY, { width: 90, align: 'right' });
         currentY += 10;
