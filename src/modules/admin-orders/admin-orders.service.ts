@@ -91,6 +91,10 @@ export class AdminOrdersService implements OnModuleInit {
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_time') THEN
             ALTER TABLE orders ADD COLUMN delivery_time VARCHAR(50);
           END IF;
+          -- cancel_comment
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='cancel_comment') THEN
+            ALTER TABLE orders ADD COLUMN cancel_comment TEXT;
+          END IF;
 
           -- order_product columns
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='order_product_comment') THEN
