@@ -875,12 +875,12 @@ export class InvoiceService {
         }
 
         // Payment Terms Section
-        doc.fontSize(7).font('Helvetica-Bold');
+        doc.fontSize(9).font('Helvetica-Bold').fillColor('#111111');
         doc.text('Payment Terms:', 40, currentY);
-        doc.font('Helvetica').fontSize(6);
+        doc.font('Helvetica').fontSize(8).fillColor('#111111');
         const paymentTerms = 'Full payment is required within 7 days of invoice date unless otherwise agreed. Please include the invoice number as your payment reference.';
-        doc.text(paymentTerms, 40, currentY + 8, { width: 520 });
-        currentY += doc.heightOfString(paymentTerms, { width: 520 }) + 15;
+        doc.text(paymentTerms, 40, currentY + 10, { width: 520 });
+        currentY += doc.heightOfString(paymentTerms, { width: 520 }) + 18;
 
         // Order Comments Section
         if (data.order_comments) {
@@ -901,11 +901,11 @@ export class InvoiceService {
 
           // Location Information
           if (data.location_name || data.location_address || data.location_phone) {
-            doc.fontSize(6).font('Helvetica-Bold').fillColor(darkGray);
+            doc.fontSize(8).font('Helvetica-Bold').fillColor('#111111');
             doc.text('Location Information:', 40, footerTextY, { width: 520, align: 'left' });
             footerTextY = doc.y + 1;
 
-            doc.font('Helvetica').fontSize(6).fillColor(lightGray);
+            doc.font('Helvetica').fontSize(8).fillColor('#111111');
             const locationInfo: string[] = [];
             if (data.location_name) locationInfo.push(data.location_name);
             if (data.location_address) locationInfo.push(data.location_address);
@@ -919,18 +919,22 @@ export class InvoiceService {
 
           // Bank Account Information
           if (data.bank_account_name || data.bank_account_number || data.bank_bsb) {
-            doc.fontSize(6).font('Helvetica-Bold').fillColor(darkGray);
+            doc.fontSize(8).font('Helvetica-Bold').fillColor('#111111');
             doc.text('Payment Information:', 40, footerTextY, { width: 520, align: 'left' });
             footerTextY = doc.y + 1;
 
-            doc.font('Helvetica').fontSize(6).fillColor(lightGray);
             const bankInfo: string[] = [];
             if (data.bank_account_name) bankInfo.push(`Account Name: ${data.bank_account_name}`);
             if (data.bank_bsb) bankInfo.push(`BSB: ${data.bank_bsb}`);
             if (data.bank_account_number) bankInfo.push(`Account No: ${data.bank_account_number}`);
 
-            doc.text(bankInfo.join(' | '), 40, footerTextY, { width: 520, align: 'left' });
-            footerTextY = doc.y + 2;
+            const bankInfoText = bankInfo.join(' | ');
+            const bankInfoHeight = doc.heightOfString(bankInfoText, { width: 516 });
+            // Highlight background for account details
+            doc.rect(40, footerTextY, 520, bankInfoHeight + 4).fillColor('#FFF9C4').fill();
+            doc.font('Helvetica-Bold').fontSize(8).fillColor('#111111');
+            doc.text(bankInfoText, 42, footerTextY + 2, { width: 516, align: 'left' });
+            footerTextY = doc.y + 4;
           }
 
           // Thank you message
