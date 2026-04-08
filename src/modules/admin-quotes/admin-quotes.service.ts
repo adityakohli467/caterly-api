@@ -1474,6 +1474,7 @@ export class AdminQuotesService {
       // Check if coupon_id exists (even if JOIN returns NULL due to deleted coupon)
       if (quote.coupon_id) {
         // First, try to use stored coupon_discount from orders table (for historical accuracy)
+        // Cap coupon discount at subtotal — cannot discount more than the order value
         if (quote.coupon_discount && parseFloat(quote.coupon_discount.toString()) > 0) {
           couponDiscount = Math.min(parseFloat(quote.coupon_discount.toString()), subtotal);
           couponCode = quote.coupon_code || 'DELETED';
@@ -1485,17 +1486,17 @@ export class AdminQuotesService {
           } else if (quote.coupon_type === 'F') {
             couponDiscount = parseFloat(quote.coupon_discount.toString());
           }
+          // Always cap at subtotal
           couponDiscount = Math.min(couponDiscount, subtotal);
         }
       }
 
       const finalCouponDiscount = couponDiscount;
-      // afterDiscount should never go below 0
+      // afterDiscount must never go below 0 — coupon cannot exceed the subtotal
       const afterDiscount = Math.max(0, subtotal - finalCouponDiscount);
       const deliveryFee = parseFloat(quote.delivery_fee || 0);
       const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-      // GST is inclusive: calculate as 1/11 of the after-discount amount (coupon applied before GST)
-      // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+      // GST is inclusive: calculate as 1/11 of afterDiscount (never negative)
       const gst = Math.round((afterDiscount / 11) * 100) / 100;
 
       // Set calculated fields on quote object for email template
