@@ -29,13 +29,6 @@ export interface FatZebraResponse {
     authorization?: string;
     transaction_id?: string;
     errors?: string[];
-    three_ds?: {
-        required: boolean;
-        acs_url: string;
-        pa_req: string;
-        md: string;
-        term_url: string;
-    };
 }
 
 @Injectable()
@@ -80,8 +73,7 @@ export class FatZebraService {
         try {
             this.logger.log(`Creating Fat Zebra purchase for reference: ${data.reference}`);
 
-            // Add 3DS request fields
-            const payload: any = {
+            const payload = {
                 amount: data.amount,
                 reference: data.reference,
                 customer_ip: data.customer_ip,
@@ -89,10 +81,6 @@ export class FatZebraService {
                 card_number: data.card_number,
                 card_expiry: data.card_expiry,
                 cvv: data.cvv,
-                three_ds: {
-                    request: true,
-                    return_url: `${this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000'}/store/payment/3ds-callback`
-                }
             };
 
             const response = await this.apiClient.post('/purchases', payload);
@@ -110,39 +98,18 @@ export class FatZebraService {
         try {
             this.logger.log(`Creating Fat Zebra token purchase for reference: ${data.reference}`);
 
-            // Add 3DS request fields
-            const payload: any = {
+            const payload = {
                 amount: data.amount,
                 reference: data.reference,
                 customer_ip: data.customer_ip,
                 token: data.token,
                 cvv: data.cvv,
-                three_ds: {
-                    request: true,
-                    return_url: `${this.configService.get<string>('BACKEND_URL') || 'http://localhost:9000'}/store/payment/3ds-callback`
-                }
             };
 
             const response = await this.apiClient.post('/purchases', payload);
             return response.data;
         } catch (error: any) {
             this.logger.error('Fat Zebra token purchase error:', error.response?.data || error.message);
-            throw error;
-        }
-    }
-
-    /**
-     * Complete 3DS authentication with Fat Zebra
-     */
-    async complete3ds(data: { PaRes: string, MD: string }): Promise<any> {
-        try {
-            const response = await this.apiClient.post('/3ds/complete', {
-                PaRes: data.PaRes,
-                MD: data.MD,
-            });
-            return response.data;
-        } catch (error: any) {
-            this.logger.error('Fat Zebra 3DS complete error:', error.response?.data || error.message);
             throw error;
         }
     }

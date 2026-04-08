@@ -91,6 +91,10 @@ export class AdminOrdersService implements OnModuleInit {
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='delivery_time') THEN
             ALTER TABLE orders ADD COLUMN delivery_time VARCHAR(50);
           END IF;
+          -- cancel_comment
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='cancel_comment') THEN
+            ALTER TABLE orders ADD COLUMN cancel_comment TEXT;
+          END IF;
 
           -- order_product columns
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_product' AND column_name='order_product_comment') THEN
@@ -434,7 +438,7 @@ export class AdminOrdersService implements OnModuleInit {
         COALESCE(o.firstname, c.firstname) as firstname,
         COALESCE(o.lastname, c.lastname) as lastname,
         COALESCE(o.email, c.email) as email,
-        COALESCE(o.telephone, COALESCE(o.telephone, c.telephone) as telephone) as telephone,
+        COALESCE(o.telephone, c.telephone) as telephone,
         c.customer_type,
         COALESCE(o.company_id, c.company_id) as company_id,
         COALESCE(o.department_id, d.department_id) as department_id,
@@ -1693,7 +1697,7 @@ export class AdminOrdersService implements OnModuleInit {
         CAST(o.order_id AS TEXT) ILIKE $${paramIndex} OR
         c.firstname ILIKE $${paramIndex} OR
         c.lastname ILIKE $${paramIndex} OR
-        CONCAT(COALESCE(o.firstname, c.firstname) as firstname, ' ', c.lastname) ILIKE $${paramIndex}
+        CONCAT(COALESCE(o.firstname, c.firstname), ' ', c.lastname) ILIKE $${paramIndex}
       )`;
       params.push(`%${search}%`);
       paramIndex++;

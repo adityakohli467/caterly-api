@@ -394,20 +394,6 @@ export class StorePaymentService {
         });
       }
 
-      // Handle 3DS authentication flow
-      if (fatZebraResponse.three_ds && fatZebraResponse.three_ds.required) {
-        // Return ACS (3DS) redirect info to frontend
-        return {
-          success: false,
-          three_ds_required: true,
-          acs_url: fatZebraResponse.three_ds.acs_url,
-          pa_req: fatZebraResponse.three_ds.pa_req,
-          md: fatZebraResponse.three_ds.md,
-          term_url: fatZebraResponse.three_ds.term_url,
-          message: '3D Secure authentication required. Redirect to ACS.'
-        };
-      }
-
       if (fatZebraResponse.successful) {
         // Double-check order hasn't been paid
         const checkQuery = await queryRunner.query(
@@ -588,7 +574,7 @@ export class StorePaymentService {
         <h3>Order Details</h3>
         <div class="order-info"><strong>Order Number:</strong> #${orderId}</div>
         <div class="order-info"><strong>Order Total:</strong> $${orderTotal.toFixed(2)}</div>
-        <div class="order-info"><strong>GST (11%):</strong> Included in total</div>
+        <div class="order-info"><strong>GST:</strong> Included in total</div>
         ${order.delivery_date_time ? `<div class="order-info"><strong>Delivery Date:</strong> ${new Date(order.delivery_date_time).toLocaleDateString()}</div>` : ''}
         ${order.delivery_address ? `<div class="order-info"><strong>Delivery Address:</strong> ${order.delivery_address}</div>` : ''}
       </div>
@@ -634,64 +620,6 @@ export class StorePaymentService {
 
     } catch (emailError) {
       this.logger.error("Failed to send payment confirmation email:", emailError);
-    }
-  }
-
-  /**
-   * Handle Fat Zebra 3DS callback (TermUrl)
-   * POST /store/payment/3ds-callback
-   */
-  async handle3dsCallback(body: any): Promise<string> {
-    const { PaRes, MD } = body;
-    if (!PaRes || !MD) {
-      return '<html><body><h2>3D Secure authentication failed: Missing parameters.</h2></body></html>';
-    }
-
-    // Complete 3DS authentication with Fat Zebra
-    try {
-      const response = await this.fatZebraService.complete3ds({ PaRes, MD });
-      // The response should include transaction details and reference
-      if (response.successful) {
-        // Mark order as paid (reuse logic from handleFatZebraCallback)
-        // Extract orderId from reference
-        const reference = response.reference;
-        const orderIdMatch = reference.match(/Order #(\d+)/);
-        const orderId = orderIdMatch ? parseInt(orderIdMatch[1]) : parseInt(reference);
-        if (!orderId || isNaN(orderId)) {
-          return '<html><body><h2>Payment completed, but could not match order.</h2></body></html>';
-        }
-        // Update order status
-        const queryRunner = this.dataSource.createQueryRunner();
-        await queryRunner.connect();
-        await queryRunner.startTransaction();
-        try {
-          await queryRunner.query(
-            `UPDATE orders 
-             SET order_status = 2,
-                 payment_status = 'paid', 
-                 payment_date = NOW(),
-                 mark_paid_comment = 'Paid via Fat Zebra 3DS - Transaction: ${response.id}',
-                 date_modified = NOW()
-             WHERE order_id = $1`,
-            [orderId]
-          );
-          await queryRunner.commitTransaction();
-        } catch (err) {
-          await queryRunner.rollbackTransaction();
-          throw err;
-        } finally {
-          await queryRunner.release();
-        }
-        // Redirect to payment success page
-        const frontendUrl = this.configService.get<string>('FRONTEND_URL') ||
-          this.configService.get<string>('ADMIN_PORTAL_URL') ||
-          'http://localhost:3000';
-        return this.generateRedirectHtml(`${frontendUrl}/payment/success?order_id=${orderId}`, 'Payment Successful');
-      } else {
-        return `<html><body><h2>3D Secure authentication failed: ${response.message || 'Unknown error'}.</h2></body></html>`;
-      }
-    } catch (err: any) {
-      return `<html><body><h2>3D Secure authentication failed: ${err.message || 'Unknown error'}.</h2></body></html>`;
     }
   }
 
@@ -759,7 +687,7 @@ export class StorePaymentService {
           <td>$${orderTotal.toFixed(2)}</td>
         </tr>
         <tr>
-          <td class="label">GST (11%):</td>
+          <td class="label">GST:</td>
           <td>Included in total</td>
         </tr>
         <tr>
