@@ -217,9 +217,44 @@ export class AdminSubscriptionsService {
       }
     }
 
+    // Calculate totals
+    let subtotal = 0;
+    if (subscription.products) {
+      for (const product of subscription.products) {
+        subtotal += parseFloat(product.total || 0);
+      }
+    }
+
+    const deliveryFee = parseFloat(subscription.delivery_fee || 0);
+    const lateFee = parseFloat(subscription.late_fee || 0);
+
+    // Calculate coupon discount
+    let couponDiscount = 0;
+    if (subscription.coupon_id) {
+      if (subscription.coupon_code && subscription.coupon_discount) {
+        if (subscription.coupon_type === 'P') {
+          couponDiscount = subtotal * (parseFloat(subscription.coupon_discount) / 100);
+        } else if (subscription.coupon_type === 'F') {
+          couponDiscount = parseFloat(subscription.coupon_discount);
+        }
+        couponDiscount = Math.min(couponDiscount, subtotal + deliveryFee + lateFee);
+      }
+    }
+
+    const afterDiscount = Math.max(0, subtotal - couponDiscount);
+    const orderTotal = Math.round((subtotal + deliveryFee + lateFee - couponDiscount) * 100) / 100;
+    const gst = Math.round(subtotal * 0.11 * 100) / 100;
+
     return {
       subscription: {
         ...subscription,
+        subtotal,
+        coupon_discount: couponDiscount,
+        total_discount: couponDiscount,
+        after_discount: afterDiscount,
+        gst,
+        calculated_total: orderTotal,
+        order_total: orderTotal,
         frequency_days: days,
         frequency_label: label,
         start_date: subscription.delivery_date_time || null,
