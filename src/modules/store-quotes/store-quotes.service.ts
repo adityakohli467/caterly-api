@@ -257,12 +257,11 @@ export class StoreQuotesService {
     }
 
     const finalCouponDiscount = couponDiscount;
-    const afterDiscount = subtotal - finalCouponDiscount;
-    // GST is inclusive: calculate as 11%
+    const afterDiscount = Math.max(0, subtotal - finalCouponDiscount);
     // Total = afterDiscount + deliveryFee (inclusive of GST)
-    const calculatedTotal = afterDiscount + parseFloat(quote.delivery_fee || 0);
-    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    const gst = afterDiscount * 0.11; // Calculate GST as 11% (product price only)
+    const calculatedTotal = Math.round((afterDiscount + parseFloat(quote.delivery_fee || 0)) * 100) / 100;
+    // GST is inclusive (1/11 of after-discount amount). Display only, not added to total.
+    const gst = Math.round((afterDiscount / 11) * 100) / 100;
 
     // Add calculated fields
     quote.subtotal = subtotal;

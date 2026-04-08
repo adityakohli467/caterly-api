@@ -300,9 +300,9 @@ export class AdminQuotesService {
       }
 
       const finalCouponDiscount = couponDiscount;
-      const afterDiscount = subtotal - finalCouponDiscount;
+      const afterDiscount = Math.max(0, subtotal - finalCouponDiscount);
       const deliveryFee = parseFloat(row.delivery_fee || 0);
-      const gst = Math.round((subtotal * 0.11) * 100) / 100;
+      const gst = Math.round((afterDiscount / 11) * 100) / 100;
       const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
 
       return {
