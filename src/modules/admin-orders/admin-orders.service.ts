@@ -1865,12 +1865,17 @@ export class AdminOrdersService implements OnModuleInit {
             <h2>${isQuote ? 'Quote' : 'Order Confirmation'}</h2>
           </div>
           <div class="content">
-            <p>Dear ${order.customer_order_name || 'Customer'},</p>
-            <p>Please find attached the ${documentType.toLowerCase()} for your ${isQuote ? 'requested quote' : 'order'} #${order.order_id}.</p>
-            
-            ${customMessage ? `<p>${customMessage}</p>` : ''}
-            
-            <p>Thank you for choosing Caterly!</p>
+            <!-- <p>Dear ${order.customer_order_name || 'Customer'},</p> -->
+            <!-- <p>Please find attached the ${documentType.toLowerCase()} for your ${isQuote ? 'requested quote' : 'order'} #${order.order_id}.</p> -->
+            <!-- ${customMessage ? `<p>${customMessage}</p>` : ''} -->
+            <!-- <p>Thank you for choosing Caterly!</p> -->
+
+            <p>Hi, ${order.customer_order_name || 'Customer'}</p>
+            <p>We hope you're doing well. Please find your invoice attached for the recent order with Caterly.</p>
+            <p>We kindly request you to review the details and process the payment at your earliest convenience.</p>
+            <p>If you have any questions or require any clarification, please feel free to reach out. We're always happy to assist.</p>
+            <p>Thank you for choosing Caterly. We truly appreciate your support and look forward to serving you again.</p>
+            <p>Warm regards,<br>The Caterly Team</p>
           </div>
           <div class="footer">
             <p>If you have any questions, please contact us at catering@caterly.com.au</p>
