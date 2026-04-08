@@ -434,7 +434,7 @@ export class AdminOrdersService implements OnModuleInit {
         COALESCE(o.firstname, c.firstname) as firstname,
         COALESCE(o.lastname, c.lastname) as lastname,
         COALESCE(o.email, c.email) as email,
-        COALESCE(o.telephone, COALESCE(o.telephone, c.telephone) as telephone) as telephone,
+        COALESCE(o.telephone, c.telephone) as telephone,
         c.customer_type,
         COALESCE(o.company_id, c.company_id) as company_id,
         COALESCE(o.department_id, d.department_id) as department_id,
@@ -1693,7 +1693,7 @@ export class AdminOrdersService implements OnModuleInit {
         CAST(o.order_id AS TEXT) ILIKE $${paramIndex} OR
         c.firstname ILIKE $${paramIndex} OR
         c.lastname ILIKE $${paramIndex} OR
-        CONCAT(COALESCE(o.firstname, c.firstname) as firstname, ' ', c.lastname) ILIKE $${paramIndex}
+        CONCAT(COALESCE(o.firstname, c.firstname), ' ', c.lastname) ILIKE $${paramIndex}
       )`;
       params.push(`%${search}%`);
       paramIndex++;
