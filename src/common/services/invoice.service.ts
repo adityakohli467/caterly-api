@@ -224,10 +224,14 @@ export class InvoiceService {
       const productTotal = (basePrice * quantity) + optionsSum;
       subtotal += productTotal;
 
+      // Calculate effective unit price (total including options divided by quantity)
+      // This ensures that if the base price is 0 but there are options, the unit price shows correctly
+      const effectivePrice = basePrice > 0 ? basePrice : (productTotal / (quantity || 1));
+
       return {
         product_name: row.product_name,
         quantity: parseInt(row.quantity),
-        price: parseFloat(row.price),
+        price: effectivePrice,
         total: productTotal,
         comment: row.order_product_comment || undefined,
         product_desc_1: row.product_desc_1 || undefined,
@@ -257,7 +261,7 @@ export class InvoiceService {
         } else if (order.coupon_type === 'F') {
           couponDiscount = parseFloat(order.coupon_discount);
         }
-        couponDiscount = Math.min(couponDiscount, subtotal);
+        couponDiscount = Math.min(couponDiscount, subtotal + deliveryFee + parseFloat(order.late_fee || 0));
       } else {
         // Coupon was deleted - calculate from stored order_total (GST is inclusive)
         const tempAfterDiscount = subtotal;
@@ -275,13 +279,11 @@ export class InvoiceService {
 
     // Use stored total and GST if available, otherwise recalculate
     // This ensures consistency with what's stored in the database
-    const storedTotal = parseFloat(order.order_total || 0);
-    const storedGst = order.stored_gst !== null ? parseFloat(order.stored_gst) : null;
-
-    const total = storedTotal > 0 ? storedTotal : Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
-    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    // Calculate GST based on the original subtotal (before coupons) for consistency
-    const gst = Math.round(subtotal * 0.11 * 100) / 100;
+    const preDiscountTotal = subtotal + deliveryFee + lateFee;
+    const total = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
+    
+    // GST is 11% of (Product + Options + Delivery Fee + Late Fee)
+    const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);

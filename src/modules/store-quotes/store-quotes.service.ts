@@ -253,15 +253,16 @@ export class StoreQuotesService {
       } else if (quote.coupon_type === 'F') {
         couponDiscount = parseFloat(quote.coupon_discount);
       }
-      couponDiscount = Math.min(couponDiscount, subtotal);
+      couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(quote.delivery_fee || 0));
     }
 
     const finalCouponDiscount = couponDiscount;
-    const afterDiscount = Math.max(0, subtotal - finalCouponDiscount);
-    // Total = afterDiscount + deliveryFee (inclusive of GST)
-    const calculatedTotal = Math.round((afterDiscount + parseFloat(quote.delivery_fee || 0)) * 100) / 100;
-    // GST is inclusive (1/11 of after-discount amount). Display only, not added to total.
-    const gst = Math.round((afterDiscount / 11) * 100) / 100;
+    const afterDiscount = subtotal - couponDiscount;
+    const preDiscountTotal = subtotal + parseFloat(quote.delivery_fee || 0) + parseFloat(quote.late_fee || 0);
+    const calculatedTotal = Math.round((preDiscountTotal - finalCouponDiscount) * 100) / 100;
+
+    // GST is 11% of (Product + Options + Delivery Fee + Late Fee)
+    const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
 
     // Add calculated fields
     quote.subtotal = subtotal;

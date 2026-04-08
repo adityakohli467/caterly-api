@@ -205,6 +205,8 @@ export class AdminQuotesService {
         SELECT 
           op.order_id,
           op.order_product_id,
+          op.price,
+          op.quantity,
           op.total as product_total,
           COALESCE((
             SELECT SUM(opo.option_price * opo.option_quantity)
@@ -221,7 +223,10 @@ export class AdminQuotesService {
           productsMap.set(row.order_id, 0);
         }
         const currentSubtotal = productsMap.get(row.order_id);
-        productsMap.set(row.order_id, currentSubtotal + parseFloat(row.product_total || 0) + parseFloat(row.options_total || 0));
+        // Calculate total manually to avoid missing options or double-counting
+        const productBaseTotal = parseFloat(row.price || 0) * parseFloat(row.quantity || 0);
+        const optionsTotal = parseFloat(row.options_total || 0);
+        productsMap.set(row.order_id, currentSubtotal + productBaseTotal + optionsTotal);
       });
     }
 
@@ -280,7 +285,7 @@ export class AdminQuotesService {
           } else if (row.coupon_type === 'F') {
             couponDiscount = parseFloat(row.coupon_discount);
           }
-          couponDiscount = Math.min(couponDiscount, subtotal);
+          couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(row.delivery_fee || 0));
         } else {
           // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
           const tempAfterDiscount = subtotal;
@@ -293,7 +298,7 @@ export class AdminQuotesService {
           if (storedTotal < tempTotal) {
             const discountIncludingGst = tempTotal - storedTotal;
             couponDiscount = discountIncludingGst / 1.1;
-            couponDiscount = Math.min(couponDiscount, subtotal);
+            couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(row.delivery_fee || 0));
             couponCode = 'DELETED';
           }
         }
@@ -347,8 +352,15 @@ export class AdminQuotesService {
               'product_name', COALESCE(p.product_name, 'Unknown Product'),
               'product_description', p.product_description,
               'quantity', op.quantity,
-              'price', op.price,
-              'total', op.total,
+              'price', CASE 
+                WHEN op.price = 0 THEN COALESCE((
+                  SELECT SUM(opo.option_price * opo.option_quantity) / NULLIF(op.quantity, 0)
+                  FROM order_product_option opo
+                  WHERE opo.order_product_id = op.order_product_id
+                ), 0)
+                ELSE op.price 
+              END,
+              'total', (op.total),
               'product_comment', op.order_product_comment,
               'is_prepared', false,
               'options', COALESCE((
@@ -479,7 +491,7 @@ export class AdminQuotesService {
         } else if (quote.coupon_type === 'F') {
           couponDiscount = parseFloat(quote.coupon_discount);
         }
-        couponDiscount = Math.min(couponDiscount, subtotal);
+        couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(quote.delivery_fee || 0));
       } else {
         // Coupon was deleted but coupon_id exists - calculate discount from stored order_total
         const tempAfterDiscount = subtotal;
@@ -492,7 +504,7 @@ export class AdminQuotesService {
         if (storedTotal < tempTotal) {
           const discountIncludingGst = tempTotal - storedTotal;
           couponDiscount = discountIncludingGst / 1.1;
-          couponDiscount = Math.min(couponDiscount, subtotal);
+          couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(quote.delivery_fee || 0));
           couponCode = 'DELETED';
         }
       }
@@ -510,7 +522,7 @@ export class AdminQuotesService {
     quote.coupon_code = couponCode;
     quote.coupon_id = quote.coupon_id || null; // Ensure coupon_id is included
     quote.total_discount = finalCouponDiscount;
-    quote.after_discount = afterDiscount;
+    quote.after_discount = Math.max(0, afterDiscount);
     quote.gst = gst;
     quote.calculated_total = calculatedTotal;
     quote.order_total = calculatedTotal;
@@ -658,7 +670,7 @@ export class AdminQuotesService {
             couponDiscount = parseFloat(coupon.coupon_discount);
           }
 
-          couponDiscount = Math.min(couponDiscount, subtotal);
+          couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(delivery_fee.toString()));
         } else {
           // Log warning if coupon not found (for debugging)
           this.logger.warn(`Coupon not found or inactive: ${coupon_code} (normalized: ${normalizedCouponCode})`);
@@ -972,7 +984,7 @@ export class AdminQuotesService {
             couponDiscount = parseFloat(coupon.coupon_discount);
           }
 
-          couponDiscount = Math.min(couponDiscount, subtotal);
+          couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(delivery_fee.toString()));
         } else {
           // Log warning if coupon not found (for debugging)
           this.logger.warn(`Coupon not found or inactive: ${coupon_code} (normalized: ${normalizedCouponCode})`);
@@ -1468,15 +1480,16 @@ export class AdminQuotesService {
         }
       }
 
+      const deliveryFee = parseFloat(quote.delivery_fee || 0);
+
       // Calculate coupon discount
       let couponDiscount = 0;
       let couponCode: string | null = quote.coupon_code || null;
       // Check if coupon_id exists (even if JOIN returns NULL due to deleted coupon)
       if (quote.coupon_id) {
         // First, try to use stored coupon_discount from orders table (for historical accuracy)
-        // Cap coupon discount at subtotal — cannot discount more than the order value
         if (quote.coupon_discount && parseFloat(quote.coupon_discount.toString()) > 0) {
-          couponDiscount = Math.min(parseFloat(quote.coupon_discount.toString()), subtotal);
+          couponDiscount = parseFloat(quote.coupon_discount.toString());
           couponCode = quote.coupon_code || 'DELETED';
         } else if (quote.coupon_code && quote.coupon_discount) {
           // Coupon information available from JOIN - recalculate to ensure accuracy
@@ -1486,18 +1499,18 @@ export class AdminQuotesService {
           } else if (quote.coupon_type === 'F') {
             couponDiscount = parseFloat(quote.coupon_discount.toString());
           }
-          // Always cap at subtotal
-          couponDiscount = Math.min(couponDiscount, subtotal);
+          couponDiscount = Math.min(couponDiscount, subtotal + deliveryFee);
         }
+        // Allow coupon to cover total
+        couponDiscount = Math.min(couponDiscount, subtotal + deliveryFee);
       }
 
       const finalCouponDiscount = couponDiscount;
-      // afterDiscount must never go below 0 — coupon cannot exceed the subtotal
-      const afterDiscount = Math.max(0, subtotal - finalCouponDiscount);
-      const deliveryFee = parseFloat(quote.delivery_fee || 0);
+      const afterDiscount = subtotal - finalCouponDiscount;
       const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-      // GST is inclusive: calculate as 1/11 of afterDiscount (never negative)
-      const gst = Math.round((afterDiscount / 11) * 100) / 100;
+      // GST is inclusive: calculate as 11% of the after-discount amount (product price only)
+      // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
+      const gst = Math.round((subtotal * 0.11) * 100) / 100;
 
       // Set calculated fields on quote object for email template
       quote.subtotal = subtotal;

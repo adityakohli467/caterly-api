@@ -221,6 +221,8 @@ export class StoreOrdersService implements OnModuleInit {
       }
 
       const afterWholesaleDiscount = subtotal - wholesaleDiscount;
+      const deliveryFeeValue = parseFloat((delivery_fee || 0).toString());
+      const preDiscountTotal = afterWholesaleDiscount + deliveryFeeValue;
 
       // Apply coupon if provided (after wholesale discount)
       let couponDiscount = 0;
@@ -238,25 +240,24 @@ export class StoreOrdersService implements OnModuleInit {
 
         if (coupon) {
           couponId = coupon.coupon_id;
-          // Apply coupon discount after wholesale discount
+          // Apply coupon discount (can cover both subtotal and delivery)
           if (coupon.type === 'P') {
             couponDiscount = afterWholesaleDiscount * (parseFloat(coupon.coupon_discount) / 100);
           } else if (coupon.type === 'F') {
             couponDiscount = parseFloat(coupon.coupon_discount);
           }
-          couponDiscount = Math.min(couponDiscount, afterWholesaleDiscount);
+          couponDiscount = Math.min(couponDiscount, preDiscountTotal);
         }
       }
 
-      const afterDiscount = afterWholesaleDiscount - couponDiscount;
-      const deliveryFee = parseFloat((delivery_fee || 0).toString());
+      const totalValue = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
+      const afterDiscount = Math.max(0, afterWholesaleDiscount - couponDiscount);
       const gstStatus = Number(gst_status || 0);
-      const baseTotal = afterDiscount + deliveryFee;
-      // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      // Use original subtotal for GST calculation to match storefront display
-      const gst = gstStatus ? Math.round(subtotal * 0.11 * 100) / 100 : 0;
-      // GST is not added to total for Caterly
-      const total = Math.round(baseTotal * 100) / 100;
+      const deliveryFee = deliveryFeeValue;
+      
+      // GST is for display only and is not added to subtotal or total. Base = (Product + Options + Delivery)
+      const gst = gstStatus ? Math.round((afterWholesaleDiscount + deliveryFee) * 0.11 * 100) / 100 : 0;
+      const total = totalValue;
 
       let parsedUnit = frequency_unit;
       let parsedValue = frequency_value;
@@ -709,13 +710,19 @@ export class StoreOrdersService implements OnModuleInit {
       });
     }
 
-    const afterDiscount = subtotal; // Assuming no discounts for guest order for now as per code
-    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    // Recalculate 11% of subtotal (after discount) consistently
-    const gstValue = Math.round(afterDiscount * 0.11 * 100) / 100;
+    const deliveryFee = parseFloat(order.delivery_fee || 0);
+    const lateFee = parseFloat(order.late_fee || 0);
+    const couponDiscount = parseFloat(order.coupon_discount || 0);
+    
+    const preDiscountTotal = subtotal + deliveryFee + lateFee;
+    
+    // GST is 11% of (Product + Options + Delivery Fee + Late Fee)
+    const gstValue = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+    
+    const orderTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
 
     // Ensure frontend gets total consistently
-    order.total = order.order_total;
+    order.total = orderTotal;
     order.gst = gstValue;
 
     return {
@@ -779,9 +786,6 @@ export class StoreOrdersService implements OnModuleInit {
       throw new NotFoundException('Order not found or access denied');
     }
 
-    // Ensure frontend gets total consistently
-    order.total = order.order_total;
-
     // Get order products with product names
     const productsQuery = `
       SELECT 
@@ -828,7 +832,6 @@ export class StoreOrdersService implements OnModuleInit {
     }
 
     // Calculate breakdown
-    const orderTotal = parseFloat(order.order_total || '0');
     const deliveryFee = parseFloat(order.delivery_fee || '0');
 
     // Calculate wholesale discount based on customer type
@@ -866,11 +869,12 @@ export class StoreOrdersService implements OnModuleInit {
       }
     }
 
-    const afterDiscount = afterWholesaleDiscount - couponDiscount;
-    const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    // Recalculate 11% of subtotal (after discount) consistently
-    const gstValue = Math.round(afterDiscount * 0.11 * 100) / 100;
+    const afterDiscount = subtotal - couponDiscount;
+    const preDiscountTotal = subtotal + deliveryFee;
+    const calculatedTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
+    
+    // GST is 11% of (Product + Options + Delivery Fee)
+    const gstValue = Math.round(preDiscountTotal * 0.11 * 100) / 100;
 
     return {
       order: {
@@ -884,7 +888,7 @@ export class StoreOrdersService implements OnModuleInit {
         after_discount: afterDiscount.toFixed(2),
         gst: gstValue.toFixed(2),
         delivery_fee: deliveryFee.toFixed(2),
-        total: orderTotal.toFixed(2),
+        total: calculatedTotal.toFixed(2),
         calculated_total: calculatedTotal.toFixed(2),
       },
     };

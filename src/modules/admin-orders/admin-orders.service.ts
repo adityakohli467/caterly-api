@@ -338,7 +338,11 @@ export class AdminOrdersService implements OnModuleInit {
           productsMap.set(row.order_id, 0);
         }
         const currentSubtotal = productsMap.get(row.order_id);
-        productsMap.set(row.order_id, currentSubtotal + parseFloat(row.product_total || 0) + parseFloat(row.options_total || 0));
+        // Calculate total manually to avoid double-counting or missing options
+        const baseTotal = parseFloat(row.price || 0) * parseFloat(row.quantity || 0);
+        const optionsTotal = parseFloat(row.options_total || 0);
+        
+        productsMap.set(row.order_id, currentSubtotal + baseTotal + optionsTotal);
       });
     }
 
@@ -362,7 +366,7 @@ export class AdminOrdersService implements OnModuleInit {
           } else if (row.coupon_type === 'F') {
             couponDiscount = parseFloat(row.coupon_discount);
           }
-          couponDiscount = Math.min(couponDiscount, subtotal);
+          couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(row.delivery_fee || 0));
         } else {
           // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
           // Calculate what the total should be without coupon (GST is inclusive)
@@ -381,10 +385,11 @@ export class AdminOrdersService implements OnModuleInit {
 
       const afterDiscount = subtotal - couponDiscount;
       const deliveryFee = parseFloat(row.delivery_fee || 0);
-      const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-      // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      // Recalculate 11% of subtotal (after discount) consistently
-      const gst = Math.round(afterDiscount * 0.11 * 100) / 100;
+      const preDiscountTotal = subtotal + deliveryFee;
+      const calculatedTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
+      
+      // GST is 11% of (Product + Options + Delivery Fee)
+      const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
 
       return {
         order_id: row.order_id,
@@ -460,10 +465,17 @@ export class AdminOrdersService implements OnModuleInit {
             json_build_object(
               'order_product_id', op.order_product_id,
               'product_id', op.product_id,
-              'product_name', COALESCE(p.product_name, 'Unknown Product'),
+               'product_name', COALESCE(p.product_name, 'Unknown Product'),
               'product_description', p.product_description,
               'quantity', op.quantity,
-              'price', op.price,
+              'price', CASE 
+                WHEN op.price = 0 THEN COALESCE((
+                  SELECT SUM(opo.option_price * opo.option_quantity) / NULLIF(op.quantity, 0)
+                  FROM order_product_option opo
+                  WHERE opo.order_product_id = op.order_product_id
+                ), 0)
+                ELSE op.price 
+              END,
               'total', op.total,
               'product_comment', op.order_product_comment,
               'item_comments', op.order_product_comment,
@@ -526,6 +538,9 @@ export class AdminOrdersService implements OnModuleInit {
       }
     }
 
+    const deliveryFee = parseFloat(order.delivery_fee || 0);
+    const lateFee = parseFloat(order.late_fee || 0);
+
     // Calculate coupon discount
     let couponDiscount = 0;
     let couponCode: string | null = order.coupon_code || null;
@@ -539,14 +554,13 @@ export class AdminOrdersService implements OnModuleInit {
         } else if (order.coupon_type === 'F') {
           couponDiscount = parseFloat(order.coupon_discount);
         }
-        couponDiscount = Math.min(couponDiscount, subtotal);
+        // Allow coupon to apply to total (subtotal + delivery)
+        couponDiscount = Math.min(couponDiscount, subtotal + deliveryFee + lateFee);
       } else {
         // Coupon was deleted but coupon_id exists - calculate discount from stored order_total
         // Calculate what the total should be without coupon (GST is inclusive)
         const tempAfterDiscount = subtotal;
-        const tempDeliveryFee = parseFloat(order.delivery_fee || 0);
-        const tempTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100; // Total is inclusive of GST
-        const tempGst = Math.round((tempTotal * 0.11) * 100) / 100; // Calculate GST as 11%
+        const tempTotal = Math.round((tempAfterDiscount + deliveryFee + lateFee) * 100) / 100; // Total is inclusive of GST
         // The difference is the coupon discount
         const storedTotal = parseFloat(order.order_total || 0);
         if (storedTotal < tempTotal) {
@@ -557,13 +571,12 @@ export class AdminOrdersService implements OnModuleInit {
     }
 
     const afterDiscount = subtotal - couponDiscount;
-    // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-    // Calculate GST based on the original subtotal (before coupons) for consistency
-    const gst = Math.round(subtotal * 0.11 * 100) / 100;
-    const deliveryFee = parseFloat(order.delivery_fee || 0);
-    const lateFee = parseFloat(order.late_fee || 0);
-    // GST is not added to total for Caterly
-    const orderTotal = Math.round((afterDiscount + deliveryFee + lateFee) * 100) / 100;
+    const preDiscountTotal = subtotal + deliveryFee + lateFee;
+    
+    // GST is 11% of (Product + Options + Delivery Fee + Late Fee)
+    const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+    
+    const orderTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
 
     // Check payment status from payment_history
     const paymentStatusQuery = `
@@ -620,7 +633,7 @@ export class AdminOrdersService implements OnModuleInit {
         coupon_code: couponCode,
         coupon_id: order.coupon_id || null, // Ensure coupon_id is included
         total_discount: couponDiscount,
-        after_discount: afterDiscount,
+        after_discount: Math.max(0, afterDiscount),
         gst: gst,
         late_fee: lateFee,
         calculated_total: orderTotal,
@@ -722,7 +735,8 @@ export class AdminOrdersService implements OnModuleInit {
             couponDiscount = parseFloat(coupon.coupon_discount);
           }
 
-          couponDiscount = Math.min(couponDiscount, subtotal);
+          // Allow coupon to apply to total (subtotal + delivery)
+          couponDiscount = Math.min(couponDiscount, subtotal + parseFloat((delivery_fee || 0).toString()));
         } else {
           // Log warning if coupon not found (for debugging)
           this.logger.warn(`Coupon not found or inactive: ${coupon_code} (normalized: ${normalizedCouponCode})`);
@@ -732,11 +746,11 @@ export class AdminOrdersService implements OnModuleInit {
       const totalDiscount = couponDiscount;
       const afterDiscount = subtotal - couponDiscount;
       const deliveryFeeAmount = parseFloat(delivery_fee || 0);
-      // GST is not added to total for Caterly
-      const orderTotal = Math.round((afterDiscount + deliveryFeeAmount) * 100) / 100;
-      // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      // Calculate GST based on the original subtotal (before coupons) for consistency
-      const gst = Math.round((subtotal * 0.11) * 100) / 100;
+      const preDiscountTotal = subtotal + deliveryFeeAmount;
+      const orderTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
+
+      // GST is for display only. Base = (Product + Options + Delivery)
+      const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
@@ -1041,14 +1055,18 @@ export class AdminOrdersService implements OnModuleInit {
             } else if (coupon.type === 'F') {
               couponDiscount = parseFloat(coupon.coupon_discount);
             }
-            couponDiscount = Math.min(couponDiscount, subtotal);
+            // Allow coupon to apply to total (subtotal + delivery)
+            couponDiscount = Math.min(couponDiscount, subtotal + parseFloat((finalDeliveryFee || currentOrder.delivery_fee || 0).toString()));
           }
         }
 
         const afterDiscount = subtotal - couponDiscount;
         const deliveryFeeAmountCalc = parseFloat(finalDeliveryFee || 0);
-        resolvedOrderTotal = Math.round((afterDiscount + deliveryFeeAmountCalc) * 100) / 100;
-        resolvedGst = Math.round((afterDiscount * 0.11) * 100) / 100;
+        const preDiscountTotal = subtotal + deliveryFeeAmountCalc;
+        resolvedOrderTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
+
+        // GST is for display only. Base = (Product + Options + Delivery)
+        resolvedGst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
         resolvedCouponDiscount = couponDiscount;
         resolvedCouponId = couponIdValue;
       }

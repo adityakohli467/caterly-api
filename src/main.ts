@@ -99,6 +99,12 @@ async function bootstrap() {
     res.redirect('/api-docs');
   });
 
+  // Redirect /Admin to the Admin Portal (Amplify)
+  app.getHttpAdapter().get('/Admin', (req, res) => {
+    const adminUrl = process.env.ADMIN_PORTAL_URL || 'https://main.d2u5hnzeh0mjr6.amplifyapp.com';
+    res.redirect(adminUrl);
+  });
+
   const port = process.env.PORT || 9000;
   await app.listen(port);
 
