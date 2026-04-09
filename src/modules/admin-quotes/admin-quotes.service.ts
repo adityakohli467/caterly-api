@@ -440,6 +440,7 @@ export class AdminQuotesService {
 
         if (hasOptions) {
           // Product has options - apply option-level discounts
+          // Do NOT add productSubtotal here as it is derived from option prices (double-count)
           for (const option of product.options) {
             const optionPrice = parseFloat(option.option_price || 0);
             const optionQuantity = option.option_quantity || 1;
@@ -458,8 +459,6 @@ export class AdminQuotesService {
               subtotal += optionPrice * optionQuantity;
             }
           }
-          // Add base product total
-          subtotal += productSubtotal;
         } else {
           // Product has no options - apply product-level discount
           const productDiscountPercentage = productDiscountsMap.get(product.product_id) || 0;
