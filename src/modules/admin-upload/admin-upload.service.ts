@@ -1,13 +1,13 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { S3Service } from '../../common/services/s3.service';
+import { FileUploadService } from '../../common/services/file-upload.service';
 
 @Injectable()
 export class AdminUploadService {
   private readonly logger = new Logger(AdminUploadService.name);
 
   constructor(
-    private s3Service: S3Service,
+    private fileUploadService: FileUploadService,
     private dataSource: DataSource,
   ) {}
 
@@ -26,7 +26,7 @@ export class AdminUploadService {
 
     for (const file of files) {
       try {
-        const result = await this.s3Service.uploadProductImage(
+        const result = await this.fileUploadService.uploadProductImage(
           file.buffer,
           productIdFinal,
           file.originalname,
@@ -65,7 +65,7 @@ export class AdminUploadService {
     }
 
     const file = files[0];
-    const result = await this.s3Service.uploadOrderImage(
+    const result = await this.fileUploadService.uploadOrderImage(
       file.buffer,
       orderId,
       file.originalname,

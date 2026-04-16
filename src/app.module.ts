@@ -64,7 +64,7 @@ import { AppService } from './app.service';
     ConfigModule,
     DatabaseModule,
     AuthModule,
-    CommonModule, // Common services (Email, S3, Invoice)
+    CommonModule, // Common services (Email, FileUpload, Invoice)
     ProductsModule,
     // Admin Modules
     AdminOrdersModule,

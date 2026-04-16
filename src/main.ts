@@ -2,6 +2,8 @@
 process.env.TZ = 'Australia/Sydney';
 
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { ValidationPipe, HttpException, HttpStatus } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
@@ -14,7 +16,7 @@ if (typeof globalThis.crypto === 'undefined') {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true, // Enable raw body for webhook signature verification
     // Enable all log levels so debug/verbose messages are printed to console
     logger: ['error','warn','log','debug','verbose'],
@@ -48,6 +50,11 @@ async function bootstrap() {
 
   // Global exception filter for consistent error messages
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  // Serve static uploads directory statically
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: '/uploads/',
+  });
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -90,17 +97,17 @@ async function bootstrap() {
   });
 
   // Health check endpoint
-  app.getHttpAdapter().get('/health', (req, res) => {
+  app.getHttpAdapter().get('/health', (req: any, res: any) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
   // Redirect root to Swagger docs
-  app.getHttpAdapter().get('/', (req, res) => {
+  app.getHttpAdapter().get('/', (req: any, res: any) => {
     res.redirect('/api-docs');
   });
 
   // Redirect /Admin to the Admin Portal (Amplify)
-  app.getHttpAdapter().get('/Admin', (req, res) => {
+  app.getHttpAdapter().get('/Admin', (req: any, res: any) => {
     const adminUrl = process.env.ADMIN_PORTAL_URL || 'https://main.d2u5hnzeh0mjr6.amplifyapp.com';
     res.redirect(adminUrl);
   });

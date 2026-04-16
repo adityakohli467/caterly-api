@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { S3Service } from '../../common/services/s3.service';
+import { FileUploadService } from '../../common/services/file-upload.service';
 import { PricingService } from '../../common/services/pricing.service';
 
 @Injectable()
@@ -9,7 +9,7 @@ export class AdminProductsService {
 
   constructor(
     private dataSource: DataSource,
-    private s3Service: S3Service,
+    private fileUploadService: FileUploadService,
     private pricingService: PricingService,
   ) { }
 
@@ -462,16 +462,16 @@ export class AdminProductsService {
 
       // Handle image uploads
       if (files && Array.isArray(files) && files.length > 0) {
-        this.logger.log(`Starting upload of ${files.length} image(s) to S3...`);
+        this.logger.log(`Starting upload of ${files.length} image(s)...`);
         for (const file of files) {
           try {
             const tempProductId = Date.now();
-            const result = await this.s3Service.uploadProductImage(
+            const result = await this.fileUploadService.uploadProductImage(
               file.buffer,
               tempProductId,
               file.originalname,
             );
-            this.logger.log(`✅ Successfully uploaded ${file.originalname} to S3: ${result.url}`);
+            this.logger.log(`✅ Successfully uploaded ${file.originalname}: ${result.url}`);
             uploadedImageUrls.push(result.url);
           } catch (error: any) {
             this.logger.error(`❌ Failed to upload ${file.originalname}:`, error);
@@ -745,15 +745,15 @@ export class AdminProductsService {
 
       // Handle image uploads
       if (files && Array.isArray(files) && files.length > 0) {
-        this.logger.log(`Starting upload of ${files.length} image(s) to S3 for product update...`);
+        this.logger.log(`Starting upload of ${files.length} image(s) for product update...`);
         for (const file of files) {
           try {
-            const result = await this.s3Service.uploadProductImage(
+            const result = await this.fileUploadService.uploadProductImage(
               file.buffer,
               Number(id),
               file.originalname,
             );
-            this.logger.log(`✅ Successfully uploaded ${file.originalname} to S3: ${result.url}`);
+            this.logger.log(`✅ Successfully uploaded ${file.originalname}: ${result.url}`);
             uploadedImageUrls.push(result.url);
           } catch (error: any) {
             this.logger.error(`❌ Failed to upload ${file.originalname}:`, error);
@@ -1081,7 +1081,13 @@ export class AdminProductsService {
       // Delete product categories
       await queryRunner.query('DELETE FROM product_category WHERE product_id = $1', [Number(id)]);
 
-      // Delete product images
+      // Get image URLs for disk cleanup before deleting records
+      const imagesToDelete = await queryRunner.query(
+        'SELECT image_url FROM product_images WHERE product_id = $1 UNION SELECT product_image as image_url FROM product WHERE product_id = $1 AND product_image IS NOT NULL',
+        [Number(id)],
+      );
+
+      // Delete product images from database
       await queryRunner.query('DELETE FROM product_images WHERE product_id = $1', [Number(id)]);
 
       // Delete product
@@ -1089,6 +1095,19 @@ export class AdminProductsService {
         'DELETE FROM product WHERE product_id = $1 RETURNING *',
         [Number(id)],
       );
+
+      // Perform disk cleanup AFTER successful DB deletion (but before commit)
+      for (const img of imagesToDelete) {
+        if (img.image_url && img.image_url.includes('/uploads/')) {
+          try {
+            const key = img.image_url.split('/uploads/')[1];
+            await this.fileUploadService.deleteFile(key);
+            this.logger.log(`Deleted local file: ${key}`);
+          } catch (err) {
+            this.logger.warn(`Failed to delete local file: ${img.image_url}`, err);
+          }
+        }
+      }
 
       await queryRunner.commitTransaction();
 
