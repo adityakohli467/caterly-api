@@ -1,0 +1,30 @@
+# Build artifacts
+dist/
+node_modules/
+*.log
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Environment
+.env
+
+# Scripts and tests in root
+scripts/
+test/
+inspect_orders_table.ts
+test-*.js
+*.txt
+*.json
+!package.json
+!package-lock.json
+!tsconfig*.json
+!nest-cli.json
+!email_config.json
+!db_settings.json
+!locations_cols.json
