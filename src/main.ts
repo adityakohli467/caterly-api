@@ -52,8 +52,19 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   // Serve static uploads directory statically
-  app.useStaticAssets(join(process.cwd(), 'uploads'), {
-    prefix: '/uploads/',
+  const uploadsPath = join(process.cwd(), 'uploads');
+  console.log(`\n📂 Serving static assets from: ${uploadsPath}`);
+  console.log(`🌐 Static prefix: /uploads`);
+  
+  app.useStaticAssets(uploadsPath, {
+    prefix: '/uploads',
+    // Ensure CORS headers are set for static assets to fix storefront display issues
+    setHeaders: (res) => {
+      res.set('Access-Control-Allow-Origin', '*');
+      res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.set('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    },
   });
 
   // Global validation pipe
