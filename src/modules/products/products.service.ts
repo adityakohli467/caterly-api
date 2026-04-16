@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Product } from '../../entities/Product';
 import { Category } from '../../entities/Category';
-import { S3Service } from '../../common/services/s3.service';
+import { FileUploadService } from '../../common/services/file-upload.service';
 
 @Injectable()
 export class ProductsService {
@@ -15,7 +15,7 @@ export class ProductsService {
     @InjectRepository(Category)
     private categoryRepository: Repository<Category>,
     private dataSource: DataSource,
-    private s3Service: S3Service,
+    private fileUploadService: FileUploadService,
   ) { }
 
   async findAll(query: any): Promise<any> {
@@ -171,12 +171,12 @@ export class ProductsService {
 
       // Handle image uploads
       if (files && Array.isArray(files) && files.length > 0) {
-        this.logger.log(`Starting upload of ${files.length} image(s) to S3...`);
+        this.logger.log(`Starting upload of ${files.length} image(s)...`);
         for (const file of files) {
           try {
             const tempProductId = Date.now();
-            const result = await this.s3Service.uploadProductImage(file.buffer, tempProductId, file.originalname);
-            this.logger.log(`✅ Successfully uploaded ${file.originalname} to S3: ${result.url}`);
+            const result = await this.fileUploadService.uploadProductImage(file.buffer, tempProductId, file.originalname);
+            this.logger.log(`✅ Successfully uploaded ${file.originalname}: ${result.url}`);
             uploadedImageUrls.push(result.url);
           } catch (error: any) {
             this.logger.error(`❌ Failed to upload ${file.originalname}:`, error);
@@ -413,7 +413,7 @@ export class ProductsService {
       if (files && Array.isArray(files) && files.length > 0) {
         for (const file of files) {
           try {
-            const result = await this.s3Service.uploadProductImage(file.buffer, id, file.originalname);
+            const result = await this.fileUploadService.uploadProductImage(file.buffer, id, file.originalname);
             uploadedImageUrls.push(result.url);
           } catch (error: any) {
             this.logger.error(`Failed to upload ${file.originalname}:`, error);

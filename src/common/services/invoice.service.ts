@@ -6,7 +6,7 @@ import PDFDocument from 'pdfkit';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { S3Service } from './s3.service';
+import { FileUploadService } from './file-upload.service';
 import { Order } from '../../entities/Order';
 
 export interface InvoiceData {
@@ -72,7 +72,7 @@ export class InvoiceService {
     @InjectRepository(Order)
     private orderRepository: Repository<Order>,
     private dataSource: DataSource,
-    private s3Service: S3Service,
+    private fileUploadService: FileUploadService,
     private configService: ConfigService,
   ) { }
 
@@ -83,7 +83,7 @@ export class InvoiceService {
     try {
       const orderData = await this.fetchOrderData(orderId);
       const pdfBuffer = await this.generatePDF(orderData);
-      const result = await this.s3Service.uploadInvoice(pdfBuffer, orderId);
+      const result = await this.fileUploadService.uploadInvoice(pdfBuffer, orderId);
 
       // Update order with invoice URL (if column exists)
       try {

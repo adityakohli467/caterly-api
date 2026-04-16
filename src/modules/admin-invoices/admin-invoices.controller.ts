@@ -24,7 +24,7 @@ export class AdminInvoicesController {
   constructor(private adminInvoicesService: AdminInvoicesService) {}
 
   @Post('generate')
-  @ApiOperation({ summary: 'Generate invoice PDF and upload to S3' })
+  @ApiOperation({ summary: 'Generate invoice PDF and upload to local storage' })
   @ApiBody({ schema: { type: 'object', properties: { order_id: { type: 'number' } }, required: ['order_id'] } })
   async generateInvoice(@Body() body: { order_id?: number }) {
     if (!body || typeof body !== 'object' || body.order_id === undefined || body.order_id === null) {
@@ -39,7 +39,7 @@ export class AdminInvoicesController {
   }
 
   @Get(':order_id')
-  @ApiOperation({ summary: 'Get invoice URL from S3' })
+  @ApiOperation({ summary: 'Get invoice URL' })
   async getInvoiceUrl(@Param('order_id', ParseIntPipe) orderId: number) {
     const url = await this.adminInvoicesService.getInvoiceUrl(orderId);
     return {

@@ -34,6 +34,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json
 COPY --from=deps /app/node_modules ./node_modules
 
+# Create uploads directory and set permissions for the non-root user
+# IMPORTANT: This directory MUST be mounted as a persistent volume in production
+RUN mkdir -p /app/uploads && chown -R nestjs:nodejs /app/uploads
+
 USER nestjs
 
 EXPOSE 9000
