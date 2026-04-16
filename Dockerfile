@@ -1,5 +1,5 @@
 # ---------------- base -------
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 WORKDIR /app
 
 # ---------------- deps ----------------
@@ -19,7 +19,7 @@ COPY . .
 RUN npm run build
 
 # ---------------- runner ----------------
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
