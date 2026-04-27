@@ -98,6 +98,9 @@ dist
 # Sveltekit cache directory
 .svelte-kit/
 
+# Server-specific config
+.htaccess
+
 # vitepress build output
 **/.vitepress/dist
 

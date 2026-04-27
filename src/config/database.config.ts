@@ -29,6 +29,7 @@ export const getDatabaseConfig = (configService: ConfigService): TypeOrmModuleOp
     'postgresql://postgres:postgres@localhost:5432/caterly_db';
 
   // SSL Detection Logic:
+  // - Can be explicitly disabled with DB_SSL=false
   // - Enable SSL for ANY non-localhost connection (AWS, RDS, remote servers)
   // - Disable SSL only for localhost in development
   // - Can be forced with DB_SSL=true environment variable
@@ -37,14 +38,16 @@ export const getDatabaseConfig = (configService: ConfigService): TypeOrmModuleOp
     dbUrl.includes('127.0.0.1') || 
     dbUrl.includes('::1');
 
+  const dbSslEnv = configService.get<string>('DB_SSL');
   const useSSL = 
-    !isLocalhost ||  // Not localhost = enable SSL (AWS, RDS, etc.)
-    configService.get<string>('DB_SSL') === 'true' ||  // Explicitly enabled
+    dbSslEnv === 'false' ? false :  // Explicitly disabled
+    dbSslEnv === 'true' ? true :  // Explicitly enabled
+    (!isLocalhost ||  // Not localhost = enable SSL (AWS, RDS, etc.)
     dbUrl.includes('rds.amazonaws.com') ||  // AWS RDS
     dbUrl.includes('.rds.') ||  // Any RDS endpoint pattern
     configService.get<string>('NODE_ENV') === 'production' ||  // Production = use SSL
     dbUrl.includes('?ssl=true') ||  // URL parameter
-    dbUrl.includes('?sslmode=require');  // URL parameter
+    dbUrl.includes('?sslmode=require'));  // URL parameter
 
   return {
     type: 'postgres',
