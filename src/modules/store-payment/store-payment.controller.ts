@@ -12,8 +12,8 @@ import {
   HttpCode,
   HttpStatus,
   Headers,
-  RawBodyRequest,
 } from '@nestjs/common';
+import type { RawBodyRequest } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { StorePaymentService } from './store-payment.service';
