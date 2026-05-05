@@ -9,6 +9,10 @@ import {
   Res,
   UseGuards,
   ParseIntPipe,
+  HttpCode,
+  HttpStatus,
+  Headers,
+  RawBodyRequest,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
@@ -22,8 +26,78 @@ export class StorePaymentController {
     private readonly storePaymentService: StorePaymentService,
   ) { }
 
+  // ─── Stripe Endpoints ───────────────────────────────────────────────
+
+  @Post('create-intent')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Create Stripe Payment Intent for an order' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        order_id: { type: 'number' },
+        email: { type: 'string' },
+      },
+      required: ['order_id'],
+    },
+  })
+  async createPaymentIntent(
+    @Body('order_id', ParseIntPipe) orderId: number,
+    @Body('email') email: string,
+    @Req() req: any,
+  ) {
+    return this.storePaymentService.createStripePaymentIntent(
+      orderId,
+      email,
+      req.ip,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Post('verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify Stripe payment after completion' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        payment_intent_id: { type: 'string' },
+        order_id: { type: 'number' },
+      },
+      required: ['payment_intent_id', 'order_id'],
+    },
+  })
+  async verifyPayment(
+    @Body('payment_intent_id') paymentIntentId: string,
+    @Body('order_id', ParseIntPipe) orderId: number,
+  ) {
+    return this.storePaymentService.verifyStripePayment(paymentIntentId, orderId);
+  }
+
+  @Get('status/:orderId')
+  @ApiOperation({ summary: 'Get payment status for an order' })
+  @ApiParam({ name: 'orderId', type: Number })
+  async getPaymentStatus(@Param('orderId', ParseIntPipe) orderId: number) {
+    return this.storePaymentService.getPaymentStatus(orderId);
+  }
+
+  @Post('stripe/webhook')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Handle Stripe webhook events' })
+  async handleStripeWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('stripe-signature') signature: string,
+    @Res() res: Response,
+  ) {
+    const rawBody = (req as any).rawBody || req.body;
+    const result = await this.storePaymentService.handleStripeWebhook(rawBody, signature);
+    res.json(result);
+  }
+
+  // ─── Legacy Fat Zebra Endpoints (kept for backward compatibility) ───
+
   @Post(':orderId/fatzebra-charge')
-  @ApiOperation({ summary: 'Process Fat Zebra payment charge' })
+  @ApiOperation({ summary: '[DEPRECATED] Process Fat Zebra payment charge' })
   @ApiParam({ name: 'orderId', type: Number })
   @ApiBody({
     schema: {
@@ -54,7 +128,7 @@ export class StorePaymentController {
   }
 
   @Get(':orderId/fatzebra-hpp')
-  @ApiOperation({ summary: 'Get Fat Zebra HPP form' })
+  @ApiOperation({ summary: '[DEPRECATED] Get Fat Zebra HPP form' })
   async fatZebraHpp(
     @Param('orderId', ParseIntPipe) orderId: number,
     @Res() res: Response,

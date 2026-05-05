@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 import { EmailService } from '../../common/services/email.service';
 import { ConfigService } from '@nestjs/config';
 import { FatZebraService } from '../../common/services/fatzebra.service';
+import { StripeService } from '../../common/services/stripe.service';
 import { NotificationService } from '../../common/services/notification.service';
 import { InvoiceService } from '../../common/services/invoice.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
@@ -23,10 +24,415 @@ export class StorePaymentService {
     private emailService: EmailService,
     private configService: ConfigService,
     private fatZebraService: FatZebraService,
+    private stripeService: StripeService,
     private notificationService: NotificationService,
     private invoiceService: InvoiceService,
     private adminNotificationsService: AdminNotificationsService,
   ) { }
+
+  // ─── Stripe Payment Methods ─────────────────────────────────────────
+
+  /**
+   * Create Stripe Payment Intent for an order (customer portal)
+   */
+  async createStripePaymentIntent(orderId: number, email: string, ipAddress?: string, userAgent?: string) {
+    if (!orderId || isNaN(orderId) || orderId <= 0) {
+      throw new BadRequestException('Valid order ID is required');
+    }
+
+    // Get order details
+    const orderQuery = `
+      SELECT 
+        o.order_id, o.order_total, o.order_status, o.payment_status,
+        o.customer_id, o.delivery_fee, o.late_fee, o.customer_order_name, o.customer_order_email,
+        c.email as customer_email, c.firstname, c.lastname, c.telephone as customer_phone
+      FROM orders o
+      LEFT JOIN customer c ON o.customer_id = c.customer_id
+      WHERE o.order_id = $1
+    `;
+    const orderResult = await this.dataSource.query(orderQuery, [orderId]);
+    const order = orderResult[0];
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Check if already paid
+    if (order.payment_status === 'paid' || order.payment_status === 'succeeded' || order.order_status === 2) {
+      throw new BadRequestException('Order is already paid');
+    }
+
+    // Check for existing pending payment intent (idempotency)
+    const existingIntentQuery = `
+      SELECT payment_transaction_id, gateway_response
+      FROM payment_history
+      WHERE order_id = $1 
+        AND payment_gateway = 'stripe' 
+        AND payment_status = 'pending'
+        AND payment_type = 'payment_intent'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    const existingIntent = await this.dataSource.query(existingIntentQuery, [orderId]);
+
+    if (existingIntent.length > 0) {
+      const existing = existingIntent[0];
+      const gatewayResponse = typeof existing.gateway_response === 'string'
+        ? JSON.parse(existing.gateway_response)
+        : existing.gateway_response;
+
+      // Verify the intent is still valid with Stripe
+      try {
+        await this.stripeService.initialize();
+        const status = await this.stripeService.getPaymentIntentStatus(existing.payment_transaction_id);
+        if (status.status !== 'canceled' && status.status !== 'succeeded') {
+          return {
+            success: true,
+            client_secret: gatewayResponse.clientSecret,
+            payment_intent_id: existing.payment_transaction_id,
+            order_id: orderId,
+            amount: parseFloat(order.order_total) + parseFloat(order.late_fee || 0),
+            currency: 'AUD',
+          };
+        }
+      } catch {
+        // Intent no longer valid, create a new one
+      }
+    }
+
+    // Initialize Stripe
+    await this.stripeService.initialize();
+
+    // Calculate total (order_total + late_fee)
+    const totalAmount = parseFloat(order.order_total || 0) + parseFloat(order.late_fee || 0);
+    const totalAmountCents = Math.round(totalAmount * 100);
+
+    if (totalAmountCents <= 0) {
+      throw new BadRequestException('Order total must be greater than zero');
+    }
+
+    const customerEmail = email || order.customer_order_email || order.customer_email || '';
+    const customerName = order.customer_order_name ||
+      `${order.firstname || ''} ${order.lastname || ''}`.trim() || '';
+
+    // Create Stripe Payment Intent
+    const paymentIntent = await this.stripeService.createPaymentIntent({
+      amount: totalAmountCents,
+      currency: 'aud',
+      orderId: orderId.toString(),
+      customerEmail,
+      customerName: customerName || undefined,
+      customerPhone: order.customer_phone || undefined,
+      description: `Order #${orderId}`,
+      metadata: {
+        order_id: orderId.toString(),
+        customer_id: order.customer_id?.toString() || '',
+        customer_name: customerName,
+      },
+    });
+
+    // Record in payment_history
+    const idempotencyKey = `store_order_${orderId}_${Date.now()}`;
+    await this.dataSource.query(
+      `INSERT INTO payment_history (
+        order_id, payment_transaction_id, payment_type, payment_status,
+        payment_gateway, amount, currency, gateway_response, request_id, idempotency_key,
+        customer_email, customer_id, ip_address, user_agent, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      [
+        orderId,
+        paymentIntent.paymentIntentId,
+        'payment_intent',
+        'pending',
+        'stripe',
+        totalAmount,
+        'AUD',
+        JSON.stringify(paymentIntent),
+        crypto.randomUUID(),
+        idempotencyKey,
+        customerEmail,
+        order.customer_id || null,
+        ipAddress || null,
+        userAgent || null,
+        JSON.stringify({ order_id: orderId, customer_id: order.customer_id }),
+      ]
+    );
+
+    return {
+      success: true,
+      client_secret: paymentIntent.clientSecret,
+      payment_intent_id: paymentIntent.paymentIntentId,
+      order_id: orderId,
+      amount: totalAmount,
+      currency: 'AUD',
+    };
+  }
+
+  /**
+   * Verify Stripe payment after client-side confirmation
+   */
+  async verifyStripePayment(paymentIntentId: string, orderId: number) {
+    if (!paymentIntentId) {
+      throw new BadRequestException('Payment Intent ID is required');
+    }
+    if (!orderId || isNaN(orderId) || orderId <= 0) {
+      throw new BadRequestException('Valid order ID is required');
+    }
+
+    await this.stripeService.initialize();
+    const paymentStatus = await this.stripeService.getPaymentIntentStatus(paymentIntentId);
+
+    if (paymentStatus.status === 'succeeded') {
+      // Update order and payment history
+      await this.markOrderAsPaid(orderId, paymentIntentId, paymentStatus);
+      return { success: true, status: 'succeeded', order_id: orderId };
+    }
+
+    return {
+      success: false,
+      status: paymentStatus.status,
+      order_id: orderId,
+      message: `Payment status: ${paymentStatus.status}`,
+    };
+  }
+
+  /**
+   * Get payment status for an order
+   */
+  async getPaymentStatus(orderId: number) {
+    if (!orderId || isNaN(orderId) || orderId <= 0) {
+      throw new BadRequestException('Valid order ID is required');
+    }
+
+    const orderQuery = `
+      SELECT order_id, order_total, order_status, payment_status, payment_date
+      FROM orders WHERE order_id = $1
+    `;
+    const orderResult = await this.dataSource.query(orderQuery, [orderId]);
+    if (orderResult.length === 0) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const order = orderResult[0];
+    const historyQuery = `
+      SELECT payment_history_id, payment_transaction_id, payment_type, payment_status,
+             payment_gateway, amount, refund_amount, currency, created_at
+      FROM payment_history
+      WHERE order_id = $1
+      ORDER BY created_at DESC
+    `;
+    const history = await this.dataSource.query(historyQuery, [orderId]);
+
+    return {
+      order_id: order.order_id,
+      order_total: order.order_total,
+      payment_status: order.payment_status,
+      payment_date: order.payment_date,
+      is_paid: order.payment_status === 'paid' || order.payment_status === 'succeeded' || order.order_status === 2,
+      payment_history: history,
+    };
+  }
+
+  /**
+   * Handle Stripe Webhook events
+   */
+  async handleStripeWebhook(rawBody: Buffer | string, signature: string) {
+    const webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
+    if (!webhookSecret) {
+      throw new InternalServerErrorException('Stripe webhook secret not configured');
+    }
+
+    await this.stripeService.initialize();
+    const event = this.stripeService.verifyWebhookSignature(rawBody, signature, webhookSecret);
+
+    this.logger.log(`Stripe webhook received: ${event.type}`);
+
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        await this.handlePaymentIntentSucceeded(event.data.object as any);
+        break;
+      case 'payment_intent.payment_failed':
+        await this.handlePaymentIntentFailed(event.data.object as any);
+        break;
+      case 'charge.refunded':
+        await this.handleChargeRefunded(event.data.object as any);
+        break;
+      default:
+        this.logger.log(`Unhandled webhook event: ${event.type}`);
+    }
+
+    return { received: true };
+  }
+
+  /**
+   * Handle payment_intent.succeeded webhook
+   */
+  private async handlePaymentIntentSucceeded(paymentIntent: any) {
+    const orderId = parseInt(paymentIntent.metadata?.order_id);
+    if (!orderId || isNaN(orderId)) {
+      this.logger.warn('Webhook: No valid order_id in payment_intent metadata');
+      return;
+    }
+
+    // Check if already processed
+    const orderCheck = await this.dataSource.query(
+      `SELECT order_status, payment_status FROM orders WHERE order_id = $1`,
+      [orderId]
+    );
+    if (orderCheck.length > 0 && (orderCheck[0].order_status === 2 || orderCheck[0].payment_status === 'paid')) {
+      this.logger.log(`Webhook: Order ${orderId} already paid, skipping`);
+      return;
+    }
+
+    await this.markOrderAsPaid(orderId, paymentIntent.id, {
+      paymentIntentId: paymentIntent.id,
+      status: paymentIntent.status,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      paymentMethod: paymentIntent.payment_method,
+      createdAt: paymentIntent.created,
+      metadata: paymentIntent.metadata,
+    });
+  }
+
+  /**
+   * Handle payment_intent.payment_failed webhook
+   */
+  private async handlePaymentIntentFailed(paymentIntent: any) {
+    const orderId = parseInt(paymentIntent.metadata?.order_id);
+    this.logger.error(`Stripe payment failed for order ${orderId}: ${paymentIntent.last_payment_error?.message}`);
+
+    // Update payment_history status
+    await this.dataSource.query(
+      `UPDATE payment_history 
+       SET payment_status = 'failed',
+           gateway_error = $1::jsonb,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE payment_transaction_id = $2`,
+      [
+        JSON.stringify({
+          error: paymentIntent.last_payment_error?.message || 'Payment failed',
+          code: paymentIntent.last_payment_error?.code,
+          decline_code: paymentIntent.last_payment_error?.decline_code,
+        }),
+        paymentIntent.id,
+      ]
+    );
+  }
+
+  /**
+   * Handle charge.refunded webhook
+   */
+  private async handleChargeRefunded(charge: any) {
+    const paymentIntentId = charge.payment_intent;
+    if (!paymentIntentId) return;
+
+    const refundAmountCents = charge.amount_refunded || 0;
+    const refundAmount = refundAmountCents / 100;
+
+    // Update payment_history refund_amount
+    await this.dataSource.query(
+      `UPDATE payment_history 
+       SET refund_amount = $1,
+           payment_status = CASE WHEN $1 >= amount THEN 'refunded' ELSE payment_status END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE payment_transaction_id = $2`,
+      [refundAmount, paymentIntentId]
+    );
+
+    // Get order_id and update order if fully refunded
+    const ph = await this.dataSource.query(
+      `SELECT order_id, amount FROM payment_history WHERE payment_transaction_id = $1`,
+      [paymentIntentId]
+    );
+    if (ph.length > 0 && refundAmount >= parseFloat(ph[0].amount)) {
+      await this.dataSource.query(
+        `UPDATE orders SET payment_status = 'refunded', date_modified = NOW() WHERE order_id = $1`,
+        [ph[0].order_id]
+      );
+    }
+  }
+
+  /**
+   * Mark order as paid and send confirmation
+   */
+  private async markOrderAsPaid(orderId: number, paymentIntentId: string, paymentData: any) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Lock and check order
+      const orderCheck = await queryRunner.query(
+        `SELECT order_status, payment_status, payment_date FROM orders WHERE order_id = $1 FOR UPDATE`,
+        [orderId]
+      );
+      if (orderCheck.length > 0 && (orderCheck[0].order_status === 2 || orderCheck[0].payment_status === 'paid')) {
+        await queryRunner.commitTransaction();
+        return; // Already paid
+      }
+
+      // Update order
+      await queryRunner.query(
+        `UPDATE orders 
+         SET order_status = 2,
+             payment_status = 'paid',
+             payment_date = NOW(),
+             mark_paid_comment = $1,
+             date_modified = NOW()
+         WHERE order_id = $2`,
+        [`Paid via Stripe - PaymentIntent: ${paymentIntentId}`, orderId]
+      );
+
+      // Update payment_history
+      await queryRunner.query(
+        `UPDATE payment_history 
+         SET payment_status = 'succeeded',
+             gateway_response = $1::jsonb,
+             processed_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE payment_transaction_id = $2`,
+        [JSON.stringify(paymentData), paymentIntentId]
+      );
+
+      await queryRunner.commitTransaction();
+
+      // Send confirmation email (async, don't block)
+      this.sendPostPaymentNotifications(orderId).catch(err =>
+        this.logger.error('Post-payment notification error:', err)
+      );
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Send payment confirmation email and admin notification
+   */
+  private async sendPostPaymentNotifications(orderId: number) {
+    const orderQuery = `
+      SELECT o.*, c.email, c.firstname, c.lastname
+      FROM orders o
+      LEFT JOIN customer c ON o.customer_id = c.customer_id
+      WHERE o.order_id = $1
+    `;
+    const orderResult = await this.dataSource.query(orderQuery, [orderId]);
+    if (orderResult.length === 0) return;
+
+    const order = orderResult[0];
+    await this.sendPaymentConfirmationEmail(orderId, order);
+
+    const customerName = order.customer_order_name ||
+      `${order.firstname || ''} ${order.lastname || ''}`.trim() || 'Guest';
+    await this.adminNotificationsService.createNotification({
+      type: 'order',
+      message: `Payment received for order #${orderId} by ${customerName} - $${parseFloat(order.order_total || 0).toFixed(2)}`,
+      order_id: orderId,
+    }).catch(err => this.logger.error('Failed to notify admin:', err));
+  }
 
   /**
    * Process Fat Zebra HPP payment (generate payment form)
