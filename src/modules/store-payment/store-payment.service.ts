@@ -1070,9 +1070,9 @@ export class StorePaymentService {
       ${logoAttachment ? '<img src="cid:logo" alt="Caterly Logo" class="logo">' : `<h1>${companyName}</h1>`}
     </div>
     <div class="content">
-      <div class="alert-header">NEW ORDER RECEIVED</div>
+      <div class="alert-header">PAYMENT RECEIVED</div>
       <p>Hello Admin,</p>
-      <p>A new order has been successfully paid and placed on the storefront.</p>
+      <p>A payment has been successfully received on the storefront.</p>
       
       <table class="details-table">
         <tr>
@@ -1126,7 +1126,7 @@ export class StorePaymentService {
 
       await this.emailService.sendEmail({
         to: adminEmail,
-        subject: `🚨 [NEW ORDER] #${orderId} - ${customerName}`,
+        subject: `🚨 Order #${orderId} - ${customerName} - Payment Received`,
         html: adminEmailHtml,
         attachments: attachments,
       });
