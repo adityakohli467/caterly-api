@@ -290,14 +290,11 @@ export class AdminQuotesService {
           // Coupon was deleted but coupon_id exists - use stored order_total to calculate discount
           const tempAfterDiscount = subtotal;
           const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
-          const tempPreGstTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100;
-          const tempGst = Math.round((tempPreGstTotal * 0.1) * 100) / 100;
-          const tempTotal = Math.round((tempPreGstTotal + tempGst) * 100) / 100;
+          const tempTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100; // GST-inclusive
 
           const storedTotal = parseFloat(row.order_total || 0);
           if (storedTotal < tempTotal) {
-            const discountIncludingGst = tempTotal - storedTotal;
-            couponDiscount = discountIncludingGst / 1.1;
+            couponDiscount = tempTotal - storedTotal;
             couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(row.delivery_fee || 0));
             couponCode = 'DELETED';
           }
@@ -495,14 +492,11 @@ export class AdminQuotesService {
         // Coupon was deleted but coupon_id exists - calculate discount from stored order_total
         const tempAfterDiscount = subtotal;
         const tempDeliveryFee = parseFloat(quote.delivery_fee || 0);
-        const tempPreGstTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100;
-        const tempGst = Math.round((tempPreGstTotal * 0.1) * 100) / 100;
-        const tempTotal = Math.round((tempPreGstTotal + tempGst) * 100) / 100;
+        const tempTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100; // GST-inclusive
 
         const storedTotal = parseFloat(quote.order_total || 0);
         if (storedTotal < tempTotal) {
-          const discountIncludingGst = tempTotal - storedTotal;
-          couponDiscount = discountIncludingGst / 1.1;
+          couponDiscount = tempTotal - storedTotal;
           couponDiscount = Math.min(couponDiscount, subtotal + parseFloat(quote.delivery_fee || 0));
           couponCode = 'DELETED';
         }
@@ -680,7 +674,7 @@ export class AdminQuotesService {
       const afterDiscount = subtotal - finalCouponDiscount;
       const orderTotal = Math.round((afterDiscount + parseFloat(delivery_fee.toString())) * 100) / 100;
       // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      const gst = Math.round((subtotal * 0.11) * 100) / 100;
+      const gst = Math.round((subtotal / 11) * 100) / 100;
 
       // Build delivery_date_time: only set if both date and time are provided
       // If null/empty, consider it a future order/quote (no delivery date set)
@@ -994,7 +988,7 @@ export class AdminQuotesService {
       const afterDiscount = subtotal - finalCouponDiscount;
       const orderTotal = Math.round((afterDiscount + parseFloat(delivery_fee.toString())) * 100) / 100;
       // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      const gst = Math.round((subtotal * 0.11) * 100) / 100;
+      const gst = Math.round((subtotal / 11) * 100) / 100;
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
@@ -1507,9 +1501,9 @@ export class AdminQuotesService {
       const finalCouponDiscount = couponDiscount;
       const afterDiscount = subtotal - finalCouponDiscount;
       const calculatedTotal = Math.round((afterDiscount + deliveryFee) * 100) / 100;
-      // GST is inclusive: calculate as 11% of the after-discount amount (product price only)
+      // GST is inclusive: calculate as 1/11 of the after-discount amount (product price only)
       // GST is for display only and is not added to subtotal or total. All totals are GST-inclusive.
-      const gst = Math.round((subtotal * 0.11) * 100) / 100;
+      const gst = Math.round((subtotal / 11) * 100) / 100;
 
       // Set calculated fields on quote object for email template
       quote.subtotal = subtotal;

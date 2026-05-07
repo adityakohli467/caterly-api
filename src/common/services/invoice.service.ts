@@ -266,7 +266,7 @@ export class InvoiceService {
         // Coupon was deleted - calculate from stored order_total (GST is inclusive)
         const tempAfterDiscount = subtotal;
         const tempTotal = tempAfterDiscount + deliveryFee; // Total is inclusive of GST
-        const tempGst = tempTotal * (11 / 100); // Calculate GST as 11%
+        const tempGst = tempTotal / 11; // Calculate GST as 1/11 of inclusive total
         const storedTotal = parseFloat(order.order_total || 0);
         if (storedTotal < tempTotal) {
           couponDiscount = tempTotal - storedTotal;
@@ -282,8 +282,8 @@ export class InvoiceService {
     const preDiscountTotal = subtotal + deliveryFee + lateFee;
     const total = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
     
-    // GST is 11% of (Product + Options + Delivery Fee + Late Fee)
-    const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+    // GST is 1/11 of total (GST-inclusive)
+    const gst = Math.round((preDiscountTotal / 11) * 100) / 100;
 
     // Calculate amount paid and balance
     const amountPaid = parseFloat(order.amount_paid || 0);

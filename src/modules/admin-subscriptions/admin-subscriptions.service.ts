@@ -243,7 +243,7 @@ export class AdminSubscriptionsService {
 
     const afterDiscount = Math.max(0, subtotal - couponDiscount);
     const orderTotal = Math.round((subtotal + deliveryFee + lateFee - couponDiscount) * 100) / 100;
-    const gst = Math.round(subtotal * 0.11 * 100) / 100;
+    const gst = Math.round((subtotal / 11) * 100) / 100;
 
     return {
       subscription: {

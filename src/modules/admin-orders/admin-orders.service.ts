@@ -373,7 +373,6 @@ export class AdminOrdersService implements OnModuleInit {
           const tempAfterDiscount = subtotal;
           const tempDeliveryFee = parseFloat(row.delivery_fee || 0);
           const tempTotal = Math.round((tempAfterDiscount + tempDeliveryFee) * 100) / 100; // Total is inclusive of GST
-          const tempGst = Math.round((tempTotal * 0.11) * 100) / 100; // Calculate GST as 11%
           // The difference is the coupon discount
           const storedTotal = parseFloat(row.order_total || 0);
           if (storedTotal < tempTotal) {
@@ -388,8 +387,8 @@ export class AdminOrdersService implements OnModuleInit {
       const preDiscountTotal = subtotal + deliveryFee;
       const calculatedTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
       
-      // GST is 11% of (Product + Options + Delivery Fee)
-      const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+      // GST is 1/11 of total (GST-inclusive)
+      const gst = Math.round((preDiscountTotal / 11) * 100) / 100;
 
       return {
         order_id: row.order_id,
@@ -573,8 +572,8 @@ export class AdminOrdersService implements OnModuleInit {
     const afterDiscount = subtotal - couponDiscount;
     const preDiscountTotal = subtotal + deliveryFee + lateFee;
     
-    // GST is 11% of (Product + Options + Delivery Fee + Late Fee)
-    const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+    // GST is 1/11 of total (GST-inclusive)
+    const gst = Math.round((preDiscountTotal / 11) * 100) / 100;
     
     const orderTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
 
@@ -749,8 +748,8 @@ export class AdminOrdersService implements OnModuleInit {
       const preDiscountTotal = subtotal + deliveryFeeAmount;
       const orderTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
 
-      // GST is for display only. Base = (Product + Options + Delivery)
-      const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+      // GST is 1/11 of total (GST-inclusive)
+      const gst = Math.round((preDiscountTotal / 11) * 100) / 100;
 
       // Build delivery_date_time: prioritize delivery_date_time if provided, otherwise build from date/time
       // Allow setting just date (with default time 00:00:00) or both date and time
@@ -1065,8 +1064,8 @@ export class AdminOrdersService implements OnModuleInit {
         const preDiscountTotal = subtotal + deliveryFeeAmountCalc;
         resolvedOrderTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
 
-        // GST is for display only. Base = (Product + Options + Delivery)
-        resolvedGst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+        // GST is 1/11 of total (GST-inclusive)
+        resolvedGst = Math.round((preDiscountTotal / 11) * 100) / 100;
         resolvedCouponDiscount = couponDiscount;
         resolvedCouponId = couponIdValue;
       }

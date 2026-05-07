@@ -261,8 +261,8 @@ export class StoreQuotesService {
     const preDiscountTotal = subtotal + parseFloat(quote.delivery_fee || 0) + parseFloat(quote.late_fee || 0);
     const calculatedTotal = Math.round((preDiscountTotal - finalCouponDiscount) * 100) / 100;
 
-    // GST is 11% of (Product + Options + Delivery Fee + Late Fee)
-    const gst = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+    // GST is 1/11 of total (GST-inclusive)
+    const gst = Math.round((preDiscountTotal / 11) * 100) / 100;
 
     // Add calculated fields
     quote.subtotal = subtotal;

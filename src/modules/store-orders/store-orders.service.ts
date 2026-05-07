@@ -256,7 +256,7 @@ export class StoreOrdersService implements OnModuleInit {
       const deliveryFee = deliveryFeeValue;
       
       // GST is for display only and is not added to subtotal or total. Base = (Product + Options + Delivery)
-      const gst = gstStatus ? Math.round((afterWholesaleDiscount + deliveryFee) * 0.11 * 100) / 100 : 0;
+      const gst = gstStatus ? Math.round(((afterWholesaleDiscount + deliveryFee) / 11) * 100) / 100 : 0;
       const total = totalValue;
 
       let parsedUnit = frequency_unit;
@@ -716,8 +716,8 @@ export class StoreOrdersService implements OnModuleInit {
     
     const preDiscountTotal = subtotal + deliveryFee + lateFee;
     
-    // GST is 11% of (Product + Options + Delivery Fee + Late Fee)
-    const gstValue = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+    // GST is 1/11 of total (GST-inclusive)
+    const gstValue = Math.round((preDiscountTotal / 11) * 100) / 100;
     
     const orderTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
 
@@ -873,8 +873,8 @@ export class StoreOrdersService implements OnModuleInit {
     const preDiscountTotal = subtotal + deliveryFee;
     const calculatedTotal = Math.round((preDiscountTotal - couponDiscount) * 100) / 100;
     
-    // GST is 11% of (Product + Options + Delivery Fee)
-    const gstValue = Math.round(preDiscountTotal * 0.11 * 100) / 100;
+    // GST is 1/11 of total (GST-inclusive)
+    const gstValue = Math.round((preDiscountTotal / 11) * 100) / 100;
 
     return {
       order: {
