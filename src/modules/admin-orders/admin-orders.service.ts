@@ -1931,6 +1931,28 @@ export class AdminOrdersService implements OnModuleInit {
   }
 
   /**
+   * Get payment link for an order (without sending email)
+   */
+  async getPaymentLink(id: number): Promise<any> {
+    const orderData = await this.findOne(id);
+    const order = orderData.order;
+
+    const customerName = order.customer_order_name || `${order.firstname || ''} ${order.lastname || ''}`.trim() || 'Customer';
+    const orderTotalValue = parseFloat(order.order_total || 0);
+    const authToken = crypto
+      .createHash('sha1')
+      .update(`${customerName}|${customerName}|${id}|${orderTotalValue}`)
+      .digest('hex');
+
+    const frontendUrl = this.configService.get<string>('STORE_PORTAL_URL') ||
+      this.configService.get<string>('FRONTEND_URL') ||
+      'http://localhost:3000';
+    const paymentLink = `${frontendUrl}/payment?order_id=${id}&auth=${authToken}`;
+
+    return { success: true, payment_link: paymentLink };
+  }
+
+  /**
    * Send payment link email to customer (matching caterly format)
    */
   async sendPaymentLink(id: number, emailPayment?: string): Promise<any> {

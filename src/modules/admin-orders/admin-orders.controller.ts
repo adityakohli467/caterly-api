@@ -122,6 +122,12 @@ export class AdminOrdersController {
     return this.adminOrdersService.sendEmail(id, body.email_type, body.custom_message);
   }
 
+  @Get(':id/payment-link')
+  @ApiOperation({ summary: 'Get payment link for an order' })
+  async getPaymentLink(@Param('id', ParseIntPipe) id: number) {
+    return this.adminOrdersService.getPaymentLink(id);
+  }
+
   @Post(':id/send-payment-link')
   @ApiOperation({ summary: 'Send payment link to customer' })
   async sendPaymentLink(
