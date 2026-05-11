@@ -8,11 +8,16 @@ export class AdminLocationsService {
   constructor(private dataSource: DataSource) {}
 
   async findAll(query: any): Promise<any> {
-    const { limit = 20, offset = 0, search } = query;
+    const { limit = 20, offset = 0, search, include_inactive } = query;
 
     let sqlQuery = `SELECT * FROM locations WHERE 1=1`;
     const params: any[] = [];
     let paramIndex = 1;
+
+    // Only return active locations unless include_inactive is explicitly set
+    if (!include_inactive || include_inactive === 'false') {
+      sqlQuery += ` AND location_status = 1`;
+    }
 
     if (search) {
       sqlQuery += ` AND (location_name ILIKE $${paramIndex} OR remittance_email ILIKE $${paramIndex} OR account_name ILIKE $${paramIndex} OR company_name ILIKE $${paramIndex})`;
@@ -28,10 +33,16 @@ export class AdminLocationsService {
 
     let countQuery = 'SELECT COUNT(*) FROM locations WHERE 1=1';
     const countParams: any[] = [];
+    let countParamIndex = 1;
+
+    if (!include_inactive || include_inactive === 'false') {
+      countQuery += ` AND location_status = 1`;
+    }
 
     if (search) {
-      countQuery += ` AND (location_name ILIKE $1 OR remittance_email ILIKE $1 OR account_name ILIKE $1 OR company_name ILIKE $1)`;
+      countQuery += ` AND (location_name ILIKE $${countParamIndex} OR remittance_email ILIKE $${countParamIndex} OR account_name ILIKE $${countParamIndex} OR company_name ILIKE $${countParamIndex})`;
       countParams.push(`%${search}%`);
+      countParamIndex++;
     }
 
     const countResult = await this.dataSource.query(countQuery, countParams);
