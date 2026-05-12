@@ -701,7 +701,39 @@ export class InvoiceService {
         const rowHeight = 12;
 
         data.items.forEach((item, index) => {
-          if (tableY > maxTableY && index > 0) {
+          const sanitizedProductName = item.product_name.replace(/[^\x20-\x7E\n]/g, '');
+
+          // Pre-calculate extra height for this row before drawing
+          let estimatedExtraHeight = 0;
+          doc.fontSize(6);
+          if (item.product_description) {
+            const sanitizedDesc = item.product_description.replace(/[^\x20-\x7E\n]/g, '');
+            estimatedExtraHeight += doc.heightOfString(sanitizedDesc, { width: 295 }) + 1;
+          }
+          if (item.product_desc_1) {
+            const sanitizedDesc1 = item.product_desc_1.replace(/[^\x20-\x7E\n]/g, '');
+            estimatedExtraHeight += doc.heightOfString(sanitizedDesc1, { width: 295 }) + 1;
+          }
+          if (item.product_desc_2) {
+            const sanitizedDesc2 = item.product_desc_2.replace(/[^\x20-\x7E\n]/g, '');
+            estimatedExtraHeight += doc.heightOfString(sanitizedDesc2, { width: 295 }) + 1;
+          }
+          if (item.comment) {
+            const commentText = `Note: ${item.comment.replace(/[^\x20-\x7E\n]/g, '')}`;
+            estimatedExtraHeight += doc.heightOfString(commentText, { width: 295 }) + 1;
+          }
+          if (item.options && item.options.length > 0) {
+            item.options.forEach((opt: any) => {
+              const optText = `${opt.option_name}: ${opt.option_value} (${opt.option_quantity}x)`;
+              estimatedExtraHeight += doc.heightOfString(optText, { width: 295 }) + 1;
+            });
+          }
+          doc.fontSize(7);
+
+          const totalRowHeight = rowHeight + estimatedExtraHeight;
+
+          // Page break check
+          if (tableY + totalRowHeight > maxTableY && index > 0) {
             doc.addPage();
             doc.rect(40, 30, 520, 20).fillColor(primaryColor).fill().fillColor('#ffffff');
             doc.fontSize(9).font('Helvetica-Bold');
@@ -714,12 +746,11 @@ export class InvoiceService {
           }
 
           if (index % 2 === 0) {
-            doc.rect(40, tableY - 3, 520, rowHeight).fillColor(bgGray).fill().fillColor(darkGray);
+            doc.rect(40, tableY - 3, 520, totalRowHeight).fillColor(bgGray).fill().fillColor(darkGray);
           }
 
           doc.moveTo(40, tableY - 3).lineTo(560, tableY - 3).strokeColor(borderGray).lineWidth(0.5).stroke();
 
-          const sanitizedProductName = item.product_name.replace(/[^\x20-\x7E\n]/g, '');
           doc.fontSize(7).font('Helvetica').fillColor(darkGray);
           doc.text(sanitizedProductName, 50, tableY + 1, { width: 300 });
 
@@ -739,39 +770,45 @@ export class InvoiceService {
           if (item.product_desc_1) {
             const sanitizedDesc1 = item.product_desc_1.replace(/[^\x20-\x7E\n]/g, '');
             doc.fontSize(6).fillColor(lightGray);
+            const desc1Height = doc.heightOfString(sanitizedDesc1, { width: 295 });
             doc.text(sanitizedDesc1, 55, tableY + 8 + extraHeight, { width: 295 });
             doc.fillColor(darkGray);
             doc.fontSize(7);
-            extraHeight += 7;
+            extraHeight += desc1Height + 1;
           }
 
           if (item.product_desc_2) {
             const sanitizedDesc2 = item.product_desc_2.replace(/[^\x20-\x7E\n]/g, '');
             doc.fontSize(6).fillColor(lightGray);
+            const desc2Height = doc.heightOfString(sanitizedDesc2, { width: 295 });
             doc.text(sanitizedDesc2, 55, tableY + 8 + extraHeight, { width: 295 });
             doc.fillColor(darkGray);
             doc.fontSize(7);
-            extraHeight += 7;
+            extraHeight += desc2Height + 1;
           }
 
           // Show product comment if available
           if (item.comment) {
             const sanitizedComment = item.comment.replace(/[^\x20-\x7E\n]/g, '');
             doc.fontSize(6).fillColor(lightGray);
-            doc.text(`Note: ${sanitizedComment}`, 55, tableY + 8 + extraHeight, { width: 295 });
+            const commentText = `Note: ${sanitizedComment}`;
+            const commentHeight = doc.heightOfString(commentText, { width: 295 });
+            doc.text(commentText, 55, tableY + 8 + extraHeight, { width: 295 });
             doc.fillColor(darkGray);
             doc.fontSize(7);
-            extraHeight += 7;
+            extraHeight += commentHeight + 1;
           }
 
           // Show options if available
           if (item.options && item.options.length > 0) {
             item.options.forEach((opt: any) => {
               doc.fontSize(6).fillColor(lightGray);
-              doc.text(`${opt.option_name}: ${opt.option_value} (${opt.option_quantity}x)`, 55, tableY + 8 + extraHeight, { width: 295 });
+              const optText = `${opt.option_name}: ${opt.option_value} (${opt.option_quantity}x)`;
+              const optHeight = doc.heightOfString(optText, { width: 295 });
+              doc.text(optText, 55, tableY + 8 + extraHeight, { width: 295 });
               doc.fillColor(darkGray);
               doc.fontSize(7);
-              extraHeight += 6;
+              extraHeight += optHeight + 1;
             });
           }
 
