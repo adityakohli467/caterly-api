@@ -633,7 +633,10 @@ export class InvoiceService {
         leftColY += 10;
         doc.font('Helvetica');
 
-        // Do not show company name or ABN again in Bill To section
+        if (data.company_name) {
+          doc.text(data.company_name, 40, leftColY, { width: 230 });
+          leftColY += 10;
+        }
         if (data.customer_company_address) {
           doc.text(data.customer_company_address, 40, leftColY, { width: 230 });
           const compAddrHeight = doc.heightOfString(data.customer_company_address, { width: 230 });
