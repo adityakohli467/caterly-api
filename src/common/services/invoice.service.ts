@@ -899,6 +899,11 @@ export class InvoiceService {
           doc.text('Balance:', totalsX, currentY, { width: 120, align: 'right' });
           doc.text(`$${data.balance.toFixed(2)}`, totalsX + 130, currentY, { width: 90, align: 'right' });
           doc.text('PAID', totalsX + 130, currentY + 10, { width: 90, align: 'right' });
+          if (data.payment_date) {
+            const paidDate = new Date(data.payment_date).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            doc.fontSize(7).font('Helvetica').fillColor('#28a745');
+            doc.text(`Paid on: ${paidDate}`, totalsX + 130, currentY + 19, { width: 90, align: 'right' });
+          }
         } else {
           doc.fillColor(primaryColor); // Teal for outstanding
           doc.text('Balance Due:', totalsX, currentY, { width: 120, align: 'right' });
