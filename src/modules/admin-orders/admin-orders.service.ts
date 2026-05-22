@@ -1233,6 +1233,13 @@ export class AdminOrdersService implements OnModuleInit {
       date_modified: new Date(),
     };
 
+    // When marking as paid (status 2 or 3), also set payment_status and payment_date
+    if (orderStatus === 2 || orderStatus === 3) {
+      updateData.payment_status = 'paid';
+      updateData.payment_date = new Date();
+      updateData.mark_paid_comment = comment || 'Manually marked as paid by admin';
+    }
+
     if (comment) {
       if (orderStatus === 0) {
         updateData.cancel_comment = comment;
@@ -1253,7 +1260,7 @@ export class AdminOrdersService implements OnModuleInit {
         const statusMessages: Record<number, string> = {
           0: 'cancelled',
           2: 'paid',
-          3: 'processing',
+          3: 'paid',
           4: 'awaiting approval',
           5: 'delivered',
           7: 'approved',
