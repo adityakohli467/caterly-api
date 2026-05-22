@@ -411,11 +411,13 @@ export class AdminOrdersService implements OnModuleInit {
         location_id: row.location_id,
         delivery_date: row.delivery_date_time ? new Date(row.delivery_date_time).toISOString().split('T')[0] : null,
         delivery_time: row.delivery_date_time ? new Date(row.delivery_date_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : null,
+        delivery_date_time: row.delivery_date_time || null,
         delivery_address: row.delivery_address || null,
         delivery_method: row.delivery_method || null,
         order_total: parseFloat(row.order_total || calculatedTotal),
         order_status: row.order_status,
         standing_order: row.standing_order,
+        has_successful_payment: row.has_successful_payment || false,
         user_id: row.user_id,
         date_added: row.date_added,
         date_modified: row.date_modified,
@@ -425,6 +427,18 @@ export class AdminOrdersService implements OnModuleInit {
         is_completed: row.is_completed || 0,
       };
     });
+
+    // Auto-fix orders that have successful payments but wrong order_status
+    const mismatchedOrders = result.filter(
+      (row: any) => row.has_successful_payment && row.order_status !== 2 && row.order_status !== 3 && row.order_status !== 0
+    );
+    if (mismatchedOrders.length > 0) {
+      const mismatchedIds = mismatchedOrders.map((row: any) => row.order_id);
+      this.dataSource.query(
+        `UPDATE orders SET order_status = 2, payment_status = 'paid', payment_date = COALESCE(payment_date, NOW()), date_modified = NOW() WHERE order_id = ANY($1) AND order_status NOT IN (0, 2, 3)`,
+        [mismatchedIds]
+      ).catch(err => this.logger.error('Auto-fix order status error:', err));
+    }
 
     return {
       orders,
