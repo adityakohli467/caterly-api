@@ -114,10 +114,11 @@ import { AppService } from './app.service';
   controllers: [AppController],
   providers: [
     AppService,
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: ApiHistoryInterceptor,
-    },
+    // Disabled: api_history table is overpopulated
+    // {
+    //   provide: APP_INTERCEPTOR,
+    //   useClass: ApiHistoryInterceptor,
+    // },
   ],
 })
 export class AppModule { }
