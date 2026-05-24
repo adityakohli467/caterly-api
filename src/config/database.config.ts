@@ -78,6 +78,8 @@ export const getDatabaseConfig = (configService: ConfigService): TypeOrmModuleOp
     extra: {
       max: 20, // Maximum pool size
       connectionTimeoutMillis: 2000,
+      // Set session timezone to AEST so CURRENT_TIMESTAMP returns Australian time
+      options: '-c timezone=Australia/Sydney',
       ssl: useSSL ? {
         rejectUnauthorized: false, // Accept self-signed certificates for AWS RDS
       } : false,

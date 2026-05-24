@@ -143,6 +143,8 @@ export class AdminOrdersService implements OnModuleInit {
       min_amount,
       max_amount,
       order_type,
+      sort_by,
+      sort_order,
     } = query;
 
     const params: any[] = [];
@@ -307,8 +309,17 @@ export class AdminOrdersService implements OnModuleInit {
     const countResult = await this.dataSource.query(countQuery, params);
     const count = parseInt(countResult[0].count);
 
-    // Sort by date_added DESC first (latest first), then by delivery_date_time DESC
-    sqlQuery += ` ORDER BY o.date_added DESC, o.delivery_date_time DESC NULLS LAST`;
+    // Sort based on sort_by param, default to delivery_date_time for past, date_added otherwise
+    const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
+    if (sort_by === 'delivery_date') {
+      sqlQuery += ` ORDER BY o.delivery_date_time ${sortDir} NULLS LAST, o.date_added DESC`;
+    } else if (sort_by === 'order_id') {
+      sqlQuery += ` ORDER BY o.order_id ${sortDir}`;
+    } else if (sort_by === 'order_total') {
+      sqlQuery += ` ORDER BY o.order_total ${sortDir}`;
+    } else {
+      sqlQuery += ` ORDER BY o.date_added DESC, o.delivery_date_time DESC NULLS LAST`;
+    }
     sqlQuery += ` LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
     params.push(Number(limit), Number(offset));
 
