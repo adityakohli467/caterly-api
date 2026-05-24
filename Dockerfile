@@ -23,7 +23,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=9000
+ENV PORT=8080
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs \
@@ -42,6 +42,6 @@ RUN chown -R nestjs:nodejs /app/uploads
 
 USER nestjs
 
-EXPOSE 9000
+EXPOSE 8080
 
 CMD ["node", "dist/main.js"]
