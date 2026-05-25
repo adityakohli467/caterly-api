@@ -35,13 +35,19 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=deps /app/node_modules ./node_modules
 COPY *.json ./
 
-# Copy existing uploads for initial state
-# NOTE: In production, mount a persistent volume to /app/uploads
-COPY uploads ./uploads
-RUN chown -R nestjs:nodejs /app/uploads
+# Copy uploads to a seed directory (volume will overlay /app/uploads)
+COPY uploads ./uploads-seed
+RUN chown -R nestjs:nodejs /app/uploads-seed
+
+# Create uploads dir (will be overlaid by volume mount)
+RUN mkdir -p /app/uploads && chown -R nestjs:nodejs /app/uploads
+
+# Copy entrypoint script
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 USER nestjs
 
 EXPOSE 8080
 
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["./entrypoint.sh"]
