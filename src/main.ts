@@ -3,7 +3,8 @@ process.env.TZ = 'Australia/Sydney';
 
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { join } from 'path';
+import { join, extname, basename } from 'path';
+import { existsSync } from 'fs';
 import { ValidationPipe, HttpException, HttpStatus } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
@@ -55,7 +56,22 @@ async function bootstrap() {
   const uploadsPath = join(process.cwd(), 'uploads');
   console.log(`\n📂 Serving static assets from: ${uploadsPath}`);
   console.log(`🌐 Static prefix: /uploads`);
-  
+
+  // Extension fallback middleware: try .webp when .png/.jpg/.jpeg is not found
+  app.use('/uploads', (req, res, next) => {
+    const ext = extname(req.path).toLowerCase();
+    if (['.png', '.jpg', '.jpeg'].includes(ext)) {
+      const filePath = join(uploadsPath, req.path);
+      if (!existsSync(filePath)) {
+        const webpPath = filePath.replace(/\.(png|jpg|jpeg)$/i, '.webp');
+        if (existsSync(webpPath)) {
+          req.url = req.url.replace(/\.(png|jpg|jpeg)$/i, '.webp');
+        }
+      }
+    }
+    next();
+  });
+
   app.useStaticAssets(uploadsPath, {
     prefix: '/uploads',
     // Ensure CORS headers are set for static assets to fix storefront display issues
