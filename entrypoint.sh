@@ -2,6 +2,9 @@
 
 echo "=== Entrypoint starting ==="
 
+# Fix volume ownership (volume mounts as root)
+chown -R nestjs:nodejs /app/uploads 2>/dev/null || true
+
 # Seed volume with files from Docker image
 if [ -d "/app/uploads-seed/caterly_assets" ]; then
   SEED_COUNT=$(ls /app/uploads-seed/caterly_assets 2>/dev/null | wc -l)
@@ -11,6 +14,7 @@ if [ -d "/app/uploads-seed/caterly_assets" ]; then
   if [ "$SEED_COUNT" -gt "$VOL_COUNT" ]; then
     echo "Volume is missing files. Copying all from seed..."
     cp -r /app/uploads-seed/* /app/uploads/
+    chown -R nestjs:nodejs /app/uploads
     echo "Done. Volume now has $(ls /app/uploads/caterly_assets | wc -l) files"
   else
     echo "Volume is up to date. Skipping seed."
@@ -19,5 +23,5 @@ else
   echo "WARNING: /app/uploads-seed/caterly_assets not found!"
 fi
 
-# Start the application
-exec node dist/main.js
+# Drop to nestjs user and start the application
+exec su-exec nestjs node dist/main.js

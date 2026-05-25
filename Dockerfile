@@ -25,6 +25,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 
+# Install su-exec for dropping privileges after volume setup
+RUN apk add --no-cache su-exec
+
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nestjs
@@ -46,7 +49,7 @@ RUN mkdir -p /app/uploads && chown -R nestjs:nodejs /app/uploads
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
-USER nestjs
+# NOTE: Entrypoint runs as root to fix volume permissions, then drops to nestjs
 
 EXPOSE 8080
 
