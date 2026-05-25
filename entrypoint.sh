@@ -1,21 +1,22 @@
 #!/bin/sh
 
 echo "=== Entrypoint starting ==="
-echo "Checking /app/uploads-seed: $(ls /app/uploads-seed 2>/dev/null | head -5)"
-echo "Checking /app/uploads: $(ls /app/uploads 2>/dev/null | head -5)"
 
-# Seed volume with files if it's empty (first deploy)
-if [ -d "/app/uploads-seed" ] && [ "$(ls -A /app/uploads-seed 2>/dev/null)" ]; then
-  # Check if volume is empty (no caterly_assets folder or it's empty)
-  if [ ! -d "/app/uploads/caterly_assets" ] || [ -z "$(ls -A /app/uploads/caterly_assets 2>/dev/null)" ]; then
-    echo "Volume is empty. Seeding with initial assets..."
+# Seed volume with files from Docker image
+if [ -d "/app/uploads-seed/caterly_assets" ]; then
+  SEED_COUNT=$(ls /app/uploads-seed/caterly_assets 2>/dev/null | wc -l)
+  VOL_COUNT=$(ls /app/uploads/caterly_assets 2>/dev/null | wc -l)
+  echo "Seed has $SEED_COUNT files, volume has $VOL_COUNT files"
+
+  if [ "$SEED_COUNT" -gt "$VOL_COUNT" ]; then
+    echo "Volume is missing files. Copying all from seed..."
     cp -r /app/uploads-seed/* /app/uploads/
-    echo "Seed complete. Files in uploads/caterly_assets: $(ls /app/uploads/caterly_assets | wc -l)"
+    echo "Done. Volume now has $(ls /app/uploads/caterly_assets | wc -l) files"
   else
-    echo "Volume already has data: $(ls /app/uploads/caterly_assets | wc -l) files. Skipping seed."
+    echo "Volume is up to date. Skipping seed."
   fi
 else
-  echo "WARNING: /app/uploads-seed is empty or missing!"
+  echo "WARNING: /app/uploads-seed/caterly_assets not found!"
 fi
 
 # Start the application
