@@ -490,7 +490,7 @@ export class AdminOrdersService implements OnModuleInit {
               'order_product_id', op.order_product_id,
               'product_id', op.product_id,
                'product_name', COALESCE(p.product_name, 'Unknown Product'),
-              'product_description', p.product_description,
+              'product_description', p.short_description,
               'quantity', op.quantity,
               'price', CASE 
                 WHEN op.price = 0 THEN COALESCE((

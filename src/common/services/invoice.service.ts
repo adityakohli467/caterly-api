@@ -184,7 +184,7 @@ export class InvoiceService {
         op.order_product_comment,
         p.product_desc_1,
         p.product_desc_2,
-        p.product_description
+        p.short_description as product_description
       FROM order_product op
       LEFT JOIN product p ON op.product_id = p.product_id
       WHERE op.order_id = $1
