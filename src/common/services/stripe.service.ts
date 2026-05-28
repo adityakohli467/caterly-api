@@ -194,6 +194,29 @@ export class StripeService {
   }
 
   /**
+   * Cancel a Payment Intent
+   */
+  async cancelPaymentIntent(paymentIntentId: string): Promise<void> {
+    await this.initialize();
+
+    if (!this.stripe) {
+      throw new Error('Stripe not initialized. Please configure Stripe secret key.');
+    }
+
+    try {
+      await this.stripe.paymentIntents.cancel(paymentIntentId);
+    } catch (error: any) {
+      this.logger.error(
+        'Stripe cancel payment intent error:',
+        error.message || error,
+      );
+      throw new Error(
+        error.message || 'Failed to cancel payment intent',
+      );
+    }
+  }
+
+  /**
    * Create a refund
    */
   async createRefund(

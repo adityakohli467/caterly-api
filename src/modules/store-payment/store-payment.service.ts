@@ -81,19 +81,37 @@ export class StorePaymentService {
         ? JSON.parse(existing.gateway_response)
         : existing.gateway_response;
 
-      // Verify the intent is still valid with Stripe
+      // Verify the intent is still valid with Stripe AND amount matches current order total
       try {
         await this.stripeService.initialize();
         const status = await this.stripeService.getPaymentIntentStatus(existing.payment_transaction_id);
+        const currentTotal = parseFloat(order.order_total || 0) + parseFloat(order.late_fee || 0);
+        const currentTotalCents = Math.round(currentTotal * 100);
+
         if (status.status !== 'canceled' && status.status !== 'succeeded') {
-          return {
-            success: true,
-            client_secret: gatewayResponse.clientSecret,
-            payment_intent_id: existing.payment_transaction_id,
-            order_id: orderId,
-            amount: parseFloat(order.order_total) + parseFloat(order.late_fee || 0),
-            currency: 'AUD',
-          };
+          // If the order total has changed since the intent was created, cancel the old one and create a new one
+          if (status.amount !== currentTotalCents) {
+            try {
+              await this.stripeService.cancelPaymentIntent(existing.payment_transaction_id);
+              // Mark old intent as canceled in payment_history
+              await this.dataSource.query(
+                `UPDATE payment_history SET payment_status = 'canceled' WHERE payment_transaction_id = $1`,
+                [existing.payment_transaction_id]
+              );
+            } catch {
+              // If cancel fails, still proceed to create a new intent
+            }
+          } else {
+            // Amount matches, safe to reuse
+            return {
+              success: true,
+              client_secret: gatewayResponse.clientSecret,
+              payment_intent_id: existing.payment_transaction_id,
+              order_id: orderId,
+              amount: currentTotal,
+              currency: 'AUD',
+            };
+          }
         }
       } catch {
         // Intent no longer valid, create a new one
@@ -896,9 +914,27 @@ export class StorePaymentService {
 
   /**
    * Send payment confirmation email
+   * Always re-fetches order data from DB to ensure current totals and email
    */
-  private async sendPaymentConfirmationEmail(orderId: number, order: any): Promise<void> {
+  private async sendPaymentConfirmationEmail(orderId: number, _order?: any): Promise<void> {
     try {
+      // Always fetch fresh order data from database to avoid stale totals/email
+      const freshOrderQuery = `
+        SELECT 
+          o.order_id, o.order_total, o.order_status, o.late_fee, o.delivery_fee,
+          o.customer_order_name, o.customer_order_email, o.delivery_date_time, o.delivery_address,
+          c.email, c.firstname, c.lastname
+        FROM orders o
+        LEFT JOIN customer c ON o.customer_id = c.customer_id
+        WHERE o.order_id = $1
+      `;
+      const freshResult = await this.dataSource.query(freshOrderQuery, [orderId]);
+      const order = freshResult[0];
+      if (!order) {
+        this.logger.error(`sendPaymentConfirmationEmail: Order #${orderId} not found in database`);
+        return;
+      }
+
       const customerName = order.customer_order_name ||
         `${order.firstname || ''} ${order.lastname || ''}`.trim() ||
         'Customer';
