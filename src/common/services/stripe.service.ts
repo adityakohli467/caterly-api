@@ -194,25 +194,33 @@ export class StripeService {
   }
 
   /**
-   * Cancel a Payment Intent
+   * Cancel a Payment Intent (safe version - does not throw)
+   * Returns status info instead of throwing on already-canceled/succeeded intents
    */
-  async cancelPaymentIntent(paymentIntentId: string): Promise<void> {
+  async cancelPaymentIntent(paymentIntentId: string): Promise<{ success: boolean; status?: string; error?: string }> {
     await this.initialize();
 
     if (!this.stripe) {
-      throw new Error('Stripe not initialized. Please configure Stripe secret key.');
+      return { success: false, error: 'Stripe not initialized' };
     }
 
     try {
+      // First check current status
+      const intent = await this.stripe.paymentIntents.retrieve(paymentIntentId);
+      
+      // Don't attempt to cancel already-terminal intents
+      if (intent.status === 'succeeded' || intent.status === 'canceled') {
+        return { success: true, status: intent.status };
+      }
+
       await this.stripe.paymentIntents.cancel(paymentIntentId);
+      return { success: true, status: 'canceled' };
     } catch (error: any) {
-      this.logger.error(
-        'Stripe cancel payment intent error:',
+      this.logger.warn(
+        `Stripe cancel payment intent warning for ${paymentIntentId}:`,
         error.message || error,
       );
-      throw new Error(
-        error.message || 'Failed to cancel payment intent',
-      );
+      return { success: false, error: error.message || 'Failed to cancel payment intent' };
     }
   }
 

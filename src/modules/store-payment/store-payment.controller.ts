@@ -54,6 +54,24 @@ export class StorePaymentController {
     );
   }
 
+  @Post('cancel-intent')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel a Stripe Payment Intent (cleanup abandoned intents)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        payment_intent_id: { type: 'string' },
+      },
+      required: ['payment_intent_id'],
+    },
+  })
+  async cancelPaymentIntent(
+    @Body('payment_intent_id') paymentIntentId: string,
+  ) {
+    return this.storePaymentService.cancelPaymentIntent(paymentIntentId);
+  }
+
   @Post('verify')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify Stripe payment after completion' })

@@ -187,6 +187,31 @@ export class StorePaymentService {
   }
 
   /**
+   * Cancel a payment intent (for cleanup when user abandons payment)
+   */
+  async cancelPaymentIntent(paymentIntentId: string) {
+    if (!paymentIntentId || typeof paymentIntentId !== 'string') {
+      throw new BadRequestException('Valid payment_intent_id is required');
+    }
+
+    const result = await this.stripeService.cancelPaymentIntent(paymentIntentId);
+
+    if (result.success) {
+      // Also update payment_history if we track it
+      try {
+        await this.dataSource.query(
+          `UPDATE payment_history SET payment_status = 'canceled' WHERE payment_transaction_id = $1 AND payment_status = 'pending'`,
+          [paymentIntentId],
+        );
+      } catch {
+        // Non-critical - intent is already canceled in Stripe
+      }
+    }
+
+    return { success: true, status: result.status || 'canceled' };
+  }
+
+  /**
    * Verify Stripe payment after client-side confirmation
    */
   async verifyStripePayment(paymentIntentId: string, orderId: number) {
