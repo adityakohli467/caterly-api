@@ -912,30 +912,44 @@ export class InvoiceService {
         doc.font('Helvetica').fontSize(7).fillColor(darkGray);
         currentY += 15;
 
+        // Helper: check if we need a page break before writing content
+        const checkPageBreak = (neededHeight: number) => {
+          if (currentY + neededHeight > pageHeight - 80) {
+            doc.addPage();
+            currentY = 40;
+          }
+        };
+
         // Delivery Notes Section
         if (data.delivery_details) {
+          const deliveryHeight = doc.heightOfString(data.delivery_details, { width: 520 }) + 15;
+          checkPageBreak(deliveryHeight);
           doc.fontSize(7).font('Helvetica-Bold');
           doc.text('Delivery Notes:', 40, currentY);
           doc.font('Helvetica').fontSize(6);
           doc.text(data.delivery_details, 40, currentY + 8, { width: 520 });
-          currentY += doc.heightOfString(data.delivery_details, { width: 520 }) + 15;
+          currentY += deliveryHeight;
         }
 
         // Payment Terms Section
+        const paymentTerms = 'Full payment is required within 7 days of invoice date unless otherwise agreed. Please include the invoice number as your payment reference.';
+        const paymentTermsHeight = doc.heightOfString(paymentTerms, { width: 520 }) + 18;
+        checkPageBreak(paymentTermsHeight);
         doc.fontSize(9).font('Helvetica-Bold').fillColor('#111111');
         doc.text('Payment Terms:', 40, currentY);
         doc.font('Helvetica').fontSize(8).fillColor('#111111');
-        const paymentTerms = 'Full payment is required within 7 days of invoice date unless otherwise agreed. Please include the invoice number as your payment reference.';
         doc.text(paymentTerms, 40, currentY + 10, { width: 520 });
-        currentY += doc.heightOfString(paymentTerms, { width: 520 }) + 18;
+        currentY += paymentTermsHeight;
 
         // Order Comments Section
         if (data.order_comments) {
+          const commentsHeight = doc.heightOfString(data.order_comments, { width: 520 }) + 15;
+          checkPageBreak(commentsHeight);
           doc.fontSize(7).font('Helvetica-Bold');
           doc.text('Order Comments:', 40, currentY);
           doc.font('Helvetica').fontSize(6);
           doc.text(data.order_comments, 40, currentY + 8, { width: 520 });
-          currentY += doc.heightOfString(data.order_comments, { width: 520 }) + 15;
+          currentY += commentsHeight;
         }
 
         // Footer Section
