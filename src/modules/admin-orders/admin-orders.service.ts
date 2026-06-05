@@ -1447,8 +1447,14 @@ export class AdminOrdersService implements OnModuleInit {
     const revenueResult = await this.dataSource.query(`
       SELECT COALESCE(SUM(order_total), 0) as total_revenue
       FROM orders
-      WHERE order_status IN (2, 7, 5)
+      WHERE (
+        order_status = 2
+        OR payment_status IN ('paid', 'succeeded', 'completed', 'success')
+      )
+      AND order_status NOT IN (0, 8, 10)
       AND (is_deleted = 0 OR is_deleted IS NULL)
+      AND delivery_date_time >= date_trunc('week', CURRENT_DATE)
+      AND delivery_date_time < date_trunc('week', CURRENT_DATE) + interval '7 days'
     `);
 
     const todayResult = await this.dataSource.query(`
