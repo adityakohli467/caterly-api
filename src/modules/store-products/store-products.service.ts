@@ -1310,6 +1310,7 @@ export class StoreProductsService {
         p.product_date_added,
         p.info_description,
         p.subcategory_id,
+        p.healthy_choice_color,
         COALESCE(
           (SELECT c.category_name FROM category c WHERE c.category_id = p.subcategory_id),
           (SELECT c.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id WHERE pc.product_id = p.product_id LIMIT 1)

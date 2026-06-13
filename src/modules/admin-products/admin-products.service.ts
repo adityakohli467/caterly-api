@@ -451,6 +451,7 @@ export class AdminProductsService {
       featured_2?: boolean;
       show_in_storefront?: boolean;
       is_healthy_choice?: boolean;
+      healthy_choice_color?: string;
       info_description?: string;
       product_tag?: string;
       product_meta_keyword?: string;
@@ -516,6 +517,7 @@ export class AdminProductsService {
         featured_2,
         show_in_storefront,
         is_healthy_choice,
+        healthy_choice_color,
         info_description,
         product_tag,
         product_meta_keyword,
@@ -594,6 +596,7 @@ export class AdminProductsService {
           featured_2,
           show_in_storefront,
           is_healthy_choice,
+          healthy_choice_color,
           info_description,
           product_tag,
           product_meta_keyword,
@@ -604,7 +607,7 @@ export class AdminProductsService {
           product_desc_5,
           product_date_added,
           product_date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
         RETURNING *`,
         [
           product_name,
@@ -628,6 +631,7 @@ export class AdminProductsService {
           featured_2 || false,
           show_in_storefront || false,
           is_healthy_choice || false,
+          healthy_choice_color || null,
           info_description || null,
           product_tag || null,
           product_meta_keyword || null,
@@ -738,6 +742,7 @@ export class AdminProductsService {
       featured_2?: boolean;
       show_in_storefront?: boolean;
       is_healthy_choice?: boolean;
+      healthy_choice_color?: string;
       info_description?: string;
       product_tag?: string;
       product_meta_keyword?: string;
@@ -801,6 +806,7 @@ export class AdminProductsService {
         featured_2,
         show_in_storefront,
         is_healthy_choice,
+        healthy_choice_color,
         info_description,
         product_tag,
         product_meta_keyword,
@@ -927,6 +933,10 @@ export class AdminProductsService {
       if (is_healthy_choice !== undefined) {
         updateFields.push(`is_healthy_choice = $${paramIndex++}`);
         updateParams.push(is_healthy_choice);
+      }
+      if (healthy_choice_color !== undefined) {
+        updateFields.push(`healthy_choice_color = $${paramIndex++}`);
+        updateParams.push(healthy_choice_color || null);
       }
       if (info_description !== undefined) {
         updateFields.push(`info_description = $${paramIndex++}`);
