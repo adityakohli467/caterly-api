@@ -33,6 +33,7 @@ export class AdminProductsController {
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, type: Number })
   @ApiQuery({ name: 'customer_id', required: false, type: Number, description: 'Optional: Calculate prices based on customer type and discounts' })
+  @ApiQuery({ name: 'healthy_only', required: false, type: Boolean, description: 'Filter for healthy choice products only' })
   async listProducts(
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
@@ -40,6 +41,7 @@ export class AdminProductsController {
     @Query('status') status?: string,
     @Query('customer_id') customer_id?: string,
     @Query('category_id') category_id?: string,
+    @Query('healthy_only') healthy_only?: string,
   ) {
     return this.adminProductsService.listProducts({
       limit: limit ? parseInt(limit) : 20,
@@ -48,6 +50,7 @@ export class AdminProductsController {
       status: status ? parseInt(status) : undefined,
       customer_id: customer_id ? parseInt(customer_id) : undefined,
       category_id: category_id ? parseInt(category_id) : undefined,
+      healthy_only: healthy_only === 'true' ? true : healthy_only === 'false' ? false : undefined,
     });
   }
 

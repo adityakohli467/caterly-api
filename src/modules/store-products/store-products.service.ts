@@ -192,6 +192,7 @@ export class StoreProductsService {
         ) as product_images
       FROM product p
       WHERE p.product_status = 1 AND p.show_in_storefront = true
+        AND (p.is_healthy_choice = false OR p.is_healthy_choice IS NULL)
     `;
 
     // Filter by customer type visibility
@@ -281,6 +282,7 @@ export class StoreProductsService {
       SELECT COUNT(*) as total
       FROM product p
       WHERE p.product_status = 1 AND p.show_in_storefront = true
+        AND (p.is_healthy_choice = false OR p.is_healthy_choice IS NULL)
     `;
 
     let countParams: any[] = [];
@@ -483,7 +485,7 @@ export class StoreProductsService {
       FROM product p
       LEFT JOIN heading_product hp ON p.product_id = hp.product_id
       LEFT JOIN product_header ph ON hp.heading_id = ph.heading_id
-      WHERE p.product_id = $1 AND p.product_status = 1 AND p.show_in_storefront = true
+      WHERE p.product_id = $1 AND p.product_status = 1 AND (p.show_in_storefront = true OR p.is_healthy_choice = true)
     `;
 
     // Filter by customer type visibility
@@ -821,6 +823,7 @@ export class StoreProductsService {
         ) as product_images
       FROM product p
       WHERE p.product_status = 1 AND p.show_in_storefront = true
+        AND (p.is_healthy_choice = false OR p.is_healthy_choice IS NULL)
     `;
 
     // Filter by customer type visibility
@@ -1006,6 +1009,7 @@ export class StoreProductsService {
       FROM product p
       WHERE p.product_status = 1 AND p.show_in_storefront = true
         AND p.${featuredColumn} = true
+        AND (p.is_healthy_choice = false OR p.is_healthy_choice IS NULL)
     `;
 
     // Filter by customer type visibility
@@ -1245,5 +1249,227 @@ export class StoreProductsService {
         created_at: result[0].created_at,
       },
     };
+  }
+
+  /**
+   * List healthy choice products
+   */
+  async listHealthyChoiceProducts(
+    filters: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      category_id?: number;
+    },
+    authHeader?: string,
+  ) {
+    const {
+      page = 1,
+      limit = 100,
+      search,
+      category_id,
+    } = filters;
+
+    let userId: number | null = null;
+    let discountPercentage = 0;
+    let customerType: string | null = null;
+
+    userId = this.extractUserIdFromToken(authHeader);
+    if (userId) {
+      discountPercentage = await this.getCustomerDiscount(userId);
+      const customerTypeQuery = await this.dataSource.query(
+        `SELECT customer_type FROM customer WHERE user_id = $1`,
+        [userId],
+      );
+      if (customerTypeQuery.length > 0) {
+        customerType = customerTypeQuery[0].customer_type || null;
+      }
+    }
+
+    const isWholesaler = customerType ? (
+      customerType.toLowerCase().includes('wholesale') ||
+      customerType.toLowerCase().includes('wholesaler') ||
+      customerType.toLowerCase().startsWith('full service') ||
+      customerType.toLowerCase().startsWith('partial service')
+    ) : false;
+
+    const offset = (Number(page) - 1) * Number(limit);
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    let query = `
+      SELECT 
+        p.product_id,
+        p.product_name,
+        p.product_description,
+        p.product_price,
+        p.retail_price,
+        p.customer_type_visibility,
+        p.product_image,
+        p.product_status,
+        p.product_date_added,
+        p.info_description,
+        p.subcategory_id,
+        COALESCE(
+          (SELECT c.category_name FROM category c WHERE c.category_id = p.subcategory_id),
+          (SELECT c.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id WHERE pc.product_id = p.product_id LIMIT 1)
+        ) as subcategory_name,
+        COALESCE(
+          (SELECT cp.category_name FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_name FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
+        ) as parent_category_name,
+        COALESCE(
+          (SELECT cp.category_id FROM category c JOIN category cp ON c.parent_category_id = cp.category_id WHERE c.category_id = p.subcategory_id),
+          (SELECT cp.category_id FROM product_category pc JOIN category c ON pc.category_id = c.category_id JOIN category cp ON c.parent_category_id = cp.category_id WHERE pc.product_id = p.product_id LIMIT 1)
+        ) as parent_category_id,
+        (
+          SELECT json_agg(json_build_object('category_id', c.category_id, 'category_name', c.category_name) ORDER BY c.sort_order ASC, c.category_name ASC)
+          FROM product_category pc
+          JOIN category c ON pc.category_id = c.category_id
+          WHERE pc.product_id = p.product_id
+        ) as categories,
+        (
+          SELECT json_agg(
+            json_build_object(
+              'product_image_id', pi.product_image_id,
+              'image_url', pi.image_url,
+              'image_order', pi.image_order
+            ) ORDER BY pi.image_order
+          )
+          FROM product_images pi
+          WHERE pi.product_id = p.product_id
+        ) as product_images
+      FROM product p
+      WHERE p.product_status = 1 AND p.is_healthy_choice = true
+    `;
+
+    if (search) {
+      params.push(`%${search}%`);
+      query += ` AND (p.product_name ILIKE $${paramIndex} OR p.product_description ILIKE $${paramIndex})`;
+      paramIndex++;
+    }
+
+    if (category_id) {
+      const catId = Number(category_id);
+      params.push(catId);
+      query += ` AND (
+        EXISTS (
+          SELECT 1 FROM product_category pc_filter 
+          WHERE pc_filter.product_id = p.product_id 
+          AND (
+            pc_filter.category_id = $${paramIndex} 
+            OR pc_filter.category_id IN (SELECT category_id FROM category WHERE parent_category_id = $${paramIndex})
+          )
+        )
+        OR p.subcategory_id = $${paramIndex}
+        OR EXISTS (
+          SELECT 1 FROM category c_sub_filter 
+          WHERE c_sub_filter.category_id = p.subcategory_id 
+          AND c_sub_filter.parent_category_id = $${paramIndex}
+        )
+      )`;
+      paramIndex++;
+    }
+
+    query += `
+      ORDER BY p.product_id DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+    params.push(Number(limit), offset);
+
+    const result = await this.dataSource.query(query, params);
+
+    // Apply pricing
+    const productsWithPricing = result.map((product: any) => {
+      const retailPrice = parseFloat(product.product_price || 0);
+      const wholesalePrice = product.retail_price ? parseFloat(product.retail_price || 0) : null;
+      const retailDiscountPercentage = product.retail_discount_percentage ? parseFloat(product.retail_discount_percentage) : null;
+
+      const pricing = this.pricingService.calculateProductPrice(
+        retailPrice,
+        wholesalePrice,
+        retailDiscountPercentage,
+        isWholesaler,
+        discountPercentage,
+      );
+
+      return {
+        ...product,
+        product_price: pricing.finalPrice.toFixed(2),
+        original_price: pricing.originalPrice,
+        discounted_price: pricing.finalPrice,
+        discount_percentage: pricing.discountPercentage,
+        has_discount: pricing.hasDiscount,
+      };
+    });
+
+    return { products: productsWithPricing };
+  }
+
+  /**
+   * Get categories that have healthy choice products
+   */
+  async getHealthyChoiceCategories() {
+    const query = `
+      SELECT DISTINCT c.category_id, c.category_name, c.parent_category_id
+      FROM category c
+      WHERE c.category_id IN (
+        SELECT DISTINCT pc.category_id
+        FROM product_category pc
+        JOIN product p ON pc.product_id = p.product_id
+        WHERE p.product_status = 1 AND p.is_healthy_choice = true
+      )
+      OR c.category_id IN (
+        SELECT DISTINCT p.subcategory_id
+        FROM product p
+        WHERE p.product_status = 1 AND p.is_healthy_choice = true AND p.subcategory_id IS NOT NULL
+      )
+      OR c.category_id IN (
+        SELECT DISTINCT c2.parent_category_id
+        FROM category c2
+        WHERE c2.category_id IN (
+          SELECT DISTINCT pc.category_id
+          FROM product_category pc
+          JOIN product p ON pc.product_id = p.product_id
+          WHERE p.product_status = 1 AND p.is_healthy_choice = true
+        )
+        AND c2.parent_category_id IS NOT NULL
+      )
+      OR c.category_id IN (
+        SELECT DISTINCT c3.parent_category_id
+        FROM category c3
+        WHERE c3.category_id IN (
+          SELECT DISTINCT p.subcategory_id
+          FROM product p
+          WHERE p.product_status = 1 AND p.is_healthy_choice = true AND p.subcategory_id IS NOT NULL
+        )
+        AND c3.parent_category_id IS NOT NULL
+      )
+      ORDER BY c.category_name ASC
+    `;
+
+    const result = await this.dataSource.query(query);
+
+    // Organize into tree structure
+    const categoriesMap = new Map();
+    const rootCategories: any[] = [];
+
+    result.forEach((cat: any) => {
+      categoriesMap.set(cat.category_id, { ...cat, children: [] });
+    });
+
+    result.forEach((cat: any) => {
+      const category = categoriesMap.get(cat.category_id);
+      if (cat.parent_category_id) {
+        const parent = categoriesMap.get(cat.parent_category_id);
+        if (parent) {
+          parent.children.push(category);
+        }
+      } else {
+        rootCategories.push(category);
+      }
+    });
+
+    return { categories: rootCategories };
   }
 }

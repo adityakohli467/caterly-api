@@ -78,6 +78,9 @@ export class Product {
   @Column({ type: "boolean", default: false })
   show_in_storefront!: boolean
 
+  @Column({ type: "boolean", default: false })
+  is_healthy_choice!: boolean
+
   @Column({ type: "text", nullable: true })
   info_description!: string
 

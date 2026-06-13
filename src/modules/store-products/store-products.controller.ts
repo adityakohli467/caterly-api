@@ -109,6 +109,36 @@ export class StoreProductsController {
     return this.storeProductsService.getHeaders();
   }
 
+  @Get('healthy-choices')
+  @ApiOperation({ summary: 'List healthy choice products' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'category_id', required: false, type: Number })
+  async listHealthyChoiceProducts(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('category_id') categoryId?: string,
+  ) {
+    return this.storeProductsService.listHealthyChoiceProducts(
+      {
+        page: page ? parseInt(page) : 1,
+        limit: limit ? parseInt(limit) : 100,
+        search,
+        category_id: categoryId ? parseInt(categoryId) : undefined,
+      },
+      req.headers.authorization,
+    );
+  }
+
+  @Get('healthy-choices/categories')
+  @ApiOperation({ summary: 'Get categories that have healthy choice products' })
+  async getHealthyChoiceCategories() {
+    return this.storeProductsService.getHealthyChoiceCategories();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get product details with options' })
   @ApiParam({ name: 'id', type: Number })

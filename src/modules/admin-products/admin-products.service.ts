@@ -24,8 +24,9 @@ export class AdminProductsService {
     status?: number;
     customer_id?: number; // Optional: if provided, prices will be calculated based on customer type and discounts
     category_id?: number;
+    healthy_only?: boolean;
   }) {
-    const { limit = 20, offset = 0, search, status, category_id } = filters;
+    const { limit = 20, offset = 0, search, status, category_id, healthy_only } = filters;
 
     let query = `
       SELECT 
@@ -78,6 +79,13 @@ export class AdminProductsService {
     `;
     const params: any[] = [];
     let paramIndex = 1;
+
+    // Healthy choice filter - by default exclude healthy products, unless specifically requesting them
+    if (healthy_only === true) {
+      query += ` AND p.is_healthy_choice = true`;
+    } else if (healthy_only === false || healthy_only === undefined) {
+      query += ` AND (p.is_healthy_choice = false OR p.is_healthy_choice IS NULL)`;
+    }
 
     // Search filter
     if (search) {
@@ -442,6 +450,7 @@ export class AdminProductsService {
       featured_1?: boolean;
       featured_2?: boolean;
       show_in_storefront?: boolean;
+      is_healthy_choice?: boolean;
       info_description?: string;
       product_tag?: string;
       product_meta_keyword?: string;
@@ -506,6 +515,7 @@ export class AdminProductsService {
         featured_1,
         featured_2,
         show_in_storefront,
+        is_healthy_choice,
         info_description,
         product_tag,
         product_meta_keyword,
@@ -583,6 +593,7 @@ export class AdminProductsService {
           featured_1,
           featured_2,
           show_in_storefront,
+          is_healthy_choice,
           info_description,
           product_tag,
           product_meta_keyword,
@@ -593,7 +604,7 @@ export class AdminProductsService {
           product_desc_5,
           product_date_added,
           product_date_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
         RETURNING *`,
         [
           product_name,
@@ -616,6 +627,7 @@ export class AdminProductsService {
           featured_1 || false,
           featured_2 || false,
           show_in_storefront || false,
+          is_healthy_choice || false,
           info_description || null,
           product_tag || null,
           product_meta_keyword || null,
@@ -725,6 +737,7 @@ export class AdminProductsService {
       featured_1?: boolean;
       featured_2?: boolean;
       show_in_storefront?: boolean;
+      is_healthy_choice?: boolean;
       info_description?: string;
       product_tag?: string;
       product_meta_keyword?: string;
@@ -787,6 +800,7 @@ export class AdminProductsService {
         featured_1,
         featured_2,
         show_in_storefront,
+        is_healthy_choice,
         info_description,
         product_tag,
         product_meta_keyword,
@@ -909,6 +923,10 @@ export class AdminProductsService {
       if (show_in_storefront !== undefined) {
         updateFields.push(`show_in_storefront = $${paramIndex++}`);
         updateParams.push(show_in_storefront);
+      }
+      if (is_healthy_choice !== undefined) {
+        updateFields.push(`is_healthy_choice = $${paramIndex++}`);
+        updateParams.push(is_healthy_choice);
       }
       if (info_description !== undefined) {
         updateFields.push(`info_description = $${paramIndex++}`);
