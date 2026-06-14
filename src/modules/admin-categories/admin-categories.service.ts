@@ -67,24 +67,24 @@ export class AdminCategoriesService {
   }
 
   async create(createCategoryDto: any): Promise<any> {
-    const { category_name, parent_category_id, sort_order = 0 } = createCategoryDto;
+    const { category_name, parent_category_id, sort_order = 0, is_healthy_choice = false } = createCategoryDto;
 
     if (!category_name) {
       throw new BadRequestException('Category name is required');
     }
 
     const result = await this.dataSource.query(
-      `INSERT INTO category (category_name, parent_category_id, sort_order) 
-       VALUES ($1, $2, $3) 
+      `INSERT INTO category (category_name, parent_category_id, sort_order, is_healthy_choice) 
+       VALUES ($1, $2, $3, $4) 
        RETURNING *`,
-      [category_name, parent_category_id || null, sort_order],
+      [category_name, parent_category_id || null, sort_order, is_healthy_choice],
     );
 
     return { category: result[0], message: 'Category created successfully' };
   }
 
   async update(id: number, updateCategoryDto: any): Promise<any> {
-    const { category_name, parent_category_id, sort_order } = updateCategoryDto;
+    const { category_name, parent_category_id, sort_order, is_healthy_choice } = updateCategoryDto;
 
     let updateQuery = 'UPDATE category SET ';
     const updateParams: any[] = [];
@@ -97,6 +97,10 @@ export class AdminCategoriesService {
     if (parent_category_id !== undefined) {
       updateQuery += `parent_category_id = $${paramIndex++}, `;
       updateParams.push(parent_category_id || null);
+    }
+    if (is_healthy_choice !== undefined) {
+      updateQuery += `is_healthy_choice = $${paramIndex++}, `;
+      updateParams.push(is_healthy_choice);
     }
     if (sort_order !== undefined) {
       updateQuery += `sort_order = $${paramIndex++}, `;

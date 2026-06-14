@@ -697,6 +697,7 @@ export class StoreProductsService {
       parent_category_id,
       category_name
       FROM category
+      WHERE (is_healthy_choice = false OR is_healthy_choice IS NULL)
       ORDER BY sort_order ASC, category_name ASC
       `;
 
@@ -1414,38 +1415,7 @@ export class StoreProductsService {
     const query = `
       SELECT DISTINCT c.category_id, c.category_name, c.parent_category_id
       FROM category c
-      WHERE c.category_id IN (
-        SELECT DISTINCT pc.category_id
-        FROM product_category pc
-        JOIN product p ON pc.product_id = p.product_id
-        WHERE p.product_status = 1 AND p.is_healthy_choice = true
-      )
-      OR c.category_id IN (
-        SELECT DISTINCT p.subcategory_id
-        FROM product p
-        WHERE p.product_status = 1 AND p.is_healthy_choice = true AND p.subcategory_id IS NOT NULL
-      )
-      OR c.category_id IN (
-        SELECT DISTINCT c2.parent_category_id
-        FROM category c2
-        WHERE c2.category_id IN (
-          SELECT DISTINCT pc.category_id
-          FROM product_category pc
-          JOIN product p ON pc.product_id = p.product_id
-          WHERE p.product_status = 1 AND p.is_healthy_choice = true
-        )
-        AND c2.parent_category_id IS NOT NULL
-      )
-      OR c.category_id IN (
-        SELECT DISTINCT c3.parent_category_id
-        FROM category c3
-        WHERE c3.category_id IN (
-          SELECT DISTINCT p.subcategory_id
-          FROM product p
-          WHERE p.product_status = 1 AND p.is_healthy_choice = true AND p.subcategory_id IS NOT NULL
-        )
-        AND c3.parent_category_id IS NOT NULL
-      )
+      WHERE c.is_healthy_choice = true
       ORDER BY c.category_name ASC
     `;
 
