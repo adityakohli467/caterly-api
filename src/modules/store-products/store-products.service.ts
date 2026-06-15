@@ -1413,10 +1413,10 @@ export class StoreProductsService {
    */
   async getHealthyChoiceCategories() {
     const query = `
-      SELECT DISTINCT c.category_id, c.category_name, c.parent_category_id
+      SELECT DISTINCT c.category_id, c.category_name, c.parent_category_id, c.sort_order
       FROM category c
       WHERE c.is_healthy_choice = true
-      ORDER BY c.category_name ASC
+      ORDER BY c.sort_order ASC, c.category_name ASC
     `;
 
     const result = await this.dataSource.query(query);
@@ -1439,6 +1439,11 @@ export class StoreProductsService {
       } else {
         rootCategories.push(category);
       }
+    });
+
+    // Sort children by sort_order as well
+    rootCategories.forEach((cat: any) => {
+      cat.children.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
     });
 
     return { categories: rootCategories };
