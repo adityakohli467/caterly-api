@@ -437,6 +437,7 @@ export class AdminOrdersService implements OnModuleInit {
         coupon_discount: couponDiscount,
         gst: gst,
         is_completed: row.is_completed || 0,
+        mark_paid_comment: row.mark_paid_comment || null,
       };
     });
 
