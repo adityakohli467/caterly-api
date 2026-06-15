@@ -1374,7 +1374,7 @@ export class StoreProductsService {
     }
 
     query += `
-      ORDER BY p.product_id DESC
+      ORDER BY p.product_price ASC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
     params.push(Number(limit), offset);
