@@ -177,6 +177,7 @@ export class AdminOrdersService implements OnModuleInit {
         o.customer_order_telephone,
         o.delivery_frequency,
         o.delivery_start_date,
+        o.mark_paid_comment,
         c.customer_type,
         COALESCE(o.company_id, c.company_id) as company_id,
         COALESCE(o.department_id, c.department_id) as department_id,
