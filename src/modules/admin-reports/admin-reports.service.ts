@@ -91,6 +91,7 @@ export class AdminReportsService {
       LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE 1=1
+      AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
     `;
     const params: any[] = [];
     let paramIndex = 1;
@@ -169,6 +170,7 @@ export class AdminReportsService {
       LEFT JOIN company comp ON c.company_id = comp.company_id
       LEFT JOIN department d ON c.department_id = d.department_id
       WHERE 1=1
+      AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
     `;
     const countParams: any[] = [];
     let countParamIndex = 1;
@@ -377,6 +379,7 @@ export class AdminReportsService {
       LEFT JOIN department d ON c.department_id = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE 1=1
+      AND (o.is_deleted = 0 OR o.is_deleted IS NULL)
     `;
     const params: any[] = [];
     let paramIndex = 1;
