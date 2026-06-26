@@ -70,14 +70,20 @@ export class AdminReportsService {
     let query = `
       SELECT 
         o.order_id,
-        o.date_added as order_date,
+        COALESCE(o.date_added, o.date_modified, o.delivery_date_time) as order_date,
         o.delivery_date_time,
         o.order_status,
         o.order_total,
         o.delivery_fee,
         COALESCE(cp.coupon_discount, 0) as coupon_discount,
         cp.type as coupon_type,
-        c.firstname || ' ' || c.lastname as customer_name,
+        COALESCE(
+          NULLIF(TRIM(CONCAT(c.firstname, ' ', c.lastname)), ''),
+          NULLIF(TRIM(CONCAT(o.firstname, ' ', o.lastname)), ''),
+          NULLIF(TRIM(o.delivery_contact), ''),
+          NULLIF(TRIM(o.account_email), ''),
+          'Guest Customer'
+        ) as customer_name,
         c.customer_id,
         comp.company_name,
         d.department_name,
@@ -319,8 +325,11 @@ export class AdminReportsService {
         discount,
         gst,
         total,
-        order_date: this.formatDate(row.order_date),
-        delivery_date_time: this.formatDate(row.delivery_date_time),
+        // Return raw timestamps and let the frontend format them once.
+        // (Pre-formatting to dd/mm/yy here caused the frontend to re-parse an
+        //  ambiguous date, dropping the time and showing "N/A" for days > 12.)
+        order_date: row.order_date || null,
+        delivery_date_time: row.delivery_date_time || null,
         customer_name: row.customer_name || 'N/A',
         company_name: row.company_name || row.customer_company_name || 'N/A',
         department_name: row.department_name || row.customer_department_name || 'N/A',
@@ -361,14 +370,20 @@ export class AdminReportsService {
     let query = `
       SELECT 
         o.order_id,
-        o.date_added as order_date,
+        COALESCE(o.date_added, o.date_modified, o.delivery_date_time) as order_date,
         o.delivery_date_time,
         o.order_status,
         o.order_total,
         o.delivery_fee,
         COALESCE(cp.coupon_discount, 0) as coupon_discount,
         cp.type as coupon_type,
-        c.firstname || ' ' || c.lastname as customer_name,
+        COALESCE(
+          NULLIF(TRIM(CONCAT(c.firstname, ' ', c.lastname)), ''),
+          NULLIF(TRIM(CONCAT(o.firstname, ' ', o.lastname)), ''),
+          NULLIF(TRIM(o.delivery_contact), ''),
+          NULLIF(TRIM(o.account_email), ''),
+          'Guest Customer'
+        ) as customer_name,
         comp.company_name,
         d.department_name,
         o.customer_company_name,

@@ -842,8 +842,9 @@ export class AdminOrdersService implements OnModuleInit {
           customer_id, location_id, branch_id, shipping_method, delivery_date_time, delivery_fee, order_total,
           order_status, order_comments, coupon_id, coupon_discount, delivery_address, delivery_method,
           account_email, cost_center, delivery_contact, delivery_details, standing_order, user_id, payment_status,
-          firstname, lastname, email, telephone, gst, company_id, department_id, delivery_time
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+          firstname, lastname, email, telephone, gst, company_id, department_id, delivery_time,
+          date_added, date_modified
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING *`,
         [
           customer_id || null,
@@ -1260,6 +1261,12 @@ export class AdminOrdersService implements OnModuleInit {
       date_modified: new Date(),
     };
 
+    // When marking as completed (status 5), also flag is_completed so the
+    // order is consistently treated as completed across the app/dashboard
+    if (Number(orderStatus) === 5) {
+      updateData.is_completed = 1;
+    }
+
     // When marking as paid (status 2 or 3), also set payment_status and payment_date
     if (orderStatus === 2 || orderStatus === 3) {
       updateData.payment_status = 'paid';
@@ -1406,7 +1413,46 @@ export class AdminOrdersService implements OnModuleInit {
     }
   }
 
+  /**
+   * Automatically mark one-time orders whose delivery date/time has passed as Completed.
+   * Active orders (excluding cancelled, awaiting approval, already completed, delivered,
+   * rejected, pending payment and quotes) that are past their delivery time are set to
+   * order_status = 5 (Completed) and is_completed = 1.
+   * Returns the number of orders that were updated.
+   */
+  async autoCompletePastDeliveryOrders(): Promise<number> {
+    try {
+      const result = await this.dataSource.query(`
+        UPDATE orders
+        SET order_status = 5,
+            is_completed = 1,
+            date_modified = CURRENT_TIMESTAMP
+        WHERE delivery_date_time IS NOT NULL
+          AND delivery_date_time < NOW()
+          AND order_status NOT IN (0, 4, 5, 6, 8, 10)
+          AND (standing_order = 0 OR standing_order IS NULL)
+          AND (payment_status IS NULL OR payment_status != 'quote')
+          AND (is_deleted = 0 OR is_deleted IS NULL)
+          AND (is_completed = 0 OR is_completed IS NULL)
+        RETURNING order_id
+      `);
+
+      const updatedCount = Array.isArray(result) ? result.length : 0;
+      if (updatedCount > 0) {
+        this.logger.log(`Auto-completed ${updatedCount} order(s) past their delivery date`);
+      }
+      return updatedCount;
+    } catch (error) {
+      this.logger.error('Failed to auto-complete past-delivery orders:', error);
+      return 0;
+    }
+  }
+
   async getStats(): Promise<any> {
+    // Automatically mark any orders whose delivery date/time has passed as completed
+    // so the dashboard always reflects an up-to-date status
+    await this.autoCompletePastDeliveryOrders();
+
     const statsQuery = `
       SELECT
         COUNT(*) as total_orders,
