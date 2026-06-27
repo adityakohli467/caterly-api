@@ -51,6 +51,7 @@ export class AdminReportsService {
     delivery_date_to?: string;
     location_id?: number;
     status?: string;
+    company?: string;
     search?: string;
     limit?: number;
     offset?: number;
@@ -62,6 +63,7 @@ export class AdminReportsService {
       delivery_date_to,
       location_id,
       status,
+      company,
       search,
       limit = 100,
       offset = 0
@@ -103,26 +105,28 @@ export class AdminReportsService {
     let paramIndex = 1;
 
     // Date filters
+    // Order date uses the same coalesced value shown in the report (date_added may be NULL on old orders).
+    // Cast columns to ::date so the "to" date is inclusive of the selected day.
     if (order_date_from) {
-      query += ` AND o.date_added >= $${paramIndex}::date`;
+      query += ` AND COALESCE(o.date_added, o.date_modified, o.delivery_date_time)::date >= $${paramIndex}::date`;
       params.push(order_date_from);
       paramIndex++;
     }
 
     if (order_date_to) {
-      query += ` AND o.date_added <= $${paramIndex}::date`;
+      query += ` AND COALESCE(o.date_added, o.date_modified, o.delivery_date_time)::date <= $${paramIndex}::date`;
       params.push(order_date_to);
       paramIndex++;
     }
 
     if (delivery_date_from) {
-      query += ` AND o.delivery_date_time >= $${paramIndex}::date`;
+      query += ` AND o.delivery_date_time::date >= $${paramIndex}::date`;
       params.push(delivery_date_from);
       paramIndex++;
     }
 
     if (delivery_date_to) {
-      query += ` AND o.delivery_date_time <= $${paramIndex}::date`;
+      query += ` AND o.delivery_date_time::date <= $${paramIndex}::date`;
       params.push(delivery_date_to);
       paramIndex++;
     }
@@ -131,6 +135,13 @@ export class AdminReportsService {
     if (location_id) {
       query += ` AND o.location_id = $${paramIndex}`;
       params.push(Number(location_id));
+      paramIndex++;
+    }
+
+    // Company filter (matches linked company name or the order's stored company name)
+    if (company) {
+      query += ` AND (comp.company_name ILIKE $${paramIndex} OR o.customer_company_name ILIKE $${paramIndex})`;
+      params.push(`%${company}%`);
       paramIndex++;
     }
 
@@ -162,7 +173,7 @@ export class AdminReportsService {
       paramIndex++;
     }
 
-    query += ' ORDER BY o.date_added DESC';
+    query += ' ORDER BY COALESCE(o.date_added, o.date_modified, o.delivery_date_time) DESC';
     query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(Number(limit), Number(offset));
 
@@ -182,25 +193,25 @@ export class AdminReportsService {
     let countParamIndex = 1;
 
     if (order_date_from) {
-      countQuery += ` AND o.date_added >= $${countParamIndex}::date`;
+      countQuery += ` AND COALESCE(o.date_added, o.date_modified, o.delivery_date_time)::date >= $${countParamIndex}::date`;
       countParams.push(order_date_from);
       countParamIndex++;
     }
 
     if (order_date_to) {
-      countQuery += ` AND o.date_added <= $${countParamIndex}::date`;
+      countQuery += ` AND COALESCE(o.date_added, o.date_modified, o.delivery_date_time)::date <= $${countParamIndex}::date`;
       countParams.push(order_date_to);
       countParamIndex++;
     }
 
     if (delivery_date_from) {
-      countQuery += ` AND o.delivery_date_time >= $${countParamIndex}::date`;
+      countQuery += ` AND o.delivery_date_time::date >= $${countParamIndex}::date`;
       countParams.push(delivery_date_from);
       countParamIndex++;
     }
 
     if (delivery_date_to) {
-      countQuery += ` AND o.delivery_date_time <= $${countParamIndex}::date`;
+      countQuery += ` AND o.delivery_date_time::date <= $${countParamIndex}::date`;
       countParams.push(delivery_date_to);
       countParamIndex++;
     }
@@ -208,6 +219,12 @@ export class AdminReportsService {
     if (location_id) {
       countQuery += ` AND o.location_id = $${countParamIndex}`;
       countParams.push(Number(location_id));
+      countParamIndex++;
+    }
+
+    if (company) {
+      countQuery += ` AND (comp.company_name ILIKE $${countParamIndex} OR o.customer_company_name ILIKE $${countParamIndex})`;
+      countParams.push(`%${company}%`);
       countParamIndex++;
     }
 
@@ -355,6 +372,7 @@ export class AdminReportsService {
     delivery_date_to?: string;
     location_id?: number;
     status?: string;
+    company?: string;
     search?: string;
   }) {
     const {
@@ -364,6 +382,7 @@ export class AdminReportsService {
       delivery_date_to,
       location_id,
       status,
+      company,
       search
     } = filters;
 
@@ -401,25 +420,25 @@ export class AdminReportsService {
 
     // Apply same filters as listReports
     if (order_date_from) {
-      query += ` AND o.date_added >= $${paramIndex}::date`;
+      query += ` AND COALESCE(o.date_added, o.date_modified, o.delivery_date_time)::date >= $${paramIndex}::date`;
       params.push(order_date_from);
       paramIndex++;
     }
 
     if (order_date_to) {
-      query += ` AND o.date_added <= $${paramIndex}::date`;
+      query += ` AND COALESCE(o.date_added, o.date_modified, o.delivery_date_time)::date <= $${paramIndex}::date`;
       params.push(order_date_to);
       paramIndex++;
     }
 
     if (delivery_date_from) {
-      query += ` AND o.delivery_date_time >= $${paramIndex}::date`;
+      query += ` AND o.delivery_date_time::date >= $${paramIndex}::date`;
       params.push(delivery_date_from);
       paramIndex++;
     }
 
     if (delivery_date_to) {
-      query += ` AND o.delivery_date_time <= $${paramIndex}::date`;
+      query += ` AND o.delivery_date_time::date <= $${paramIndex}::date`;
       params.push(delivery_date_to);
       paramIndex++;
     }
@@ -427,6 +446,12 @@ export class AdminReportsService {
     if (location_id) {
       query += ` AND o.location_id = $${paramIndex}`;
       params.push(Number(location_id));
+      paramIndex++;
+    }
+
+    if (company) {
+      query += ` AND (comp.company_name ILIKE $${paramIndex} OR o.customer_company_name ILIKE $${paramIndex})`;
+      params.push(`%${company}%`);
       paramIndex++;
     }
 
@@ -454,7 +479,7 @@ export class AdminReportsService {
       paramIndex++;
     }
 
-    query += ' ORDER BY o.date_added DESC';
+    query += ' ORDER BY COALESCE(o.date_added, o.date_modified, o.delivery_date_time) DESC';
 
     const result = await this.dataSource.query(query, params);
 
