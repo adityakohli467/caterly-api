@@ -149,27 +149,87 @@ export class GrokService implements OnModuleInit {
   }
 
   private async callGrok(messages: GrokMessage[], tools?: any[]): Promise<any> {
-    try {
-      return await this.postCompletion(this.model, messages, tools);
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const providerMsg = err?.response?.data?.error?.message || err?.message || '';
-      this.logger.error(`AI call failed (model="${this.model}", status=${status}): ${providerMsg}`);
+    const maxAttempts = 3;
 
-      // If the configured model looks invalid/unsupported, fall back to a known-good one and retry once.
-      const looksLikeModelProblem =
-        (status === 400 || status === 404) &&
-        this.model !== FALLBACK_MODEL &&
-        /model|decommission|not found|does not exist|unsupported|invalid/i.test(String(providerMsg));
-
-      if (looksLikeModelProblem) {
-        this.logger.warn(`Falling back from model "${this.model}" to "${FALLBACK_MODEL}" and retrying.`);
-        this.model = FALLBACK_MODEL;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
         return await this.postCompletion(this.model, messages, tools);
-      }
+      } catch (err: any) {
+        const status = err?.response?.status;
+        const data = err?.response?.data?.error;
+        const providerMsg = data?.message || err?.message || '';
+        const code = data?.code;
 
-      throw err;
+        // If the configured model is invalid/unsupported, fall back to a known-good one and retry.
+        const looksLikeModelProblem =
+          (status === 400 || status === 404) &&
+          this.model !== FALLBACK_MODEL &&
+          /model|decommission|not found|does not exist|unsupported|invalid/i.test(String(providerMsg));
+
+        if (looksLikeModelProblem) {
+          this.logger.warn(`Falling back from model "${this.model}" to "${FALLBACK_MODEL}" and retrying.`);
+          this.model = FALLBACK_MODEL;
+          continue;
+        }
+
+        // The model occasionally emits a malformed tool call and Groq rejects it with
+        // "tool_use_failed". This is stochastic, so retry a couple of times; as a last
+        // resort, recover the intended call from failed_generation so the chat still progresses.
+        if (status === 400 && code === 'tool_use_failed') {
+          this.logger.warn(`tool_use_failed (attempt ${attempt}/${maxAttempts}); retrying.`);
+          if (attempt < maxAttempts) continue;
+
+          const recovered = this.recoverToolCall(data?.failed_generation);
+          if (recovered) {
+            this.logger.warn('Recovered tool call from failed_generation after retries.');
+            return recovered;
+          }
+        }
+
+        this.logger.error(`AI call failed (model="${this.model}", status=${status}, code=${code}): ${providerMsg}`);
+        throw err;
+      }
     }
+
+    throw new Error('AI call failed after retries.');
+  }
+
+  /**
+   * Rebuild a valid tool-call response from Groq's failed_generation payload, e.g.
+   * `<function=search_menu={"keywords":"party"}</function>`, so a malformed generation
+   * does not break the conversation.
+   */
+  private recoverToolCall(failed?: string): any | null {
+    if (!failed || typeof failed !== 'string') return null;
+
+    const match = failed.match(/<function=([a-zA-Z_][\w]*)=?\s*(\{[\s\S]*\})\s*<\/function>/);
+    if (!match) return null;
+
+    const name = match[1];
+    const args = match[2];
+    try {
+      JSON.parse(args);
+    } catch {
+      return null;
+    }
+
+    return {
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: `recovered_${Date.now()}`,
+                type: 'function',
+                function: { name, arguments: args },
+              },
+            ],
+          },
+        },
+      ],
+    };
   }
 
   private async postCompletion(model: string, messages: GrokMessage[], tools?: any[]): Promise<any> {
