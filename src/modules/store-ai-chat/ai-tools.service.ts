@@ -9,7 +9,28 @@ import { DataSource } from 'typeorm';
 export class AiToolsService {
   private readonly logger = new Logger(AiToolsService.name);
 
+  // Cached result of whether the optional `is_vegetarian` column exists on the
+  // product table (the migration may not have been run on every environment).
+  private hasVegColumn: boolean | null = null;
+
   constructor(private readonly dataSource: DataSource) {}
+
+  /** Detect once whether product.is_vegetarian exists so a missing column never breaks search. */
+  private async vegetarianColumnExists(): Promise<boolean> {
+    if (this.hasVegColumn !== null) return this.hasVegColumn;
+    try {
+      const rows = await this.dataSource.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = 'product' AND column_name = 'is_vegetarian' LIMIT 1`,
+      );
+      this.hasVegColumn = rows.length > 0;
+      if (!this.hasVegColumn) {
+        this.logger.warn('product.is_vegetarian column not found; run add-is-vegetarian-to-product.sql to enable vegetarian filtering.');
+      }
+    } catch {
+      this.hasVegColumn = false;
+    }
+    return this.hasVegColumn;
+  }
 
   /**
    * JSON schema definitions passed to Grok so it knows which tools exist.
@@ -121,12 +142,15 @@ export class AiToolsService {
     const params: any[] = [];
     let i = 1;
 
+    const hasVeg = await this.vegetarianColumnExists();
+    const vegSelect = hasVeg ? 'COALESCE(p.is_vegetarian, false)' : 'false';
+
     let query = `
       SELECT
         p.product_id,
         p.product_name,
         p.product_price,
-        COALESCE(p.is_vegetarian, false) AS is_vegetarian,
+        ${vegSelect} AS is_vegetarian,
         p.short_description,
         p.product_tag,
         (
@@ -169,8 +193,8 @@ export class AiToolsService {
       if (clauses.length) query += ` AND (${clauses.join(' OR ')})`;
     }
 
-    // Structured vegetarian flag only when explicitly requested.
-    if (args.vegetarian_only === true) {
+    // Structured vegetarian flag only when explicitly requested (and the column exists).
+    if (args.vegetarian_only === true && hasVeg) {
       query += ` AND COALESCE(p.is_vegetarian, false) = true`;
     }
 
@@ -214,8 +238,8 @@ export class AiToolsService {
           description: r.short_description || null,
         })),
       };
-    } catch (err) {
-      this.logger.error('search_menu failed', err as any);
+    } catch (err: any) {
+      this.logger.error(`search_menu failed: ${err?.message || err}`);
       return { error: 'Menu search failed', count: 0, items: [] };
     }
   }
