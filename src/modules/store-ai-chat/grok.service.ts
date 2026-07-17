@@ -76,53 +76,67 @@ export class GrokService {
     const toolDefs = this.tools.getToolDefinitions();
     const collectedToolResults: any[] = [];
 
-    // Allow a few rounds of tool calls before forcing a final answer.
-    for (let round = 0; round < 5; round++) {
-      const response = await this.callGrok(messages, toolDefs);
-      const choice = response?.choices?.[0];
-      const msg = choice?.message;
+    try {
+      // Allow a few rounds of tool calls before forcing a final answer.
+      for (let round = 0; round < 5; round++) {
+        const response = await this.callGrok(messages, toolDefs);
+        const choice = response?.choices?.[0];
+        const msg = choice?.message;
 
-      if (!msg) {
-        return { reply: 'Sorry, I had trouble responding just now. Please try again.', toolResults: collectedToolResults };
-      }
-
-      // No tool calls -> final answer.
-      if (!msg.tool_calls || msg.tool_calls.length === 0) {
-        return { reply: msg.content || '', toolResults: collectedToolResults };
-      }
-
-      // Append the assistant message that requested the tools.
-      messages.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls });
-
-      // Execute each requested tool and feed results back.
-      for (const call of msg.tool_calls) {
-        const fnName = call.function?.name;
-        let args: any = {};
-        try {
-          args = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
-        } catch {
-          args = {};
+        if (!msg) {
+          return { reply: 'Sorry, I had trouble responding just now. Please try again.', toolResults: collectedToolResults };
         }
 
-        const result = await this.tools.runTool(fnName, args);
-        collectedToolResults.push({ tool: fnName, args, result });
+        // No tool calls -> final answer.
+        if (!msg.tool_calls || msg.tool_calls.length === 0) {
+          return { reply: msg.content || '', toolResults: collectedToolResults };
+        }
 
-        messages.push({
-          role: 'tool',
-          tool_call_id: call.id,
-          name: fnName,
-          content: JSON.stringify(result),
-        });
+        // Append the assistant message that requested the tools.
+        messages.push({ role: 'assistant', content: msg.content ?? '', tool_calls: msg.tool_calls });
+
+        // Execute each requested tool and feed results back.
+        for (const call of msg.tool_calls) {
+          const fnName = call.function?.name;
+          let args: any = {};
+          try {
+            args = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+          } catch {
+            args = {};
+          }
+
+          const result = await this.tools.runTool(fnName, args);
+          collectedToolResults.push({ tool: fnName, args, result });
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            name: fnName,
+            content: JSON.stringify(result),
+          });
+        }
       }
-    }
 
-    // Safety net: ask for a final summary without tools.
-    const finalResp = await this.callGrok(messages, undefined);
-    const finalMsg = finalResp?.choices?.[0]?.message?.content;
-    return {
-      reply: finalMsg || 'Here is what I found. Would you like me to put together a quote?',
-      toolResults: collectedToolResults,
-    };
+      // Safety net: ask for a final summary without tools.
+      const finalResp = await this.callGrok(messages, undefined);
+      const finalMsg = finalResp?.choices?.[0]?.message?.content;
+      return {
+        reply: finalMsg || 'Here is what I found. Would you like me to put together a quote?',
+        toolResults: collectedToolResults,
+      };
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const providerMsg = err?.response?.data?.error?.message || err?.message;
+      this.logger.error(
+        `AI provider error (model="${this.model}", base="${this.baseUrl}", status=${status}): ${providerMsg}`,
+      );
+      // Degrade gracefully instead of returning a 500 to the browser.
+      return {
+        reply:
+          "Sorry, I'm having a little trouble right now. Please try again in a moment, or reach out to our team and we'll help you plan your event.",
+        toolResults: collectedToolResults,
+      };
+    }
   }
 
   private async callGrok(messages: GrokMessage[], tools?: any[]): Promise<any> {
