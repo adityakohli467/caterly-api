@@ -21,18 +21,23 @@ export class AiToolsService {
         function: {
           name: 'search_menu',
           description:
-            'Search the live catering catalog for items. Use this before recommending any dish so prices and names are real. Returns matching products with price, category and vegetarian flag.',
+            'Search the live catering catalog for items. Use this before recommending any dish so prices and names are real. Returns matching products with price, category and the vegetarian flag.',
           parameters: {
             type: 'object',
             properties: {
               keywords: {
                 type: 'string',
-                description: 'Optional free-text keywords, e.g. "biryani grilled chicken salad".',
+                description: 'Optional free-text dish keywords, e.g. "biryani grilled chicken salad".',
               },
-              diet: {
+              dietary: {
                 type: 'string',
-                enum: ['veg', 'non-veg', 'any'],
-                description: 'Filter by dietary type. Use "veg" for vegetarian only, "non-veg" for non-vegetarian only.',
+                description:
+                  'Any dietary preference or restriction the customer mentioned, matched against item name/description/tags. Free text — e.g. "vegan", "gluten free", "halal", "nut free", "dairy free", "vegetarian", "kids". Leave empty if none.',
+              },
+              vegetarian_only: {
+                type: 'boolean',
+                description:
+                  'Set true ONLY when the customer explicitly wants strictly vegetarian items (uses the structured vegetarian flag). Otherwise omit.',
               },
               max_price: {
                 type: 'number',
@@ -106,7 +111,8 @@ export class AiToolsService {
 
   private async searchMenu(args: {
     keywords?: string;
-    diet?: 'veg' | 'non-veg' | 'any';
+    dietary?: string;
+    vegetarian_only?: boolean;
     max_price?: number;
     min_price?: number;
     category?: string;
@@ -122,6 +128,7 @@ export class AiToolsService {
         p.product_price,
         COALESCE(p.is_vegetarian, false) AS is_vegetarian,
         p.short_description,
+        p.product_tag,
         (
           SELECT c.category_name
           FROM product_category pc
@@ -148,10 +155,23 @@ export class AiToolsService {
       if (clauses.length) query += ` AND (${clauses.join(' OR ')})`;
     }
 
-    if (args.diet === 'veg') {
+    // Free-form dietary preference / restriction: match against name, description and tags.
+    if (args.dietary && args.dietary.trim()) {
+      const words = args.dietary.trim().split(/\s+/).slice(0, 6);
+      const clauses: string[] = [];
+      for (const w of words) {
+        params.push(`%${w}%`);
+        clauses.push(
+          `(p.product_name ILIKE $${i} OR p.product_description ILIKE $${i} OR p.short_description ILIKE $${i} OR p.product_tag ILIKE $${i})`,
+        );
+        i++;
+      }
+      if (clauses.length) query += ` AND (${clauses.join(' OR ')})`;
+    }
+
+    // Structured vegetarian flag only when explicitly requested.
+    if (args.vegetarian_only === true) {
       query += ` AND COALESCE(p.is_vegetarian, false) = true`;
-    } else if (args.diet === 'non-veg') {
-      query += ` AND COALESCE(p.is_vegetarian, false) = false`;
     }
 
     if (typeof args.min_price === 'number' && !isNaN(args.min_price)) {
@@ -190,6 +210,7 @@ export class AiToolsService {
           price: Number(r.product_price),
           is_vegetarian: r.is_vegetarian === true,
           category: r.category_name || null,
+          tags: r.product_tag || null,
           description: r.short_description || null,
         })),
       };
