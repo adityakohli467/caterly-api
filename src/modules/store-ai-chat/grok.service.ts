@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 import { AiToolsService } from './ai-tools.service';
 
@@ -10,17 +10,26 @@ interface GrokMessage {
   name?: string;
 }
 
+// Known-good Groq model with tool-calling support, used as a safety net if the
+// configured AI_MODEL is invalid/decommissioned (Groq returns 400 in that case).
+const FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+
 @Injectable()
-export class GrokService {
+export class GrokService implements OnModuleInit {
   private readonly logger = new Logger(GrokService.name);
 
   // Works with any OpenAI-compatible provider. Defaults target Groq (groq.com).
   // For xAI Grok instead, set AI_BASE_URL=https://api.x.ai/v1 and AI_MODEL=grok-4.
   private readonly apiKey = process.env.AI_API_KEY || process.env.GROQ_API_KEY || process.env.GROK_API_KEY || '';
   private readonly baseUrl = process.env.AI_BASE_URL || process.env.GROK_BASE_URL || 'https://api.groq.com/openai/v1';
-  private readonly model = process.env.AI_MODEL || process.env.GROK_MODEL || 'llama-3.3-70b-versatile';
+  private model = process.env.AI_MODEL || process.env.GROK_MODEL || 'llama-3.3-70b-versatile';
 
   constructor(private readonly tools: AiToolsService) {}
+
+  onModuleInit() {
+    const keyState = this.apiKey ? `set (…${this.apiKey.slice(-4)})` : 'MISSING';
+    this.logger.log(`AI assistant config -> model="${this.model}", base="${this.baseUrl}", apiKey=${keyState}`);
+  }
 
   private systemPrompt(): string {
     const today = new Date().toISOString().slice(0, 10);
@@ -141,29 +150,42 @@ export class GrokService {
 
   private async callGrok(messages: GrokMessage[], tools?: any[]): Promise<any> {
     try {
-      const body: any = {
-        model: this.model,
-        messages,
-        temperature: 0.4,
-      };
-      if (tools && tools.length) {
-        body.tools = tools;
-        body.tool_choice = 'auto';
+      return await this.postCompletion(this.model, messages, tools);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const providerMsg = err?.response?.data?.error?.message || err?.message || '';
+      this.logger.error(`AI call failed (model="${this.model}", status=${status}): ${providerMsg}`);
+
+      // If the configured model looks invalid/unsupported, fall back to a known-good one and retry once.
+      const looksLikeModelProblem =
+        (status === 400 || status === 404) &&
+        this.model !== FALLBACK_MODEL &&
+        /model|decommission|not found|does not exist|unsupported|invalid/i.test(String(providerMsg));
+
+      if (looksLikeModelProblem) {
+        this.logger.warn(`Falling back from model "${this.model}" to "${FALLBACK_MODEL}" and retrying.`);
+        this.model = FALLBACK_MODEL;
+        return await this.postCompletion(this.model, messages, tools);
       }
 
-      const { data } = await axios.post(`${this.baseUrl}/chat/completions`, body, {
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 60000,
-      });
-      return data;
-    } catch (err: any) {
-      this.logger.error(
-        `Grok API call failed: ${err?.response?.status} ${JSON.stringify(err?.response?.data || err?.message)}`,
-      );
       throw err;
     }
+  }
+
+  private async postCompletion(model: string, messages: GrokMessage[], tools?: any[]): Promise<any> {
+    const body: any = { model, messages, temperature: 0.4 };
+    if (tools && tools.length) {
+      body.tools = tools;
+      body.tool_choice = 'auto';
+    }
+
+    const { data } = await axios.post(`${this.baseUrl}/chat/completions`, body, {
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 60000,
+    });
+    return data;
   }
 }
