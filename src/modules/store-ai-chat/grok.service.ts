@@ -25,7 +25,7 @@ export class GrokService {
   private systemPrompt(): string {
     const today = new Date().toISOString().slice(0, 10);
     return [
-      'You are "Caterly Assistant", a warm, professional catering concierge for Caterly.',
+      'You are "Bizzy", a warm, professional catering concierge for Caterly.',
       `Today's date is ${today}. Prices are in AUD unless stated otherwise.`,
       '',
       'Your job: help customers plan events, recommend menus within their budget and dietary',
