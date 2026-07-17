@@ -55,6 +55,7 @@ import { StoreWholesaleEnquiryModule } from './modules/store-wholesale-enquiry/s
 import { StoreQuotationModule } from './modules/store-quotation/store-quotation.module';
 import { StoreBlogsModule } from './modules/store-blogs/store-blogs.module';
 import { StoreReviewsModule } from './modules/store-reviews/store-reviews.module';
+import { StoreAiChatModule } from './modules/store-ai-chat/store-ai-chat.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -110,6 +111,7 @@ import { AppService } from './app.service';
     StoreQuotationModule,
     StoreBlogsModule,
     StoreReviewsModule,
+    StoreAiChatModule,
   ],
   controllers: [AppController],
   providers: [

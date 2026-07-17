@@ -81,6 +81,9 @@ export class Product {
   @Column({ type: "boolean", default: false })
   is_healthy_choice!: boolean
 
+  @Column({ type: "boolean", default: false })
+  is_vegetarian!: boolean
+
   @Column({ type: "varchar", length: 20, nullable: true })
   healthy_choice_color!: string
 
