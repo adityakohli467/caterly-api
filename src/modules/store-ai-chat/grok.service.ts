@@ -124,7 +124,50 @@ export class GrokService implements OnModuleInit {
 
         // No tool calls -> final answer.
         if (!msg.tool_calls || msg.tool_calls.length === 0) {
-          const reply = msg.content || '';
+          const rawContent = msg.content || '';
+
+          // Guard: Llama on Groq intermittently emits a malformed tool call as plain text
+          // (e.g. "<function=search_menu>{}</function>") inside the content instead of a
+          // structured tool_call. If we shipped that, the customer would see raw markup and
+          // get no menu. Detect it, run the tool for real, and continue the conversation.
+          const inlineCalls = this.extractInlineToolCalls(rawContent);
+          if (inlineCalls.length) {
+            this.logger.warn(
+              `Recovered ${inlineCalls.length} inline/malformed tool call(s) from content; executing instead of showing them.`,
+            );
+            const toolCalls = inlineCalls.map((c, idx) => ({
+              id: `inline_${Date.now()}_${idx}`,
+              type: 'function',
+              function: { name: c.name, arguments: c.arguments },
+            }));
+            messages.push({ role: 'assistant', content: '', tool_calls: toolCalls });
+            for (const call of toolCalls) {
+              const fnName = call.function.name;
+              let args: any = {};
+              try {
+                args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+              } catch {
+                args = {};
+              }
+              const result = await this.tools.runTool(fnName, args);
+              collectedToolResults.push({ tool: fnName, args, result });
+              if (fnName === 'search_menu') {
+                searchedThisTurn = true;
+                const items = Array.isArray(result?.items) ? result.items : [];
+                realItemsFound += items.length;
+              }
+              messages.push({
+                role: 'tool',
+                tool_call_id: call.id,
+                name: fnName,
+                content: JSON.stringify(result),
+              });
+            }
+            continue;
+          }
+
+          // Belt and braces: strip any stray function markup before it can reach the customer.
+          const reply = this.stripInlineToolMarkup(rawContent);
 
           // Grounding check: if the model is presenting dishes/prices but has not grounded
           // them in a real search this turn (or the search returned nothing), reject the
@@ -198,7 +241,7 @@ export class GrokService implements OnModuleInit {
 
       // Safety net: ask for a final summary without tools.
       const finalResp = await this.callGrok(messages, undefined);
-      const finalMsg = finalResp?.choices?.[0]?.message?.content;
+      const finalMsg = this.stripInlineToolMarkup(finalResp?.choices?.[0]?.message?.content || '');
       return {
         reply: finalMsg || 'Here is what I found. Would you like me to put together a quote?',
         toolResults: collectedToolResults,
@@ -293,6 +336,41 @@ export class GrokService implements OnModuleInit {
     const listy = /(^|\n)\s*(?:[-*\u2022]|\d+[.)])\s+\S/.test(text);
     const menuWords = /\b(menu|dish|dishes|platter|starter|main|dessert|per person|pp)\b/i.test(text);
     return listy && menuWords;
+  }
+
+  // Matches a malformed inline tool call the model sometimes writes into its text content,
+  // e.g. "<function=search_menu>{...}</function>" or "<function=search_menu={...}</function>".
+  private static readonly INLINE_TOOL_CALL =
+    /<function\s*=\s*([a-zA-Z_]\w*)\s*[>=]?\s*(\{[\s\S]*?\})?\s*(?:<\/function>)?/g;
+
+  /**
+   * Pull any malformed inline tool calls out of a text reply so we can run them for real
+   * instead of showing the raw markup to the customer. Returns the tool name and a JSON
+   * argument string (defaulting to "{}") for each match.
+   */
+  private extractInlineToolCalls(content: string): { name: string; arguments: string }[] {
+    if (!content || content.indexOf('<function') === -1) return [];
+    const calls: { name: string; arguments: string }[] = [];
+    const re = new RegExp(GrokService.INLINE_TOOL_CALL.source, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      const name = m[1];
+      let args = m[2] || '{}';
+      try {
+        JSON.parse(args);
+      } catch {
+        args = '{}';
+      }
+      calls.push({ name, arguments: args });
+    }
+    return calls;
+  }
+
+  /** Remove any stray inline tool-call markup from text before it is shown to the customer. */
+  private stripInlineToolMarkup(content: string): string {
+    if (!content || content.indexOf('<function') === -1) return content;
+    const re = new RegExp(GrokService.INLINE_TOOL_CALL.source, 'g');
+    return content.replace(re, '').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   /** Work out how long to wait after a 429, from the Retry-After header or Groq's message. */
