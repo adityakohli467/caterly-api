@@ -25,11 +25,16 @@ export class StoreAiChatService {
 
     // Surface the last menu suggestion (if any) for the UI to render nicely.
     const lastMenu = [...toolResults].reverse().find((t) => t.tool === 'search_menu')?.result;
+    // Surface the latest priced quote so the widget can offer "Add all to cart".
+    const lastQuote = [...toolResults]
+      .reverse()
+      .find((t) => t.tool === 'build_quote' && Array.isArray(t.result?.items) && t.result.items.length > 0)?.result;
     const lead = toolResults.find((t) => t.tool === 'capture_lead')?.result;
 
     return {
       reply,
       suggestion: lastMenu || undefined,
+      quote: lastQuote || undefined,
       session_id: dto.session_id,
       ...(lead ? { lead } : {}),
     } as ChatResponseDto;

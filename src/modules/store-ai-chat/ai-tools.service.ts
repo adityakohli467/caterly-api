@@ -92,6 +92,34 @@ export class AiToolsService {
       {
         type: 'function',
         function: {
+          name: 'build_quote',
+          description:
+            'Build a finalised quote from the specific items and quantities you are recommending. Call this RIGHT BEFORE you present your final menu, so the customer sees real prices and an "Add all to cart" button. Only use product_id values returned by search_menu.',
+          parameters: {
+            type: 'object',
+            properties: {
+              items: {
+                type: 'array',
+                description: 'The chosen menu items with quantities.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    product_id: { type: 'number', description: 'product_id from search_menu.' },
+                    quantity: { type: 'number', description: 'Quantity of this item (default 1).' },
+                  },
+                  required: ['product_id'],
+                },
+              },
+              guest_count: { type: 'number', description: 'Number of guests, if known.' },
+              notes: { type: 'string', description: 'Short note about the quote, e.g. a veg/non-veg split.' },
+            },
+            required: ['items'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
           name: 'capture_lead',
           description:
             'Save the customer enquiry / event request as a lead so the catering team can follow up. Call this once you have collected the essentials (name + contact) and the customer wants to proceed or get a quote.',
@@ -123,6 +151,8 @@ export class AiToolsService {
         return this.searchMenu(args || {});
       case 'get_menu_categories':
         return this.getMenuCategories();
+      case 'build_quote':
+        return this.buildQuote(args || {});
       case 'capture_lead':
         return this.captureLead(args || {});
       default:
@@ -257,6 +287,66 @@ export class AiToolsService {
     } catch (err) {
       this.logger.error('get_menu_categories failed', err as any);
       return { categories: [] };
+    }
+  }
+
+  /**
+   * Build a priced quote from the chosen product ids + quantities. Prices, names and
+   * images are re-read from the DB so the quote (and the cart it feeds) is always real.
+   */
+  private async buildQuote(args: {
+    items?: Array<{ product_id?: number; quantity?: number }>;
+    guest_count?: number;
+    notes?: string;
+  }) {
+    const reqItems = Array.isArray(args.items) ? args.items : [];
+    const ids = reqItems.map((it) => Number(it.product_id)).filter((n) => Number.isFinite(n));
+    if (ids.length === 0) {
+      return { error: 'No valid items provided for the quote.', items: [], subtotal: 0, item_count: 0 };
+    }
+
+    try {
+      const rows = await this.dataSource.query(
+        `SELECT product_id, product_name, product_price, product_image_url
+           FROM product
+          WHERE product_id = ANY($1::int[])
+            AND product_status = 1`,
+        [ids],
+      );
+      const byId = new Map<number, any>(rows.map((r: any) => [Number(r.product_id), r]));
+
+      const items = reqItems
+        .map((it) => {
+          const row = byId.get(Number(it.product_id));
+          if (!row) return null;
+          const quantity = Math.max(1, Math.round(Number(it.quantity) || 1));
+          const price = Number(row.product_price);
+          return {
+            product_id: Number(row.product_id),
+            name: row.product_name,
+            price,
+            quantity,
+            line_total: Math.round(price * quantity * 100) / 100,
+            image: row.product_image_url || null,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      if (items.length === 0) {
+        return { error: 'None of the items could be found.', items: [], subtotal: 0, item_count: 0 };
+      }
+
+      const subtotal = Math.round(items.reduce((s, it) => s + it.line_total, 0) * 100) / 100;
+      return {
+        items,
+        subtotal,
+        item_count: items.length,
+        guest_count: args.guest_count ?? null,
+        notes: args.notes ?? null,
+      };
+    } catch (err: any) {
+      this.logger.error(`build_quote failed: ${err?.message || err}`);
+      return { error: 'Could not build the quote', items: [], subtotal: 0, item_count: 0 };
     }
   }
 

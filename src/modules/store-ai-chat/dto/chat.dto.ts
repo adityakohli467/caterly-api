@@ -23,5 +23,7 @@ export interface ChatResponseDto {
   reply: string;
   /** Structured menu suggestion, if the AI produced one via tools. */
   suggestion?: any;
+  /** Priced quote (items + subtotal) the customer can add straight to the cart. */
+  quote?: any;
   session_id?: string;
 }
