@@ -51,8 +51,13 @@ export class GrokService implements OnModuleInit {
       '- Help plan events and recommend menus within budget and dietary needs, then collect their details for a quote.',
       '',
       'HARD RULES:',
-      '- NEVER invent menu items, dishes or prices. ALWAYS call search_menu to get real items before recommending anything.',
-      '- Given a budget + guest count, work out the per-person budget and pick a realistic combination of REAL items that fits.',
+      '- NEVER invent, guess, paraphrase or "fill in" menu items, dishes, descriptions or prices. Every single dish name and',
+      '  price you mention MUST come verbatim from a search_menu result in THIS conversation turn. If you have not called',
+      '  search_menu yet, you are FORBIDDEN from naming any dish or price — call search_menu first.',
+      '- If search_menu returns no matching items, DO NOT substitute similar-sounding dishes. Instead say you could not find a',
+      '  match for that exact request, offer to broaden the search, or take their details so the team can help. Never invent.',
+      '- Only use the exact product_name and product_price values returned by search_menu. Do not round, rename or embellish them.',
+      '- Given a budget + guest count, work out the per-person budget and pick a realistic combination of REAL returned items that fits.',
       '  Show item names, unit prices, chosen quantities and the running total.',
       '- As soon as you have put together a menu you would recommend, call build_quote with those exact product_id values',
       '  and quantities BEFORE writing your reply. This is what renders the "Add all items to cart" button with real prices.',
@@ -90,10 +95,26 @@ export class GrokService implements OnModuleInit {
     const toolDefs = this.tools.getToolDefinitions();
     const collectedToolResults: any[] = [];
 
+    // Grounding guard: we must never present a dish or price that did not come from a
+    // real search_menu result in this turn. Track whether we searched and how many real
+    // items came back, so a hallucinated menu can be caught and forced back through search.
+    let searchedThisTurn = false;
+    let realItemsFound = 0;
+    let forceSearchNextRound = false;
+    let groundingCorrections = 0;
+    const MAX_GROUNDING_CORRECTIONS = 2;
+
     try {
       // Allow a few rounds of tool calls before forcing a final answer.
-      for (let round = 0; round < 5; round++) {
-        const response = await this.callGrok(messages, toolDefs);
+      for (let round = 0; round < 6; round++) {
+        // If the model previously tried to answer with a menu without searching, force it
+        // to call search_menu on this round rather than letting it free-text an answer.
+        const toolChoice = forceSearchNextRound
+          ? { type: 'function', function: { name: 'search_menu' } }
+          : 'auto';
+        forceSearchNextRound = false;
+
+        const response = await this.callGrok(messages, toolDefs, toolChoice);
         const choice = response?.choices?.[0];
         const msg = choice?.message;
 
@@ -103,7 +124,44 @@ export class GrokService implements OnModuleInit {
 
         // No tool calls -> final answer.
         if (!msg.tool_calls || msg.tool_calls.length === 0) {
-          return { reply: msg.content || '', toolResults: collectedToolResults };
+          const reply = msg.content || '';
+
+          // Grounding check: if the model is presenting dishes/prices but has not grounded
+          // them in a real search this turn (or the search returned nothing), reject the
+          // hallucinated answer and force a real search instead of misinforming the customer.
+          const menuish = this.looksLikeMenuRecommendation(reply);
+          const ungrounded = menuish && (!searchedThisTurn || realItemsFound === 0);
+          if (ungrounded && groundingCorrections < MAX_GROUNDING_CORRECTIONS) {
+            groundingCorrections++;
+            this.logger.warn(
+              `Blocked an ungrounded menu reply (searched=${searchedThisTurn}, realItems=${realItemsFound}); forcing search_menu (correction ${groundingCorrections}/${MAX_GROUNDING_CORRECTIONS}).`,
+            );
+            messages.push({
+              role: 'system',
+              content:
+                'STOP. You just tried to present dishes or prices that did not come from search_menu in this turn. ' +
+                'That is forbidden — you must never invent menu items. Call search_menu now (broaden the keywords if the ' +
+                'last search was empty) and only use the exact items and prices it returns. If nothing matches, tell the ' +
+                'customer you could not find a match and offer to take their details — do not make anything up.',
+            });
+            forceSearchNextRound = true;
+            continue;
+          }
+
+          // If it is still ungrounded after our correction attempts, never ship invented
+          // items to the customer — return an honest fallback instead.
+          if (ungrounded) {
+            this.logger.error('Menu reply remained ungrounded after corrections; returning safe fallback.');
+            return {
+              reply:
+                "I want to make sure I only quote you dishes we actually offer, and I'm not finding an exact match for that " +
+                'right now. Could you tell me a bit more about what you\u2019re after (cuisine, guest count or budget), or ' +
+                'leave your name and number and our team will send you real options?',
+              toolResults: collectedToolResults,
+            };
+          }
+
+          return { reply, toolResults: collectedToolResults };
         }
 
         // Append the assistant message that requested the tools.
@@ -121,6 +179,13 @@ export class GrokService implements OnModuleInit {
 
           const result = await this.tools.runTool(fnName, args);
           collectedToolResults.push({ tool: fnName, args, result });
+
+          // Record grounding: a successful search_menu is what makes a menu recommendation legitimate.
+          if (fnName === 'search_menu') {
+            searchedThisTurn = true;
+            const items = Array.isArray(result?.items) ? result.items : [];
+            realItemsFound += items.length;
+          }
 
           messages.push({
             role: 'tool',
@@ -153,12 +218,12 @@ export class GrokService implements OnModuleInit {
     }
   }
 
-  private async callGrok(messages: GrokMessage[], tools?: any[]): Promise<any> {
+  private async callGrok(messages: GrokMessage[], tools?: any[], toolChoice?: any): Promise<any> {
     const maxAttempts = 4;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await this.postCompletion(this.model, messages, tools);
+        return await this.postCompletion(this.model, messages, tools, toolChoice);
       } catch (err: any) {
         const status = err?.response?.status;
         const data = err?.response?.data?.error;
@@ -213,6 +278,21 @@ export class GrokService implements OnModuleInit {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Heuristic: does this reply look like it is presenting menu items or prices to the
+   * customer? Used to catch replies that name dishes/prices without a real search_menu
+   * result backing them, so we never ship invented items.
+   */
+  private looksLikeMenuRecommendation(text: string): boolean {
+    if (!text) return false;
+    // Any explicit price is the strongest signal (e.g. "$120", "$ 80", "AUD 40").
+    if (/\$\s?\d|\b\d+(?:\.\d{2})?\s?(?:aud|dollars?)\b/i.test(text)) return true;
+    // A bulleted/numbered list combined with menu vocabulary.
+    const listy = /(^|\n)\s*(?:[-*\u2022]|\d+[.)])\s+\S/.test(text);
+    const menuWords = /\b(menu|dish|dishes|platter|starter|main|dessert|per person|pp)\b/i.test(text);
+    return listy && menuWords;
   }
 
   /** Work out how long to wait after a 429, from the Retry-After header or Groq's message. */
@@ -270,11 +350,11 @@ export class GrokService implements OnModuleInit {
     };
   }
 
-  private async postCompletion(model: string, messages: GrokMessage[], tools?: any[]): Promise<any> {
+  private async postCompletion(model: string, messages: GrokMessage[], tools?: any[], toolChoice?: any): Promise<any> {
     const body: any = { model, messages, temperature: 0.4 };
     if (tools && tools.length) {
       body.tools = tools;
-      body.tool_choice = 'auto';
+      body.tool_choice = toolChoice ?? 'auto';
     }
 
     const { data } = await axios.post(`${this.baseUrl}/chat/completions`, body, {
