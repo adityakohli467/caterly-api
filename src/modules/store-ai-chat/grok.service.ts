@@ -149,7 +149,7 @@ export class GrokService implements OnModuleInit {
   }
 
   private async callGrok(messages: GrokMessage[], tools?: any[]): Promise<any> {
-    const maxAttempts = 3;
+    const maxAttempts = 4;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -172,12 +172,24 @@ export class GrokService implements OnModuleInit {
           continue;
         }
 
+        // Rate limited (Groq free-tier tokens/requests per minute). Wait the suggested
+        // amount of time and retry instead of failing the whole conversation.
+        if (status === 429 && attempt < maxAttempts) {
+          const waitMs = this.parseRetryAfterMs(err);
+          this.logger.warn(`Rate limited (attempt ${attempt}/${maxAttempts}); retrying in ${waitMs}ms.`);
+          await this.sleep(waitMs);
+          continue;
+        }
+
         // The model occasionally emits a malformed tool call and Groq rejects it with
         // "tool_use_failed". This is stochastic, so retry a couple of times; as a last
         // resort, recover the intended call from failed_generation so the chat still progresses.
         if (status === 400 && code === 'tool_use_failed') {
           this.logger.warn(`tool_use_failed (attempt ${attempt}/${maxAttempts}); retrying.`);
-          if (attempt < maxAttempts) continue;
+          if (attempt < maxAttempts) {
+            await this.sleep(300);
+            continue;
+          }
 
           const recovered = this.recoverToolCall(data?.failed_generation);
           if (recovered) {
@@ -192,6 +204,27 @@ export class GrokService implements OnModuleInit {
     }
 
     throw new Error('AI call failed after retries.');
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Work out how long to wait after a 429, from the Retry-After header or Groq's message. */
+  private parseRetryAfterMs(err: any): number {
+    const headerVal = err?.response?.headers?.['retry-after'];
+    if (headerVal && !isNaN(Number(headerVal))) {
+      return Math.min(Math.max(Number(headerVal) * 1000, 500), 10000);
+    }
+
+    // Groq messages look like: "Please try again in 2.13s."
+    const msg: string = err?.response?.data?.error?.message || '';
+    const m = msg.match(/try again in\s+([\d.]+)s/i);
+    if (m) {
+      return Math.min(Math.max(Math.ceil(parseFloat(m[1]) * 1000) + 200, 500), 10000);
+    }
+
+    return 2000;
   }
 
   /**
