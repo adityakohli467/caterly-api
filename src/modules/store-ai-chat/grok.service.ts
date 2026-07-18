@@ -10,9 +10,12 @@ interface GrokMessage {
   name?: string;
 }
 
-// Known-good Groq model with tool-calling support, used as a safety net if the
-// configured AI_MODEL is invalid/decommissioned (Groq returns 400 in that case).
-const FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+// Ordered list of Groq models that DO support OpenAI-style tool calling, used as a
+// fallback chain. If the configured AI_MODEL is invalid, rejects tools (e.g. the
+// "groq/compound*" agentic systems), or is rate limited (per-model TPM exhausted),
+// we walk down this list to another model that has its own token budget. Ordered
+// from most capable to highest free-tier throughput.
+const FALLBACK_MODELS = ['openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 
 @Injectable()
 export class GrokService implements OnModuleInit {
@@ -22,13 +25,61 @@ export class GrokService implements OnModuleInit {
   // For xAI Grok instead, set AI_BASE_URL=https://api.x.ai/v1 and AI_MODEL=grok-4.
   private readonly apiKey = process.env.AI_API_KEY || process.env.GROQ_API_KEY || process.env.GROK_API_KEY || '';
   private readonly baseUrl = process.env.AI_BASE_URL || process.env.GROK_BASE_URL || 'https://api.groq.com/openai/v1';
-  private model = process.env.AI_MODEL || process.env.GROK_MODEL || 'llama-3.3-70b-versatile';
+  private model = process.env.AI_MODEL || process.env.GROK_MODEL || FALLBACK_MODELS[0];
+
+  // Models we have learned (this process) reject custom tools or don't exist, so we
+  // stop trying them and never reset back to them at the start of a turn.
+  private readonly unusableModels = new Set<string>();
 
   constructor(private readonly tools: AiToolsService) {}
 
   onModuleInit() {
     const keyState = this.apiKey ? `set (…${this.apiKey.slice(-4)})` : 'MISSING';
-    this.logger.log(`AI assistant config -> model="${this.model}", base="${this.baseUrl}", apiKey=${keyState}`);
+    this.logger.log(
+      `AI assistant config -> model="${this.model}", fallbacks=[${this.modelChain().join(', ')}], base="${this.baseUrl}", apiKey=${keyState}`,
+    );
+  }
+
+  /** The configured model followed by the tool-capable fallbacks, de-duplicated. */
+  private modelChain(): string[] {
+    const configured = process.env.AI_MODEL || process.env.GROK_MODEL || FALLBACK_MODELS[0];
+    const chain: string[] = [];
+    for (const m of [configured, ...FALLBACK_MODELS]) {
+      if (m && !chain.includes(m)) chain.push(m);
+    }
+    return chain;
+  }
+
+  /** First model in the chain that we haven't marked unusable this process. */
+  private preferredModel(): string {
+    const chain = this.modelChain();
+    return chain.find((m) => !this.unusableModels.has(m)) ?? chain[0];
+  }
+
+  /**
+   * Switch this.model to the next usable model in the fallback chain. Returns false when
+   * there are no further models to try, so the caller can give up gracefully.
+   */
+  private advanceToFallbackModel(reason: string): boolean {
+    const chain = this.modelChain();
+    const start = chain.indexOf(this.model);
+    for (let j = start + 1; j < chain.length; j++) {
+      if (!this.unusableModels.has(chain[j])) {
+        this.logger.warn(`Switching model "${this.model}" -> "${chain[j]}" (${reason}).`);
+        this.model = chain[j];
+        return true;
+      }
+    }
+    // Current model isn't in the chain (custom value): jump to the first usable fallback.
+    if (start === -1) {
+      const first = chain.find((m) => !this.unusableModels.has(m) && m !== this.model);
+      if (first) {
+        this.logger.warn(`Switching model "${this.model}" -> "${first}" (${reason}).`);
+        this.model = first;
+        return true;
+      }
+    }
+    return false;
   }
 
   private systemPrompt(): string {
@@ -91,6 +142,10 @@ export class GrokService implements OnModuleInit {
       { role: 'system', content: this.systemPrompt() },
       ...history.map((m) => ({ role: m.role, content: m.content })),
     ];
+
+    // Start each turn on the most preferred model that is still usable, so a transient
+    // fallback earlier doesn't permanently pin us to a weaker model.
+    this.model = this.preferredModel();
 
     const toolDefs = this.tools.getToolDefinitions();
     const collectedToolResults: any[] = [];
@@ -262,7 +317,8 @@ export class GrokService implements OnModuleInit {
   }
 
   private async callGrok(messages: GrokMessage[], tools?: any[], toolChoice?: any): Promise<any> {
-    const maxAttempts = 4;
+    // Allow enough attempts to both retry transient errors and walk the fallback chain.
+    const maxAttempts = 6;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -273,25 +329,41 @@ export class GrokService implements OnModuleInit {
         const providerMsg = data?.message || err?.message || '';
         const code = data?.code;
 
-        // If the configured model is invalid/unsupported, fall back to a known-good one and retry.
+        // The model configured is invalid, decommissioned, or does not support the custom
+        // `tools` parameter (e.g. Groq's "compound" agentic systems). Mark it unusable and
+        // fall back to the next tool-capable model in the chain. NB: this is NOT the
+        // stochastic `tool_use_failed` case (handled separately below), so exclude it.
         const looksLikeModelProblem =
           (status === 400 || status === 404) &&
-          this.model !== FALLBACK_MODEL &&
-          /model|decommission|not found|does not exist|unsupported|invalid/i.test(String(providerMsg));
+          code !== 'tool_use_failed' &&
+          /model|decommission|not found|does not exist|unsupported|invalid|not support|does not support|compound|tool use|function call/i.test(
+            String(providerMsg),
+          );
 
         if (looksLikeModelProblem) {
-          this.logger.warn(`Falling back from model "${this.model}" to "${FALLBACK_MODEL}" and retrying.`);
-          this.model = FALLBACK_MODEL;
-          continue;
+          this.unusableModels.add(this.model);
+          if (this.advanceToFallbackModel(`model/tool incompatibility: ${providerMsg}`)) {
+            continue;
+          }
+          this.logger.error(`No usable fallback model left after "${this.model}": ${providerMsg}`);
+          throw err;
         }
 
-        // Rate limited (Groq free-tier tokens/requests per minute). Wait the suggested
-        // amount of time and retry instead of failing the whole conversation.
-        if (status === 429 && attempt < maxAttempts) {
-          const waitMs = this.parseRetryAfterMs(err);
-          this.logger.warn(`Rate limited (attempt ${attempt}/${maxAttempts}); retrying in ${waitMs}ms.`);
-          await this.sleep(waitMs);
-          continue;
+        // Rate limited: the per-minute token/request budget for THIS model is exhausted.
+        // Because limits are per-model, the fastest way to still answer the customer is to
+        // switch to another model that has its own budget. Only if none are left do we wait.
+        if (status === 429) {
+          if (this.advanceToFallbackModel('rate limited (TPM/RPM exhausted for this model)')) {
+            continue;
+          }
+          if (attempt < maxAttempts) {
+            const waitMs = this.parseRetryAfterMs(err);
+            this.logger.warn(
+              `Rate limited and no fallback models left (attempt ${attempt}/${maxAttempts}); retrying in ${waitMs}ms.`,
+            );
+            await this.sleep(waitMs);
+            continue;
+          }
         }
 
         // The model occasionally emits a malformed tool call and Groq rejects it with
