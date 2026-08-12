@@ -594,8 +594,8 @@ export class StoreOrdersService implements OnModuleInit {
       FROM orders o
       LEFT JOIN order_product op ON o.order_id = op.order_id
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
-      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
+      LEFT JOIN company co ON COALESCE(c.company_id, o.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(c.department_id, o.department_id) = d.department_id
       LEFT JOIN locations loc ON o.location_id = loc.location_id
       WHERE o.customer_id = $1
       GROUP BY o.order_id, o.order_total, o.order_status, o.date_added, o.delivery_date_time, o.delivery_address, co.company_name, d.department_name, loc.location_name, loc.company_name, loc.abn, loc.remittance_email, loc.pickup_address, loc.contact
@@ -656,8 +656,8 @@ export class StoreOrdersService implements OnModuleInit {
         loc.contact as location_phone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
-      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
+      LEFT JOIN company co ON COALESCE(c.company_id, o.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(c.department_id, o.department_id) = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       LEFT JOIN locations loc ON o.location_id = loc.location_id
       WHERE o.order_id = $1
@@ -754,8 +754,8 @@ export class StoreOrdersService implements OnModuleInit {
         loc.contact as location_phone
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
-      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
+      LEFT JOIN company co ON COALESCE(c.company_id, o.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(c.department_id, o.department_id) = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       LEFT JOIN locations loc ON o.location_id = loc.location_id
       WHERE o.order_id = $1

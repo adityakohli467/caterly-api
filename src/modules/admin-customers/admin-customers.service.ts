@@ -343,7 +343,18 @@ export class AdminCustomersService {
     }
   }
 
-  async update(id: number, updateCustomerDto: any): Promise<any> {
+  async update(id: number, updateCustomerDto: any, performedByUserId?: number): Promise<any> {
+    // Capture the customer's current company before applying updates so we can
+    // record a company-reassignment activity log entry if it changes.
+    const beforeUpdate = await this.dataSource.query(
+      'SELECT company_id FROM customer WHERE customer_id = $1',
+      [id],
+    );
+    if (beforeUpdate.length === 0) {
+      throw new NotFoundException('Customer not found');
+    }
+    const previousCompanyId: number | null = beforeUpdate[0].company_id ?? null;
+
     const columnCheck = await this.dataSource.query(`
       SELECT column_name 
       FROM information_schema.columns 
@@ -454,8 +465,102 @@ export class AdminCustomersService {
     `;
 
     const result = await this.dataSource.query(query, values);
+    const updatedCustomer = result[0];
 
-    return { customer: result[0], message: 'Customer updated successfully' };
+    // If the customer's company was reassigned, record it in the activity log.
+    const newCompanyId: number | null = updatedCustomer?.company_id ?? null;
+    if (newCompanyId !== previousCompanyId) {
+      await this.logCustomerCompanyReassignment({
+        customerId: id,
+        oldCompanyId: previousCompanyId,
+        newCompanyId,
+        performedByUserId: performedByUserId ?? null,
+      });
+    }
+
+    return { customer: updatedCustomer, message: 'Customer updated successfully' };
+  }
+
+  /**
+   * Ensure the customer_activity_log table exists. The project runs with
+   * TypeORM synchronize disabled, so tables are self-healed via raw SQL
+   * (consistent with the rest of the codebase).
+   */
+  private async ensureActivityLogTable(): Promise<void> {
+    await this.dataSource.query(`
+      CREATE TABLE IF NOT EXISTS customer_activity_log (
+        log_id SERIAL PRIMARY KEY,
+        customer_id INTEGER NOT NULL,
+        activity_type VARCHAR(100) NOT NULL,
+        old_company_id INTEGER,
+        new_company_id INTEGER,
+        old_company_name VARCHAR(255),
+        new_company_name VARCHAR(255),
+        performed_by_user_id INTEGER,
+        description TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+    await this.dataSource.query(
+      'CREATE INDEX IF NOT EXISTS idx_customer_activity_log_customer_id ON customer_activity_log(customer_id)',
+    );
+    await this.dataSource.query(
+      'CREATE INDEX IF NOT EXISTS idx_customer_activity_log_created_at ON customer_activity_log(created_at)',
+    );
+  }
+
+  /**
+   * Record a company reassignment for a customer. Logging failures must never
+   * break the update flow, so all errors are swallowed and logged.
+   */
+  private async logCustomerCompanyReassignment(params: {
+    customerId: number;
+    oldCompanyId: number | null;
+    newCompanyId: number | null;
+    performedByUserId: number | null;
+  }): Promise<void> {
+    try {
+      await this.ensureActivityLogTable();
+
+      const companyIds = [params.oldCompanyId, params.newCompanyId].filter(
+        (value): value is number => value != null,
+      );
+      const nameById: Record<number, string> = {};
+      if (companyIds.length > 0) {
+        const rows = await this.dataSource.query(
+          'SELECT company_id, company_name FROM company WHERE company_id = ANY($1)',
+          [companyIds],
+        );
+        for (const row of rows) {
+          nameById[row.company_id] = row.company_name;
+        }
+      }
+
+      const oldName = params.oldCompanyId != null ? nameById[params.oldCompanyId] ?? null : null;
+      const newName = params.newCompanyId != null ? nameById[params.newCompanyId] ?? null : null;
+      const description = `Company changed from ${oldName ?? 'None'} to ${newName ?? 'None'}`;
+
+      await this.dataSource.query(
+        `INSERT INTO customer_activity_log
+          (customer_id, activity_type, old_company_id, new_company_id, old_company_name, new_company_name, performed_by_user_id, description)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          params.customerId,
+          'company_reassignment',
+          params.oldCompanyId,
+          params.newCompanyId,
+          oldName,
+          newName,
+          params.performedByUserId,
+          description,
+        ],
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to write customer_activity_log for customer ${params.customerId}`,
+        error as Error,
+      );
+    }
   }
 
   async archive(id: number): Promise<void> {

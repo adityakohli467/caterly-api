@@ -36,8 +36,8 @@ export class AdminQuotesService {
         COALESCE(o.lastname, c.lastname) as lastname,
         COALESCE(o.email, c.email) as email,
         COALESCE(o.telephone, c.telephone) as telephone,
-        COALESCE(o.company_id, c.company_id) as company_id,
-        COALESCE(o.department_id, c.department_id) as department_id,
+        COALESCE(c.company_id, o.company_id) as company_id,
+        COALESCE(c.department_id, o.department_id) as department_id,
         co.company_name,
         l.location_name,
         d.department_name,
@@ -46,9 +46,9 @@ export class AdminQuotesService {
         cp.coupon_discount
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
+      LEFT JOIN company co ON COALESCE(c.company_id, o.company_id) = co.company_id
       LEFT JOIN locations l ON o.location_id = l.location_id
-      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
+      LEFT JOIN department d ON COALESCE(c.department_id, o.department_id) = d.department_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.standing_order = 0
       AND (o.order_status = 1 OR o.order_status = 4 OR o.order_status = 7 OR o.order_status = 8 OR o.order_status = 9)
@@ -330,8 +330,8 @@ export class AdminQuotesService {
         COALESCE(o.lastname, c.lastname) as lastname,
         COALESCE(o.email, c.email) as email,
         COALESCE(o.telephone, c.telephone) as telephone,
-        COALESCE(o.company_id, c.company_id) as company_id,
-        COALESCE(o.department_id, c.department_id) as department_id,
+        COALESCE(c.company_id, o.company_id) as company_id,
+        COALESCE(c.department_id, o.department_id) as department_id,
         c.customer_type,
         co.company_name,
         co.company_abn,
@@ -380,8 +380,8 @@ export class AdminQuotesService {
         ), '[]'::json) as products
       FROM orders o
       LEFT JOIN customer c ON o.customer_id = c.customer_id
-      LEFT JOIN company co ON COALESCE(o.company_id, c.company_id) = co.company_id
-      LEFT JOIN department d ON COALESCE(o.department_id, c.department_id) = d.department_id
+      LEFT JOIN company co ON COALESCE(c.company_id, o.company_id) = co.company_id
+      LEFT JOIN department d ON COALESCE(c.department_id, o.department_id) = d.department_id
       LEFT JOIN locations l ON o.location_id = l.location_id
       LEFT JOIN coupon cp ON o.coupon_id = cp.coupon_id
       WHERE o.order_id = $1 AND o.standing_order = 0

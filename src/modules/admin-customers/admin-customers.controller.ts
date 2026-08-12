@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AdminCustomersService } from './admin-customers.service';
@@ -79,8 +80,8 @@ export class AdminCustomersController {
 
   @Put(':id')
   @ApiOperation({ summary: 'Update customer' })
-  async update(@Param('id', ParseIntPipe) id: number, @Body() updateCustomerDto: any) {
-    return this.adminCustomersService.update(id, updateCustomerDto);
+  async update(@Param('id', ParseIntPipe) id: number, @Body() updateCustomerDto: any, @Request() req: any) {
+    return this.adminCustomersService.update(id, updateCustomerDto, req.user?.user_id);
   }
 
   @Post(':id/archive')
