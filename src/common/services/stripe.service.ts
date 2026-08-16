@@ -126,16 +126,21 @@ export class StripeService {
     }
 
     try {
+      // Stripe rejects empty/invalid receipt_email, so only include it when valid
+      const hasValidEmail =
+        typeof paymentData.customerEmail === 'string' &&
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paymentData.customerEmail.trim());
+
       const paymentIntent = await this.stripe.paymentIntents.create({
         amount: paymentData.amount, // Amount in cents
         currency: paymentData.currency.toLowerCase(),
         metadata: {
           order_id: paymentData.orderId,
-          customer_email: paymentData.customerEmail,
+          customer_email: paymentData.customerEmail || '',
           ...paymentData.metadata,
         },
         description: paymentData.description || `Order #${paymentData.orderId}`,
-        receipt_email: paymentData.customerEmail,
+        ...(hasValidEmail ? { receipt_email: paymentData.customerEmail.trim() } : {}),
         automatic_payment_methods: {
           enabled: true,
         },
